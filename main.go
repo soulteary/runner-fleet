@@ -59,6 +59,7 @@ func main() {
 
 	handler.ConfigPath = *configPath
 	handler.Version = Version
+	handler.StartRegistrationWorker()
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
