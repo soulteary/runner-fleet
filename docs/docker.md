@@ -1,6 +1,6 @@
 # Docker 部署
 
-- **基础镜像**：运行时使用 **Ubuntu**（非 Alpine），避免 GitHub Runner 在 Alpine 下运行异常。镜像内已预装 .NET Core 6.0 所需依赖（libicu72、libkrb5-3、liblttng-ust1、libssl3、zlib1g），避免注册/运行 Runner 时报「Libicu's dependencies is missing for Dotnet Core 6.0」。
+- **基础镜像**：运行时使用 **Ubuntu**（非 Alpine），避免 GitHub Runner 在 Alpine 下运行异常。镜像内已预装 .NET Core 6.0 所需依赖（libicu74、libkrb5-3、liblttng-ust1、libssl3、zlib1g），避免注册/运行 Runner 时报「Libicu's dependencies is missing for Dotnet Core 6.0」。
 - **非 root 运行**：镜像内以 UID 1001（用户 `app`）运行，避免 GitHub Actions Runner 报错「Must not run with sudo」。挂载 `runners` 目录时，请确保宿主机上该目录对 UID 1001 可写（常见做法：`mkdir runners && chown 1001:1001 runners`）；若你自定义为 root 运行容器，需设置环境变量 `RUNNER_ALLOW_RUNASROOT=1`。
 - **自动拉起 Runner**：服务启动约 15 秒后会自动启动所有「已注册但未在运行」的 Runner；定时任务每 5 分钟也会再次检查并拉起未运行的已注册 Runner，便于 DinD 或管理器重启后恢复。
 

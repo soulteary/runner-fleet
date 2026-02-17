@@ -12,7 +12,7 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    libicu72 \
+    libicu74 \
     libkrb5-3 \
     liblttng-ust1 \
     libssl3 \
