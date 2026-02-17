@@ -14,4 +14,9 @@
 - **添加**：禁止与已有 Runner 同名。
 - **编辑**：名称不可修改，与磁盘目录名一致。
 
+## Token 与敏感文件
+
+- **config.yaml**：已列入 `.gitignore`，若含敏感信息请勿提交到仓库。
+- **各 runner 目录下的 `.github_check_token`**：用于该 runner 的「GitHub 显示检查」，内容为 PAT。建议限制文件权限（如 `chmod 600`），若 `runners/` 被纳入版本库，请在 `.gitignore` 中加入 `**/.github_check_token` 避免泄露。
+
 [← 返回文档索引](README.md)

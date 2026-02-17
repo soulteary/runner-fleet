@@ -12,9 +12,10 @@ cp config.yaml.example config.yaml
 |------|------|------|
 | `server.port` | HTTP 服务端口 | `8080` |
 | `server.addr` | 监听地址；空则仅绑定端口（等价所有接口） | 空 |
-| `github.token` | 预留，用于今后通过 GitHub API 获取 token 等能力 | 当前未使用 |
 | `runners.base_path` | 所有 Runner 安装目录的根路径 | `./runners` |
 | `runners.items` | 预置的 Runner 列表 | 也可通过 Web 界面添加 |
+
+「GitHub 显示检查」所需的 token 仅在各 runner 目录下配置，见 [添加 Runner](adding-runner.md) 中的说明。
 
 ## 示例
 
@@ -22,8 +23,6 @@ cp config.yaml.example config.yaml
 server:
     port: 8080
     addr: 0.0.0.0
-github:
-    token: ""
 runners:
     base_path: ./runners
     items: []

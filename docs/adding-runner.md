@@ -42,10 +42,10 @@
 
 **使用 Docker 或 DinD 时**：若在「快速添加」中填写了 Token 并提交，服务会**先自动执行安装脚本**（下载并解压 runner 到该目录），再执行**向 GitHub 注册**（`config.sh`，超时 2 分钟）并启动；无需事先手动执行 `install-runner.sh`。若自动安装失败（如网络问题），可按 [Docker 部署](docker.md) 中「Docker/DinD 下自动注册的前提」手动安装后，重新获取 Token 再在界面提交或在该目录下手动执行 `config.sh`。
 
-## 注册结果与定时检查
+## 注册结果与 GitHub 显示检查
 
-- **注册结果**：每次在界面使用 Token 执行注册后，结果会写入该 runner 目录下的 `.registration_result.json`（成功或失败原因），并在列表与详情中显示。
-- **GitHub 显示检查**：服务内建定时任务每 5 分钟检查各 runner 是否已在 GitHub 的 Actions Runners 列表中显示。需在 `config.yaml` 中配置 `github.token`（需 scope：组织用 `admin:org`，仓库用 `repo`）。检查结果写入各 runner 目录的 `.github_status.json`，并在界面「注册 / GitHub」列与详情中展示。
+- **注册结果**：仅使用添加时在表单中填写的 Token（从 GitHub 复制的短期 token）。每次在界面使用 Token 执行注册后，结果会写入该 runner 目录下的 `.registration_result.json`（成功或失败原因），并在列表与详情中显示。
+- **GitHub 显示检查**（可选）：服务内建定时任务约每 5 分钟检查各 runner 是否已在 GitHub 的 Actions Runners 列表中显示。若需此功能，请在该 runner 安装目录下放置 `.github_check_token` 文件，内容为 PAT（需 scope：组织用 `admin:org`，仓库用 `repo`）。检查结果写入各 runner 目录的 `.github_status.json`，并在界面「注册 / GitHub」列与详情中展示。
 
 ## 一台机器多 Runner
 

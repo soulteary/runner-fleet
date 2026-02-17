@@ -14,7 +14,6 @@ var mu sync.Mutex
 // Config 应用配置
 type Config struct {
 	Server  ServerConfig  `yaml:"server"`
-	GitHub  GitHubConfig  `yaml:"github"`
 	Runners RunnersConfig `yaml:"runners"`
 }
 
@@ -22,11 +21,6 @@ type Config struct {
 type ServerConfig struct {
 	Port int    `yaml:"port"`
 	Addr string `yaml:"addr"`
-}
-
-// GitHubConfig GitHub 相关配置（可选，用于 API 获取 token）
-type GitHubConfig struct {
-	Token string `yaml:"token"`
 }
 
 // RunnersConfig Runner 根配置
