@@ -1,0 +1,20 @@
+# 可执行文件
+runner-manager
+*.exe
+
+# Runner 数据目录（按需取消注释）
+# runners/
+
+# 本地配置（若含敏感信息建议加入）
+config.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统
+.DS_Store
+Thumbs.db

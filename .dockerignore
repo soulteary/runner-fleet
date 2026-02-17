@@ -1,0 +1,13 @@
+.git
+.github
+*.md
+!README.md
+.gitignore
+.dockerignore
+runner-manager
+*.exe
+runners
+.env
+*.test
+*.out
+.DS_Store
