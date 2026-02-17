@@ -212,6 +212,21 @@ docker run -d --name runner-manager \
 - **回滚**：将 `job_docker_backend` 设为 `dind` 并确保 DinD 已启动（`docker compose --profile dind up -d`）。
 - **可选**：改为 `host-socket` 时需在创建 Runner 容器时挂载宿主机 socket，Compose 已为 Manager 挂载；Runner 容器由 Manager 按 `host-socket` 自动注入挂载与 `DOCKER_HOST`。改为 `none` 时 Job 内无法使用 Docker。
 
+### 状态 `unknown` 的处理（容器模式）
+
+当列表中 Runner 显示 `status=unknown` 时，表示 Manager 对该 Runner 的状态探测失败。常见原因包括：
+
+- Manager 无法访问 Docker（权限、socket、daemon）。
+- Manager 无法连通 Runner 容器内 Agent（网络或容器未就绪）。
+- Agent 返回非 200（Runner 进程异常、容器内依赖异常）。
+
+排查建议：
+
+1. 在 WebUI 详情弹窗查看 `probe` 字段（`error/type/suggestion/check_command/fix_command`）。
+2. 先执行 `probe.check_command`（只读）确认问题边界。
+3. 再按需执行 `probe.fix_command`（有副作用）。
+4. 在 `status=unknown` 时可直接尝试 UI 的「启动 / 停止」按钮进行自愈；接口会继续尝试执行启停动作。
+
 ### 最小验收清单
 
 - [ ] WebUI 可新增一个项目下多个 Runner，并能独立启动/停止。

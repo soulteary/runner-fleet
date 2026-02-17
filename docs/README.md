@@ -2,6 +2,8 @@
 
 本目录为 Runner Fleet 的详细文档，主文档见 [README](../README.md)。
 
+> 接口变更提示：探测失败信息现仅通过结构化 `probe` 返回，历史扁平字段 `probe_*` 已移除。详见 [开发与构建](development.md) 的 HTTP API 说明与示例。
+
 | 文档 | 说明 |
 |------|------|
 | [配置说明](config.md) | `config.yaml` 各字段说明与示例 |

@@ -49,6 +49,14 @@
 - **注册结果**：仅使用添加时在表单中填写的 Token（从 GitHub 复制的短期 token）。每次在界面使用 Token 执行注册后，结果会写入该 runner 目录下的 `.registration_result.json`（成功或失败原因），并在列表与详情中显示。
 - **GitHub 显示检查**（可选）：服务内建定时任务约每 5 分钟检查各 runner 是否已在 GitHub 的 Actions Runners 列表中显示。若需此功能，请在该 runner 安装目录下放置 `.github_check_token` 文件，内容为 PAT（需 scope：组织用 `admin:org`，仓库用 `repo`）。检查结果写入各 runner 目录的 `.github_status.json`，并在界面「注册 / GitHub」列与详情中展示。
 
+## 探测失败与自愈（容器模式）
+
+当列表状态显示 `unknown` 时，表示 Manager 无法完成容器状态探测（例如 Docker 访问异常、Agent 不可达、Agent HTTP 错误），并不代表「启动/停止」一定失败。
+
+- 详情弹窗会展示结构化 `probe` 信息（错误类型、建议、检查命令、修复命令）。
+- 建议先执行「检查命令（只读）」定位问题，再决定是否执行「修复命令（有副作用）」。
+- 在 `status=unknown` 时界面仍保留「启动 / 停止」按钮，可用于手动自愈尝试。
+
 ## 一台机器多 Runner
 
 每个 Runner 使用独立子目录（如 `runners/runner-1`、`runners/runner-2`），互不干扰，可同时运行多个 Runner 并行执行任务。

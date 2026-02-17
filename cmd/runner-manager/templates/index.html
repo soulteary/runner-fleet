@@ -117,6 +117,28 @@
     .modal-body .row { margin-bottom: 12px; }
     .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
     .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+    .btn-reveal-fix {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--warn);
+      border: 1px solid var(--warn);
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .btn-reveal-fix:hover { opacity: 0.9; }
+    .btn-copy-cmd {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .btn-copy-cmd:hover { opacity: 0.9; }
     .modal-body input, .modal-body select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 4px; }
     .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
     .modal-footer button { margin-right: 8px; }
@@ -197,7 +219,7 @@
           <td>
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">运行中</span>{{end}}
-            {{if .ProbeError}}<br><span class="probe-err" title="{{.ProbeError}}">探测失败</span>{{end}}
+            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">探测失败{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
           </td>
           {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
@@ -222,6 +244,10 @@
           <td>
             {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="启动 Runner">启动</button>{{end}}
             {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="停止 Runner">停止</button>{{end}}
+            {{if eq .Status "unknown"}}
+            <button type="button" class="btn-start" data-name="{{.Name}}" title="状态探测失败，尝试启动 Runner">启动</button>
+            <button type="button" class="btn-stop" data-name="{{.Name}}" title="状态探测失败，尝试停止 Runner">停止</button>
+            {{end}}
             <button type="button" class="btn-view" data-name="{{.Name}}" title="查看配置">查看</button>
             <button type="button" class="btn-edit" data-name="{{.Name}}" title="编辑配置">编辑</button>
             <button type="button" class="btn-del" data-name="{{.Name}}" title="从配置中移除">删除</button>
@@ -285,6 +311,10 @@
           <div class="row"><label>安装目录</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>Docker 后端</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>状态</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+          <div class="row"><label>探测错误类型</label><div class="val" id="vProbeErrorType"></div></div>
+          <div class="row"><label>建议操作</label><div class="val" id="vProbeSuggestion"></div></div>
+          <div class="row"><label>检查命令（只读）</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">复制命令</button><span id="vProbeCheckCommand"></span></div></div>
+          <div class="row"><label>修复命令（有副作用）</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">显示修复命令</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">复制命令</button><span id="vProbeFixCommand"></span></div></div>
           <div class="row"><label>探测错误</label><div class="val" id="vProbeError"></div></div>
           <div class="row"><label>注册结果</label><div class="val" id="vRegistrationMessage"></div></div>
           <div class="row"><label>注册检查时间</label><div class="val" id="vRegistrationCheckedAt"></div></div>
@@ -443,6 +473,26 @@
       d.textContent = s;
       return d.innerHTML;
     }
+    function resolveProbeSuggestion(data) {
+      if (data && data.probe && data.probe.suggestion) return data.probe.suggestion;
+      return '请先尝试“停止/启动”进行自愈；若仍失败，查看 manager 与 runner 容器日志。';
+    }
+    function resolveProbeError(data) {
+      if (data && data.probe && data.probe.error) return data.probe.error;
+      return '';
+    }
+    function resolveProbeCheckCommand(data) {
+      if (data && data.probe && data.probe.check_command) return data.probe.check_command;
+      return 'docker compose ps && docker logs --tail=200 runner-manager';
+    }
+    function resolveProbeFixCommand(data) {
+      if (data && data.probe && data.probe.fix_command) return data.probe.fix_command;
+      return 'docker compose up -d --force-recreate';
+    }
+    function resolveProbeType(data) {
+      if (data && data.probe && data.probe.type) return data.probe.type;
+      return 'unknown';
+    }
     const modal = document.getElementById('runnerModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalView = document.getElementById('modalView');
@@ -450,6 +500,42 @@
     const modalEditBtn = document.getElementById('modalEditBtn');
     const modalSaveBtn = document.getElementById('modalSaveBtn');
     const modalMsg = document.getElementById('modalMsg');
+    const revealFixBtn = document.getElementById('vRevealFixCmdBtn');
+    const copyCheckBtn = document.getElementById('vCopyCheckCmdBtn');
+    const copyFixBtn = document.getElementById('vCopyFixCmdBtn');
+    const probeFixCmdEl = document.getElementById('vProbeFixCommand');
+    const probeCheckCmdEl = document.getElementById('vProbeCheckCommand');
+    let currentProbeCheckCommand = '';
+    let currentProbeFixCommand = '';
+    let probeFixRevealed = false;
+
+    async function copyCommandText(text) {
+      if (!text) return false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) {
+        // ignore and fallback below
+      }
+      // 回退：在不支持/拒绝 clipboard API 的环境里尝试 execCommand
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        return !!ok;
+      } catch (_) {
+        return false;
+      }
+    }
 
     function openModal(mode, name) {
       modalMsg.style.display = 'none';
@@ -479,7 +565,18 @@
             }
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">运行中</span>' : '';
-            document.getElementById('vProbeError').textContent = data.probe_error || '—';
+            const probeError = resolveProbeError(data);
+            document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
+            document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
+            currentProbeCheckCommand = probeError ? resolveProbeCheckCommand(data) : '';
+            probeCheckCmdEl.textContent = currentProbeCheckCommand || '—';
+            copyCheckBtn.style.display = currentProbeCheckCommand ? 'inline-block' : 'none';
+            currentProbeFixCommand = probeError ? resolveProbeFixCommand(data) : '';
+            probeFixRevealed = false;
+            probeFixCmdEl.textContent = probeError ? '（默认隐藏，点击“显示修复命令”）' : '—';
+            revealFixBtn.style.display = probeError ? 'inline-block' : 'none';
+            copyFixBtn.style.display = 'none';
+            document.getElementById('vProbeError').textContent = probeError || '—';
             document.getElementById('vRegistrationMessage').textContent = data.registration_message || '—';
             document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
             var gh = data.registered_on_github;
@@ -497,6 +594,11 @@
               startStopSpan.style.display = 'inline-block';
               startBtn.style.display = data.running ? 'none' : 'inline-block';
               stopBtn.style.display = data.running ? 'inline-block' : 'none';
+            } else if (data.status === 'unknown') {
+              // 状态探测失败时允许用户手动尝试启停进行自愈
+              startStopSpan.style.display = 'inline-block';
+              startBtn.style.display = 'inline-block';
+              stopBtn.style.display = 'inline-block';
             } else {
               startBtn.style.display = 'none';
               stopBtn.style.display = 'none';
@@ -600,14 +702,45 @@
         const r = await fetch('/api/runners/' + encodeURIComponent(name) + '/' + action, { method: 'POST' });
         const data = await r.json().catch(() => ({}));
         if (r.ok) {
-          if (data && data.probe_error) {
-            alert((data.message || '操作已执行') + '\n\n探测错误：' + data.probe_error);
+          const probeError = resolveProbeError(data);
+          if (probeError) {
+            const probeType = resolveProbeType(data);
+            const checkMsg =
+              (data.message || '操作已执行') +
+              '\n\n探测错误类型：' + probeType +
+              '\n建议：' + resolveProbeSuggestion(data) +
+              '\n检查命令：' + resolveProbeCheckCommand(data) +
+              '\n探测错误：' + probeError;
+            alert(checkMsg);
+            if (confirm('是否显示修复命令（有副作用）？建议先执行检查命令确认。')) {
+              alert('修复命令：\n' + resolveProbeFixCommand(data));
+            }
           }
           location.reload();
         }
         else { alert(data.message || r.statusText || '请求失败'); }
       } catch (e) { alert(e.message); }
     }
+    revealFixBtn.addEventListener('click', () => {
+      if (!currentProbeFixCommand) return;
+      if (!confirm('修复命令可能有副作用，确认显示？')) return;
+      probeFixCmdEl.textContent = currentProbeFixCommand;
+      probeFixRevealed = true;
+      copyFixBtn.style.display = 'inline-block';
+    });
+    copyCheckBtn.addEventListener('click', async () => {
+      if (!currentProbeCheckCommand) return;
+      const ok = await copyCommandText(currentProbeCheckCommand);
+      alert(ok ? '检查命令已复制' : '复制失败，请手动复制');
+    });
+    copyFixBtn.addEventListener('click', async () => {
+      if (!probeFixRevealed || !currentProbeFixCommand) {
+        alert('请先显示修复命令并确认后再复制');
+        return;
+      }
+      const ok = await copyCommandText(currentProbeFixCommand);
+      alert(ok ? '修复命令已复制' : '复制失败，请手动复制');
+    });
     document.querySelectorAll('.btn-start').forEach(btn => {
       if (btn.id === 'modalStartBtnFooter') return;
       btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'start'));
