@@ -8,9 +8,15 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -ldflags "-X main.Version=${VERSION}" -o runner-manager .
 
 FROM ubuntu:24.04
+# GitHub Actions Runner 需 .NET Core 6.0 依赖（libicu 等），与 installdependencies.sh 一致
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    libicu72 \
+    libkrb5-3 \
+    liblttng-ust1 \
+    libssl3 \
+    zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 # 使用非 root 用户运行，避免 GitHub Actions Runner 报 "Must not run with sudo"
