@@ -1,31 +1,57 @@
-name: Build and Test
+name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, develop]
+
+env:
+  GO_VERSION: "1.26.0"
 
 jobs:
-  build:
+  test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.0"
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.sum
 
       - name: Vet
         run: go vet ./...
 
       - name: Run tests
-        run: go test ./...
+        run: go test -v ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Get version information
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build
-        run: go build -ldflags "-X main.Version=${{ github.sha }}" -o runner-manager .
+        run: |
+          go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" -o runner-manager .
 
       - name: Init example config
         run: cp config.yaml.example config.yaml
