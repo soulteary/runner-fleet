@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -68,7 +69,13 @@ func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) 
 }
 
 // runConfigScript 在 installDir 下执行 config 脚本向 GitHub 注册，超时 2 分钟；返回输出与 error
+// 将 installDir 转为绝对路径，避免相对路径在 exec 时随进程 CWD 解析导致找不到 config 脚本
 func runConfigScript(installDir, url, token string, labels []string, timeout time.Duration) ([]byte, error) {
+	absDir, err := filepath.Abs(installDir)
+	if err != nil {
+		return nil, fmt.Errorf("解析 runner 路径失败: %w", err)
+	}
+	installDir = absDir
 	configScript := filepath.Join(installDir, runner.ConfigScriptName())
 	args := []string{"--url", url, "--token", token}
 	if len(labels) > 0 {

@@ -259,7 +259,13 @@ func processExists(pid int) bool {
 var execCommand = exec.Command
 
 // Start 在 installDir 下后台启动 runner（执行 run.sh/run.cmd）
+// 将 installDir 转为绝对路径，避免相对路径在 exec 时随进程 CWD 解析导致找不到 run.sh
 func Start(installDir string) error {
+	absDir, err := filepath.Abs(installDir)
+	if err != nil {
+		return fmt.Errorf("解析 runner 路径失败: %w", err)
+	}
+	installDir = absDir
 	script := filepath.Join(installDir, RunScriptName())
 	if _, err := os.Stat(script); err != nil {
 		return fmt.Errorf("未找到运行脚本 %s: %w", script, err)
@@ -278,7 +284,13 @@ func Start(installDir string) error {
 }
 
 // Stop 向 runner 进程发送停止信号（读取 pid 后 SIGTERM；Windows 用 taskkill）
+// 将 installDir 转为绝对路径，确保能正确找到该 runner 的 pid 文件
 func Stop(installDir string) error {
+	absDir, err := filepath.Abs(installDir)
+	if err != nil {
+		return fmt.Errorf("解析 runner 路径失败: %w", err)
+	}
+	installDir = absDir
 	pid, err := readRunnerPid(installDir)
 	if err != nil || pid <= 0 {
 		return fmt.Errorf("未找到 runner pid 文件或 pid 无效: %w", err)
