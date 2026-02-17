@@ -1,0 +1,39 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.0"
+          cache-dependency-path: go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build
+        run: go build -ldflags "-X main.Version=${{ github.sha }}" -o runner-manager .
+
+      - name: Verify binary
+        run: |
+          ./runner-manager -version
+          ./runner-manager -config config.yaml &
+          PID=$!
+          trap "kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true" EXIT
+          for i in 1 2 3 4 5; do sleep 1; curl -sf http://localhost:8080/health | grep -q '"status":"ok"' && break; done
+          curl -sf http://localhost:8080/health | grep -q '"status":"ok"' || (echo "health check failed"; exit 1)
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runner Fleet - GitHub Actions Runner 管理</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --warn: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 24px; color: var(--text); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { margin: 0 0 16px; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .badge.installed { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+    .badge.new { background: rgba(210, 153, 34, 0.2); color: var(--warn); }
+    .badge.missing { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+    .badge.unknown { background: rgba(139, 148, 158, 0.2); color: var(--muted); }
+    .badge.running { background: rgba(63, 185, 80, 0.3); color: var(--success); margin-left: 4px; }
+    form label { display: block; margin-top: 12px; color: var(--muted); font-size: 13px; }
+    form input, form select { width: 100%; max-width: 400px; padding: 8px 12px; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+    form button {
+      margin-top: 16px;
+      padding: 8px 20px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    form button:hover { opacity: 0.9; }
+    .btn-del {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-del:hover { color: var(--danger); border-color: var(--danger); }
+    .btn-view, .btn-edit {
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-right: 6px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-view:hover { color: var(--accent); border-color: var(--accent); }
+    .btn-edit:hover { color: var(--warn); border-color: var(--warn); }
+    .btn-start { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(63, 185, 80, 0.2); color: var(--success); border: 1px solid var(--success); border-radius: 4px; cursor: pointer; }
+    .btn-start:hover { opacity: 0.9; }
+    .btn-stop { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(248, 81, 73, 0.2); color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; cursor: pointer; }
+    .btn-stop:hover { opacity: 0.9; }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+    }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h3 { margin: 0; font-size: 1rem; }
+    .modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 20px; }
+    .modal-body .row { margin-bottom: 12px; }
+    .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+    .modal-body input, .modal-body select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 4px; }
+    .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
+    .modal-footer button { margin-right: 8px; }
+    .msg { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 14px; }
+    .msg.ok { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+    .msg.err { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
+    .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Runner Fleet - GitHub Actions Runner 管理</h1>
+
+  <div class="card">
+    <h2>Runner 列表</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>目标</th>
+          <th>状态</th>
+          <th>安装目录</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Runners}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.TargetType}}: {{.Target}}</td>
+          <td>
+            <span class="badge {{.Status}}">{{.Status}}</span>
+            {{if .Running}}<span class="badge running">运行中</span>{{end}}
+          </td>
+          <td class="path">{{.InstallDir}}</td>
+          <td>
+            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="启动 Runner">启动</button>{{end}}
+            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="停止 Runner">停止</button>{{end}}
+            <button type="button" class="btn-view" data-name="{{.Name}}" title="查看配置">查看</button>
+            <button type="button" class="btn-edit" data-name="{{.Name}}" title="编辑配置">编辑</button>
+            <button type="button" class="btn-del" data-name="{{.Name}}" title="从配置中移除">删除</button>
+          </td>
+        </tr>
+        {{end}}
+        {{if not .Runners}}
+        <tr><td colspan="5" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>快速添加 Runner</h2>
+    <form id="addForm">
+      <label>名称 (name) *</label>
+      <input name="name" required placeholder="例如 runner-1">
+      <label>子路径 (path，可选，默认用名称)</label>
+      <input name="path" placeholder="例如 runner-1">
+      <label>目标类型 (target_type) *</label>
+      <select name="target_type" required>
+        <option value="org">组织 (org)</option>
+        <option value="repo">仓库 (repo)</option>
+      </select>
+      <label>目标 (target) *</label>
+      <input name="target" required placeholder="组织名 或 owner/repo">
+      <label>标签 (labels，逗号分隔，可选)</label>
+      <input name="labelsStr" placeholder="self-hosted, linux, x64">
+      <label>注册 Token（可选，从 GitHub 设置 → Actions → Runners 复制，1 小时有效）</label>
+      <input name="registration_token" type="password" placeholder="选填，有则自动执行注册">
+      <button type="submit">添加 Runner</button>
+    </form>
+    <div id="addMsg"></div>
+  </div>
+
+  <div id="runnerModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Runner 配置</h3>
+        <button type="button" class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalView">
+          <div class="row"><label>名称</label><div class="val" id="vName"></div></div>
+          <div class="row"><label>子路径</label><div class="val" id="vPath"></div></div>
+          <div class="row"><label>目标类型</label><div class="val" id="vTargetType"></div></div>
+          <div class="row"><label>目标</label><div class="val" id="vTarget"></div></div>
+          <div class="row"><label>标签</label><div class="val" id="vLabels"></div></div>
+          <div class="row"><label>安装目录</label><div class="val path" id="vInstallDir"></div></div>
+          <div class="row"><label>状态</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+        </div>
+        <form id="modalEditForm" style="display:none">
+          <input type="hidden" name="name" id="eName">
+          <div class="row"><label>名称</label><input type="text" name="nameDisplay" id="eNameDisplay" readonly style="opacity:0.8"></div>
+          <div class="row"><label>子路径 (path)</label><input type="text" name="path" id="ePath" placeholder="可选"></div>
+          <div class="row"><label>目标类型 (target_type) *</label><select name="target_type" id="eTargetType" required><option value="org">组织 (org)</option><option value="repo">仓库 (repo)</option></select></div>
+          <div class="row"><label>目标 (target) *</label><input type="text" name="target" id="eTarget" required placeholder="组织名 或 owner/repo"></div>
+          <div class="row"><label>标签 (labels，逗号分隔)</label><input type="text" name="labelsStr" id="eLabelsStr" placeholder="self-hosted, linux, x64"></div>
+        </form>
+        <div id="modalMsg" class="msg" style="display:none; margin-top:12px"></div>
+      </div>
+      <div class="modal-footer" id="modalFooter">
+        <span id="modalStartStopSpan" style="display:none; margin-right: auto;">
+          <button type="button" id="modalStartBtnFooter" class="btn-start" style="display:none">启动</button>
+          <button type="button" id="modalStopBtnFooter" class="btn-stop" style="display:none">停止</button>
+        </span>
+        <button type="button" id="modalEditBtn" style="display:none">编辑</button>
+        <button type="button" id="modalSaveBtn" style="display:none">保存</button>
+        <button type="button" class="modal-close" id="modalCancelBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {};
+      fd.forEach((v, k) => { if (v) body[k] = v; });
+      if (body.labelsStr) {
+        body.labels = body.labelsStr.split(',').map(s => s.trim()).filter(Boolean);
+        delete body.labelsStr;
+      }
+      const msgEl = document.getElementById('addMsg');
+      msgEl.innerHTML = '';
+      msgEl.className = 'msg';
+      try {
+        const r = await fetch('/api/runners', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          msgEl.className = 'msg err';
+          msgEl.textContent = data.message || r.statusText || '请求失败';
+          return;
+        }
+        msgEl.className = 'msg ok';
+        msgEl.innerHTML = data.message + (data.install_dir ? '<br><span class="path">' + data.install_dir + '</span>' : '');
+        if (data.output) msgEl.innerHTML += '<pre style="margin-top:8px;font-size:12px">' + escapeHtml(data.output) + '</pre>';
+        e.target.reset();
+        setTimeout(() => location.reload(), 1500);
+      } catch (err) {
+        msgEl.className = 'msg err';
+        msgEl.textContent = err.message || '请求失败';
+      }
+    });
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    const modal = document.getElementById('runnerModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalView = document.getElementById('modalView');
+    const modalEditForm = document.getElementById('modalEditForm');
+    const modalEditBtn = document.getElementById('modalEditBtn');
+    const modalSaveBtn = document.getElementById('modalSaveBtn');
+    const modalMsg = document.getElementById('modalMsg');
+
+    function openModal(mode, name) {
+      modalMsg.style.display = 'none';
+      if (mode === 'view') {
+        modalTitle.textContent = '查看 Runner 配置';
+        modalView.style.display = 'block';
+        modalEditForm.style.display = 'none';
+        modalEditBtn.style.display = 'inline-block';
+        modalSaveBtn.style.display = 'none';
+        document.getElementById('modalStartStopSpan').style.display = 'none';
+        fetch('/api/runners/' + encodeURIComponent(name))
+          .then(r => r.ok ? r.json() : Promise.reject(r))
+          .then(data => {
+            document.getElementById('vName').textContent = data.name || '';
+            document.getElementById('vPath').textContent = data.path || data.name || '';
+            document.getElementById('vTargetType').textContent = data.target_type || '';
+            document.getElementById('vTarget').textContent = data.target || '';
+            document.getElementById('vLabels').textContent = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
+            document.getElementById('vInstallDir').textContent = data.install_dir || '';
+            document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
+            document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">运行中</span>' : '';
+            const startStopSpan = document.getElementById('modalStartStopSpan');
+            const startBtn = document.getElementById('modalStartBtnFooter');
+            const stopBtn = document.getElementById('modalStopBtnFooter');
+            startBtn.setAttribute('data-name', name);
+            stopBtn.setAttribute('data-name', name);
+            if (data.status === 'installed') {
+              startStopSpan.style.display = 'inline-block';
+              startBtn.style.display = data.running ? 'none' : 'inline-block';
+              stopBtn.style.display = data.running ? 'inline-block' : 'none';
+            } else {
+              startBtn.style.display = 'none';
+              stopBtn.style.display = 'none';
+            }
+          })
+          .catch(() => { modalMsg.textContent = '加载失败'; modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
+      } else {
+        document.getElementById('modalStartStopSpan').style.display = 'none';
+        modalTitle.textContent = '编辑 Runner 配置';
+        modalView.style.display = 'none';
+        modalEditForm.style.display = 'block';
+        modalEditBtn.style.display = 'none';
+        modalSaveBtn.style.display = 'inline-block';
+        fetch('/api/runners/' + encodeURIComponent(name))
+          .then(r => r.ok ? r.json() : Promise.reject(r))
+          .then(data => {
+            document.getElementById('eName').value = data.name || '';
+            document.getElementById('eNameDisplay').value = data.name || '';
+            document.getElementById('ePath').value = data.path || '';
+            document.getElementById('eTargetType').value = data.target_type || 'org';
+            document.getElementById('eTarget').value = data.target || '';
+            document.getElementById('eLabelsStr').value = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
+          })
+          .catch(() => { modalMsg.textContent = '加载失败'; modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
+      }
+      modal.classList.add('show');
+    }
+
+    function closeModal() {
+      modal.classList.remove('show');
+    }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    document.getElementById('modalEditBtn').addEventListener('click', () => {
+      const name = document.getElementById('vName').textContent;
+      if (name) openModal('edit', name);
+    });
+
+    document.getElementById('modalSaveBtn').addEventListener('click', async () => {
+      const name = document.getElementById('eName').value;
+      if (!name) return;
+      const labelsStr = document.getElementById('eLabelsStr').value.trim();
+      const labels = labelsStr ? labelsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const body = {
+        name: name,
+        path: document.getElementById('ePath').value.trim() || undefined,
+        target_type: document.getElementById('eTargetType').value,
+        target: document.getElementById('eTarget').value.trim(),
+        labels: labels
+      };
+      modalMsg.style.display = 'none';
+      try {
+        const r = await fetch('/api/runners/' + encodeURIComponent(name), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          modalMsg.className = 'msg err';
+          modalMsg.textContent = data.message || r.statusText;
+          modalMsg.style.display = 'block';
+          return;
+        }
+        modalMsg.className = 'msg ok';
+        modalMsg.textContent = data.message || '已保存';
+        modalMsg.style.display = 'block';
+        setTimeout(() => { closeModal(); location.reload(); }, 800);
+      } catch (e) {
+        modalMsg.className = 'msg err';
+        modalMsg.textContent = e.message;
+        modalMsg.style.display = 'block';
+      }
+    });
+
+    document.querySelectorAll('.btn-view').forEach(btn => {
+      btn.addEventListener('click', () => openModal('view', btn.getAttribute('data-name')));
+    });
+    document.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.addEventListener('click', () => openModal('edit', btn.getAttribute('data-name')));
+    });
+
+    document.querySelectorAll('.btn-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.getAttribute('data-name');
+        if (!name || !confirm('确定从配置中移除 “‘ + name +’”？')) return;
+        try {
+          const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok) location.reload();
+          else alert(data.message || r.statusText);
+        } catch (e) { alert(e.message); }
+      });
+    });
+
+    async function runnerAction(name, action) {
+      try {
+        const r = await fetch('/api/runners/' + encodeURIComponent(name) + '/' + action, { method: 'POST' });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) { location.reload(); }
+        else { alert(data.message || r.statusText || '请求失败'); }
+      } catch (e) { alert(e.message); }
+    }
+    document.querySelectorAll('.btn-start').forEach(btn => {
+      if (btn.id === 'modalStartBtnFooter') return;
+      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'start'));
+    });
+    document.querySelectorAll('.btn-stop').forEach(btn => {
+      if (btn.id === 'modalStopBtnFooter') return;
+      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'stop'));
+    });
+    document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
+    document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));
+  </script>
+</body>
+</html>

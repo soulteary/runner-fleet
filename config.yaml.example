@@ -1,0 +1,12 @@
+# 示例配置。生产环境请复制为 config.yaml 后按需修改。
+# cp config.yaml.example config.yaml
+# 详细字段说明见 docs/config.md
+
+server:
+    port: 8080
+    addr: 0.0.0.0
+github:
+    token: ""
+runners:
+    base_path: ./runners
+    items: []   # 预置 Runner 列表，也可通过 Web 界面添加
