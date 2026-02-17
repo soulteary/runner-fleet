@@ -123,6 +123,11 @@
     .msg { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 14px; }
     .msg.ok { background: rgba(63, 185, 80, 0.15); color: var(--success); }
     .msg.err { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
+    .msg-wrap { margin-top: 12px; }
+    .msg-wrap .msg { margin-top: 0; }
+    .msg-wrap-actions { margin-top: 8px; }
+    .msg-wrap-actions .btn-close-msg { padding: 6px 14px; font-size: 13px; background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .msg-wrap-actions .btn-close-msg:hover { color: var(--text); border-color: var(--text); }
     .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
     .parse-box {
       margin-bottom: 20px;
@@ -250,11 +255,14 @@
       <input name="target" id="addFormTarget" required placeholder="组织名 或 owner/repo">
       <label>标签 (labels，逗号分隔，可选)</label>
       <input name="labelsStr" id="addFormLabelsStr" placeholder="self-hosted, linux, x64">
-      <label>注册 Token（可选，从 GitHub 设置 → Actions → Runners 复制，1 小时有效）</label>
+      <label>注册 Token（可选，从 GitHub 设置 → Actions → Runners → Add new 复制，1 小时有效；<strong>每添加一个 Runner 请使用新生成的 Token</strong>）</label>
       <input name="registration_token" id="addFormToken" type="password" placeholder="选填；填写后将自动安装（Docker 下）并注册、启动">
       <button type="submit">添加 Runner</button>
     </form>
-    <div id="addMsg"></div>
+    <div id="addMsgWrap" class="msg-wrap" style="display: none;">
+      <div id="addMsg" class="msg"></div>
+      <div class="msg-wrap-actions"><button type="button" class="btn-close-msg" id="addMsgClose">关闭</button></div>
+    </div>
   </div>
 
   <div id="runnerModal" class="modal-overlay">
@@ -378,29 +386,47 @@
         delete body.labelsStr;
       }
       const msgEl = document.getElementById('addMsg');
-      msgEl.innerHTML = '';
+      const msgWrap = document.getElementById('addMsgWrap');
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      msgWrap.style.display = 'none';
+      msgEl.innerHTML = '正在添加并注册 Runner，请稍候…';
       msgEl.className = 'msg';
+      msgWrap.style.display = 'block';
+      if (submitBtn) submitBtn.disabled = true;
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
         const r = await fetch('/api/runners', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
           msgEl.className = 'msg err';
           msgEl.textContent = data.message || r.statusText || '请求失败';
+          if (submitBtn) submitBtn.disabled = false;
+          msgWrap.style.display = 'block';
           return;
         }
         msgEl.className = 'msg ok';
         msgEl.innerHTML = data.message + (data.install_dir ? '<br><span class="path">' + data.install_dir + '</span>' : '');
         if (data.output) msgEl.innerHTML += '<pre style="margin-top:8px;font-size:12px">' + escapeHtml(data.output) + '</pre>';
         e.target.reset();
-        setTimeout(() => location.reload(), 1500);
+        if (submitBtn) submitBtn.disabled = false;
+        msgWrap.style.display = 'block';
       } catch (err) {
+        if (submitBtn) submitBtn.disabled = false;
         msgEl.className = 'msg err';
-        msgEl.textContent = err.message || '请求失败';
+        msgEl.textContent = err.name === 'AbortError' ? '请求超时，请刷新页面查看当前状态' : (err.message || '请求失败');
+        msgWrap.style.display = 'block';
       }
+    });
+    document.getElementById('addMsgClose').addEventListener('click', function() {
+      document.getElementById('addMsgWrap').style.display = 'none';
+      location.reload();
     });
     function escapeHtml(s) {
       const d = document.createElement('div');

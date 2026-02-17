@@ -19,6 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI：DinD 模式下 Job 内 docker/setup-qemu-action、docker build 等需在容器内调用 docker 命令，通过 DOCKER_HOST 连接 DinD 守护进程
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a644 /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${VERSION_CODENAME}") main" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
 # 使用非 root 用户运行，避免 GitHub Actions Runner 报 "Must not run with sudo"
 # UID/GID 1001 挂载 runners 卷时可按需 chown
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /app -s /bin/bash app

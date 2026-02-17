@@ -253,9 +253,16 @@ func AddRunner(c echo.Context) error {
 			if strings.Contains(string(out), "Must not run with sudo") {
 				msg += "（请以非 root 用户运行容器，或设置环境变量 RUNNER_ALLOW_RUNASROOT=1）"
 			}
+			// 若疑似 token 已用/无效/过期，提示为每个 Runner 使用新 Token
+			outLower := strings.ToLower(string(out))
+			if strings.Contains(outLower, "token") &&
+				(strings.Contains(outLower, "invalid") || strings.Contains(outLower, "expired") ||
+					strings.Contains(outLower, "already") || strings.Contains(outLower, "used")) {
+				msg += "。请为每个 Runner 在 GitHub 重新生成新的注册 Token（Settings → Actions → Runners → Add new runner）"
+			}
 			writeRegistrationResult(installDir, false, msg)
 			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "配置已保存，向 GitHub 注册失败（可能 token 过期或网络问题）: " + msg,
+				"message":     "配置已保存，向 GitHub 注册失败: " + msg,
 				"name":        item.Name,
 				"install_dir": installDir,
 				"output":      string(out),
@@ -450,6 +457,7 @@ func UpdateRunner(c echo.Context) error {
 }
 
 // RemoveRunnerByName 从路径参数获取 name 并移除（DELETE /api/runners/:name）
+// 会先停止 runner 进程，再删除其安装目录，最后从配置中移除。
 func RemoveRunnerByName(c echo.Context) error {
 	name := c.Param("name")
 	if name == "" {
@@ -457,6 +465,21 @@ func RemoveRunnerByName(c echo.Context) error {
 	}
 	if !isValidNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
+	}
+	cfg, err := config.Load(ConfigPath)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "加载配置失败: "+err.Error())
+	}
+	info := runner.GetByName(cfg, name)
+	if info == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
+	}
+	installDir := info.InstallDir
+	// 先停止 runner 进程（若在运行）
+	_ = runner.Stop(installDir)
+	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
+	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {
+		_ = os.RemoveAll(installDir)
 	}
 	if err := config.LoadAndSave(ConfigPath, func(cfg *config.Config) error {
 		return removeRunnerFromConfig(cfg, name)
@@ -467,6 +490,23 @@ func RemoveRunnerByName(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败: "+err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "已从配置中移除"})
+}
+
+// isUnderBasePath 判断 dir 是否在 basePath 之下（用于安全删除），且不为 basePath 自身
+func isUnderBasePath(basePath, dir string) bool {
+	baseAbs, err := filepath.Abs(basePath)
+	if err != nil {
+		return false
+	}
+	dirAbs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseAbs, dirAbs)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // isValidNameOrPath 校验 name/path 不含路径穿越或非法字符
