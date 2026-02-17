@@ -54,10 +54,40 @@ make run
 |------|------|------|
 | `/health` | GET | 返回 `{"status":"ok"}`，可用于 Ingress/K8s 探针。 |
 | `/version` | GET | 返回 `{"version":"..."}`。 |
-| `/api/runners` | GET | 返回 Runner 列表。容器模式下若状态探测失败，会返回 `status=unknown` 且带 `probe_error`。 |
-| `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回 `probe_error` 便于排障。 |
-| `/api/runners/:name/start` | POST | 启动指定 Runner。容器模式下若状态探测失败，仍会尝试启动，并在响应中返回 `probe_error`。 |
-| `/api/runners/:name/stop` | POST | 停止指定 Runner。容器模式下若状态探测失败，仍会尝试停止，并在响应中返回 `probe_error`。 |
+| `/api/runners` | GET | 返回 Runner 列表。容器模式下若状态探测失败，会返回 `status=unknown` 且带结构化 `probe`（含 `error/type/suggestion/check_command/fix_command`）。 |
+| `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回结构化 `probe`。 |
+| `/api/runners/:name/start` | POST | 启动指定 Runner。容器模式下若状态探测失败，仍会尝试启动，并在响应中返回结构化 `probe`。 |
+| `/api/runners/:name/stop` | POST | 停止指定 Runner。容器模式下若状态探测失败，仍会尝试停止，并在响应中返回结构化 `probe`。 |
+
+### 升级注意（破坏性变更）
+
+- 探测失败相关的历史扁平字段（`probe_error`、`probe_error_type`、`probe_suggestion`、`probe_check_command`、`probe_fix_command`）已移除。
+- 调用方需统一读取 `probe` 对象：
+  - 错误文本：`probe.error`
+  - 错误类型：`probe.type`
+  - 建议与命令：`probe.suggestion`、`probe.check_command`、`probe.fix_command`
+- 若你有自定义前端、告警或脚本，请将解析逻辑从 `probe_*` 切换到 `probe.*`。
+
+WebUI 在 `status=unknown` 时会保留「启动 / 停止」手动操作入口，便于运维在探测异常时执行自愈动作。
+`probe.type` 目前可能值：`docker-access`、`agent-http`、`agent-connect`、`unknown`。
+WebUI 优先展示后端返回的 `probe` 字段（后端为建议与命令单点来源），前端仅保留兜底通用提示。
+WebUI 会将命令拆分为「检查命令（只读）」与「修复命令（有副作用）」，默认建议先执行检查命令；修复命令需要二次确认后才显示。两类命令都支持一键复制（仅复制，不执行），并带浏览器权限受限时的回退复制逻辑。
+
+示例（探测失败）：
+
+```json
+{
+  "name": "runner-a",
+  "status": "unknown",
+  "probe": {
+    "error": "agent 返回 502: bad gateway",
+    "type": "agent-http",
+    "suggestion": "查看 runner 容器日志，确认 Agent 与 /runner 下脚本进程状态",
+    "check_command": "docker ps -a | rg \"github-runner-\" && docker logs --tail=200 <runner_container_name>",
+    "fix_command": "docker restart <runner_container_name>"
+  }
+}
+```
 
 ## Makefile 目标
 

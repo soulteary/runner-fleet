@@ -296,14 +296,18 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	cn := ContainerName(runnerName)
 	ok, err := ContainerRunning(ctx, cn)
 	if err != nil {
-		return false, StatusUnknown, err
+		return false, StatusUnknown, newProbeError(ProbeErrorTypeDockerAccess, err)
 	}
 	if !ok {
 		return false, StatusInstalled, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}
 	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort)
 	if err != nil {
-		return true, StatusUnknown, err
+		agentErrType := ProbeErrorTypeAgentConnect
+		if strings.Contains(err.Error(), "agent 返回") {
+			agentErrType = ProbeErrorTypeAgentHTTP
+		}
+		return true, StatusUnknown, newProbeError(agentErrType, err)
 	}
 	switch agent.Status {
 	case "installed":

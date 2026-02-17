@@ -33,20 +33,29 @@ const (
 
 // RunnerInfo 供前端展示的 runner 信息
 type RunnerInfo struct {
-	Name                  string   `json:"name"`
-	Path                  string   `json:"path"`
-	TargetType            string   `json:"target_type"`
-	Target                string   `json:"target"`
-	Labels                []string `json:"labels"`
-	Status                Status   `json:"status"`
-	InstallDir            string   `json:"install_dir"`
-	Running               bool     `json:"running"`                 // 进程是否在跑
-	ProbeError            string   `json:"probe_error"`             // 容器模式下状态探测失败原因（如 Docker 权限、Agent 不可达）
-	JobDockerBackend      string   `json:"job_docker_backend"`      // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
-	RegistrationMessage   string   `json:"registration_message"`    // 最近一次注册结果信息（成功或失败原因）
-	RegistrationCheckedAt string   `json:"registration_checked_at"` // 注册结果时间
-	RegisteredOnGitHub    *bool    `json:"registered_on_github"`    // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
-	GitHubCheckAt         string   `json:"github_check_at"`         // 最近一次 GitHub 检查时间
+	Name                  string     `json:"name"`
+	Path                  string     `json:"path"`
+	TargetType            string     `json:"target_type"`
+	Target                string     `json:"target"`
+	Labels                []string   `json:"labels"`
+	Status                Status     `json:"status"`
+	InstallDir            string     `json:"install_dir"`
+	Running               bool       `json:"running"`                 // 进程是否在跑
+	Probe                 *ProbeInfo `json:"probe,omitempty"`         // 结构化探测信息（error/type/suggestion/check_command/fix_command）
+	JobDockerBackend      string     `json:"job_docker_backend"`      // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
+	RegistrationMessage   string     `json:"registration_message"`    // 最近一次注册结果信息（成功或失败原因）
+	RegistrationCheckedAt string     `json:"registration_checked_at"` // 注册结果时间
+	RegisteredOnGitHub    *bool      `json:"registered_on_github"`    // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
+	GitHubCheckAt         string     `json:"github_check_at"`         // 最近一次 GitHub 检查时间
+}
+
+// ProbeInfo 为容器探测失败的结构化信息。
+type ProbeInfo struct {
+	Error        string `json:"error"`
+	Type         string `json:"type"`
+	Suggestion   string `json:"suggestion"`
+	CheckCommand string `json:"check_command"`
+	FixCommand   string `json:"fix_command"`
 }
 
 // GetByName 根据名称获取单个 runner 信息，不存在返回 nil；cfg 为 nil 时安全返回 nil

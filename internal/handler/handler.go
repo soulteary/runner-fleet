@@ -114,6 +114,23 @@ func getConfig(c echo.Context) (*config.Config, error) {
 	return cfg, nil
 }
 
+func applyProbeFailure(info *runner.RunnerInfo, statusErr error) {
+	info.Running = false
+	info.Status = runner.StatusUnknown
+	pt := runner.DetectProbeErrorType(statusErr)
+	info.Probe = &runner.ProbeInfo{
+		Error:        statusErr.Error(),
+		Type:         string(pt),
+		Suggestion:   runner.ProbeSuggestion(pt),
+		CheckCommand: runner.ProbeCheckCommand(pt),
+		FixCommand:   runner.ProbeFixCommand(pt),
+	}
+}
+
+func clearProbe(info *runner.RunnerInfo) {
+	info.Probe = nil
+}
+
 // shortRandomSuffix 生成 6 位小写字母+数字的随机后缀，用于 runner 名称去重
 func shortRandomSuffix() string {
 	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -212,12 +229,10 @@ func ListRunners(c echo.Context) error {
 			running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
 			if statusErr != nil {
 				log.Printf("[list] 获取容器 Runner 状态失败 name=%s: %v", list[i].Name, statusErr)
-				list[i].Running = false
-				list[i].Status = runner.StatusUnknown
-				list[i].ProbeError = statusErr.Error()
+				applyProbeFailure(&list[i], statusErr)
 				continue
 			}
-			list[i].ProbeError = ""
+			clearProbe(&list[i])
 			list[i].Running = running
 			list[i].Status = status
 		}
@@ -238,12 +253,10 @@ func Index(c echo.Context) error {
 			running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
 			if statusErr != nil {
 				log.Printf("[index] 获取容器 Runner 状态失败 name=%s: %v", list[i].Name, statusErr)
-				list[i].Running = false
-				list[i].Status = runner.StatusUnknown
-				list[i].ProbeError = statusErr.Error()
+				applyProbeFailure(&list[i], statusErr)
 				continue
 			}
-			list[i].ProbeError = ""
+			clearProbe(&list[i])
 			list[i].Running = running
 			list[i].Status = status
 		}
@@ -412,12 +425,10 @@ func GetRunner(c echo.Context) error {
 		ctx := c.Request().Context()
 		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
 		if statusErr != nil {
-			info.Running = false
-			info.Status = runner.StatusUnknown
-			info.ProbeError = statusErr.Error()
+			applyProbeFailure(info, statusErr)
 			return c.JSON(http.StatusOK, info)
 		}
-		info.ProbeError = ""
+		clearProbe(info)
 		info.Running = running
 		info.Status = status
 	}
@@ -447,11 +458,10 @@ func StartRunner(c echo.Context) error {
 		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
 		if statusErr != nil {
 			probeFailed = true
-			info.ProbeError = statusErr.Error()
-			info.Running = false
+			applyProbeFailure(info, statusErr)
 			log.Printf("[start] 容器 Runner 状态探测失败 name=%s，将继续尝试启动: %v", info.Name, statusErr)
 		} else {
-			info.ProbeError = ""
+			clearProbe(info)
 			info.Running = running
 			info.Status = status
 		}
@@ -470,8 +480,8 @@ func StartRunner(c echo.Context) error {
 		}
 		if probeFailed {
 			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "状态探测失败，但已尝试启动 Runner 容器并通知 Agent 启动",
-				"probe_error": info.ProbeError,
+				"message": "状态探测失败，但已尝试启动 Runner 容器并通知 Agent 启动",
+				"probe":   info.Probe,
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]any{"message": "已启动 Runner 容器并通知 Agent 启动"})
@@ -505,11 +515,10 @@ func StopRunner(c echo.Context) error {
 		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
 		if statusErr != nil {
 			probeFailed = true
-			info.ProbeError = statusErr.Error()
-			info.Running = false
+			applyProbeFailure(info, statusErr)
 			log.Printf("[stop] 容器 Runner 状态探测失败 name=%s，将继续尝试停止: %v", info.Name, statusErr)
 		} else {
-			info.ProbeError = ""
+			clearProbe(info)
 			info.Running = running
 			info.Status = status
 		}
@@ -525,8 +534,8 @@ func StopRunner(c echo.Context) error {
 		}
 		if probeFailed {
 			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "状态探测失败，但已尝试停止 Runner 容器",
-				"probe_error": info.ProbeError,
+				"message": "状态探测失败，但已尝试停止 Runner 容器",
+				"probe":   info.Probe,
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]any{"message": "已停止 Runner 容器"})
