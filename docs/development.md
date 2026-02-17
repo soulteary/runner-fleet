@@ -56,7 +56,10 @@ make run
 - `make build`：构建（带 Version ldflags）。
 - `make test`：运行测试。
 - `make run`：先 build 再运行当前目录二进制。
-- `make docker-build` / `make docker-run` / `make docker-stop`：Docker 构建与运行，见 [Docker 部署](docker.md)。
+- `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [Docker 部署](docker.md)。
+- `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。
 - `make clean`：删除生成的二进制。
+
+容器模式下 Runner 容器内运行的是 `cmd/runner-agent` 编译出的 Agent，仅构建 Manager 时不会包含该二进制；Runner 镜像单独用 `Dockerfile.runner` 构建。
 
 [← 返回文档索引](README.md)

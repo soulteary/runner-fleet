@@ -42,6 +42,8 @@
 
 **使用 Docker 或 DinD 时**：若在「快速添加」中填写了 Token 并提交，服务会**先自动执行安装脚本**（下载并解压 runner 到该目录），再执行**向 GitHub 注册**（`config.sh`，超时 2 分钟）并启动；无需事先手动执行 `install-runner.sh`。若自动安装失败（如网络问题），可按 [Docker 部署](docker.md) 中「Docker/DinD 下自动注册的前提」手动安装后，重新获取 Token 再在界面提交或在该目录下手动执行 `config.sh`。
 
+**容器模式**（`runners.container_mode: true`）：注册成功后的「自动启动」会启动该 Runner 的**独立容器**（并通知容器内 Agent 启动 Runner 进程）。需先构建 Runner 镜像并配置 `volume_host_path` 等，见 [Docker 部署 - 容器模式](docker.md#容器模式runner-独立容器cs)。
+
 ## 注册结果与 GitHub 显示检查
 
 - **注册结果**：仅使用添加时在表单中填写的 Token（从 GitHub 复制的短期 token）。每次在界面使用 Token 执行注册后，结果会写入该 runner 目录下的 `.registration_result.json`（成功或失败原因），并在列表与详情中显示。

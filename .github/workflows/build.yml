@@ -26,6 +26,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: --max-same-issues=100000
+
       - name: Run tests
         run: go test -v ./...
 
@@ -49,9 +55,12 @@ jobs:
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build
+      - name: Build Manager
         run: |
           go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" -o runner-manager .
+
+      - name: Build Runner Agent (container mode)
+        run: go build -o runner-agent ./cmd/runner-agent
 
       - name: Init example config
         run: cp config.yaml.example config.yaml

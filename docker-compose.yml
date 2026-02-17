@@ -1,8 +1,22 @@
-# 基于 docs/docker.md 中「方式二：DinD」编排
-# 使用前请确保 config.yaml 中 runners.base_path 为 /app/runners
-# 镜像以 UID 1001 运行，宿主机上请保证：
-#   - ./config.yaml 对 UID 1001 可写（添加/删除/更新 Runner 会写回），例如：chown 1001:1001 config.yaml
-#   - ./runners 对 UID 1001 可写，例如：mkdir -p runners && chown 1001:1001 runners
+# Runner Fleet - GitHub Actions Runner 管理 + DinD
+# 详见 docs/docker.md
+#
+# === 首次使用 ===
+# 1. 复制配置：cp config.yaml.example config.yaml
+# 2. 确认 config.yaml 中 runners.base_path 为 /app/runners（与下方 volumes 一致）
+# 3. 宿主机目录权限（Manager 以 UID 1001 运行）：
+#      chown 1001:1001 config.yaml
+#      mkdir -p runners && chown 1001:1001 runners
+# 4. 可选：复制 .env.example 为 .env，设置 MANAGER_IMAGE 等（见下方 services.runner-manager.image）
+# 5. 若启用容器模式（runners.container_mode: true）：
+#      - 取消 config.yaml 中 container_mode 等注释
+#      - 设置 volume_host_path 为宿主机 runners 绝对路径（例如：realpath runners 或 $(cd . && pwd)/runners）
+#      - 设置 container_image 为 CI 推送的 ghcr.io/<owner>/<repo>:main-runner（与 Manager 同镜像名，tag 带 -runner），或本地构建的镜像 tag
+#
+# === 两种运行模式 ===
+# - 默认（container_mode: false）：Runner 进程在 Manager 容器内运行，Job 需 Docker 时使用 DOCKER_HOST（当前为宿主机 socket）
+# - 容器模式（container_mode: true）：每个 Runner 独立容器，Manager 通过宿主机 Docker 启停（需 socket，已配置）
+# 非容器模式且希望 Job 内 docker 使用 DinD：在 .env 中设置 DOCKER_HOST=tcp://runner-dind:2375（仅非容器模式；容器模式须用宿主机 socket）
 
 services:
   runner-dind:
@@ -11,31 +25,36 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
-    # 显式关闭 TLS，仅在内网 runner-net 使用，消除弃用告警
     command: ["--tls=false"]
     volumes:
-      # 持久化 DinD 的镜像与容器层，Runner 拉取的 action 容器可复用，减少重复下载
-      # 务必使用命名卷或单独宿主机路径，不要挂载宿主机 /var/lib/docker，否则与宿主 Docker 争用 metadata.db 导致启动 timeout
       - dind-storage:/var/lib/docker
     networks:
       - runner-net
     restart: unless-stopped
 
   runner-manager:
-    image: ghcr.io/soulteary/runner-fleet:main
+    # 使用本仓库 CI 镜像时可设 .env：MANAGER_IMAGE=ghcr.io/<owner>/<repo>:main
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:main}
     container_name: runner-manager
     depends_on:
       - runner-dind
     environment:
-      DOCKER_HOST: tcp://runner-dind:2375
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
     ports:
-      - "8080:8080"
+      - "${MANAGER_PORT:-8080}:8080"
     volumes:
       - ./config.yaml:/app/config.yaml
-      - ./runners:/app/runners  # 需对 UID 1001 可写，见顶部注释
+      - ./runners:/app/runners
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - runner-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
 networks:
   runner-net:
@@ -43,4 +62,3 @@ networks:
 
 volumes:
   dind-storage:
-    # DinD 数据卷，供 runner-dind 持久化 /var/lib/docker

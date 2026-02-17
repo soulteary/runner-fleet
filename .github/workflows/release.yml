@@ -76,11 +76,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Compute canonical image name (lowercase for GHCR)
+        id: vars
+        run: |
+          CANONICAL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "canonical=${CANONICAL,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata (Manager image)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.vars.outputs.canonical }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
@@ -88,7 +94,7 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=true
 
-      - name: Build and push Docker image
+      - name: Build and push Manager Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -98,6 +104,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Prepare Runner tags (same image, tag suffix -runner)
+        id: runner-tags
+        run: |
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${{ steps.meta.outputs.tags }}" | sed '/./s/\(:.*\)$/\1-runner/' >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Runner Docker image (container mode)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.runner
+          push: true
+          tags: ${{ steps.runner-tags.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -116,8 +141,13 @@ jobs:
 
             ### Docker 镜像 (GHCR)
 
+            - Manager（管理服务）:
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}
+            ```
+            - Runner 容器镜像（容器模式，同镜像名，tag 带 -runner 后缀）:
+            ```bash
+            docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}-runner
             ```
 
             ### 二进制

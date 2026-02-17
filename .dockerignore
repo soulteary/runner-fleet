@@ -5,8 +5,10 @@
 .gitignore
 .dockerignore
 runner-manager
+runner-agent
 *.exe
 runners
+config.yaml
 .env
 *.test
 *.out

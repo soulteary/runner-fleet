@@ -131,9 +131,16 @@ func runAutoStartRunners(configPath string) {
 		return
 	}
 	list := runner.List(cfg)
+	ctx := context.Background()
 	for _, info := range list {
 		if info.Status == runner.StatusInstalled && !info.Running {
-			if err := runner.Start(info.InstallDir); err != nil {
+			if cfg.Runners.ContainerMode {
+				if err := runner.StartRunnerContainer(ctx, cfg, info.Name, info.InstallDir); err != nil {
+					log.Printf("自动启动 Runner 容器 %s 失败: %v", info.Name, err)
+				} else {
+					log.Printf("已自动启动 Runner 容器: %s", info.Name)
+				}
+			} else if err := runner.Start(info.InstallDir); err != nil {
 				log.Printf("自动启动 runner %s 失败: %v", info.Name, err)
 			} else {
 				log.Printf("已自动启动 runner: %s", info.Name)
@@ -156,9 +163,17 @@ func runRegistrationCheck(configPath string) {
 			githubcheck.Run(cfg)
 			// 首次不执行拉起，避免与 runAutoStartRunners(15s) 重叠导致重复启动同一 runner
 			if !firstRun {
-				for _, info := range runner.List(cfg) {
+				list := runner.List(cfg)
+				ctx := context.Background()
+				for _, info := range list {
 					if info.Status == runner.StatusInstalled && !info.Running {
-						if err := runner.Start(info.InstallDir); err != nil {
+						if cfg.Runners.ContainerMode {
+							if err := runner.StartRunnerContainer(ctx, cfg, info.Name, info.InstallDir); err != nil {
+								log.Printf("定时拉起 Runner 容器 %s 失败: %v", info.Name, err)
+							} else {
+								log.Printf("已定时拉起 Runner 容器: %s", info.Name)
+							}
+						} else if err := runner.Start(info.InstallDir); err != nil {
 							log.Printf("定时拉起 runner %s 失败: %v", info.Name, err)
 						} else {
 							log.Printf("已定时拉起 runner: %s", info.Name)

@@ -13,6 +13,27 @@
 docker pull ghcr.io/soulteary/runner-fleet:main
 ```
 
+## 使用 docker-compose 快速开始
+
+仓库根目录提供 `docker-compose.yml`，包含 Manager + DinD，开箱可用：
+
+```bash
+# 1. 复制配置并修改 base_path
+cp config.yaml.example config.yaml
+# 编辑 config.yaml，将 runners.base_path 改为 /app/runners
+
+# 2. 宿主机目录权限（Manager 以 UID 1001 运行）
+chown 1001:1001 config.yaml
+mkdir -p runners && chown 1001:1001 runners
+
+# 3. 启动
+docker compose up -d
+
+# 管理界面：http://localhost:8080
+```
+
+若启用**容器模式**（每个 Runner 独立容器），还需：在 `config.yaml` 中取消注释 `container_mode`、`container_image` 等并设置 `volume_host_path` 为宿主机上 `runners` 的绝对路径。Runner 镜像与 Manager 同名，tag 带 `-runner` 后缀（如 `ghcr.io/<owner>/<repo>:main-runner`），或本地构建：`docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。详见 [容器模式](#容器模式runner-独立容器cs)。
+
 ## 运行容器（完整参数）
 
 **必须挂载配置与 runners 目录**，否则配置无法持久化、Runner 无法安装与运行。端口需与 `config.yaml` 中 `server.port` 一致（默认 8080）。
@@ -115,7 +136,56 @@ docker run -d --name runner-manager \
 
 ---
 
+## 容器模式：Runner 独立容器（C/S）
+
+当希望**每个 GitHub Runner 运行在独立容器中**、由 Manager 通过 C/S 方式启停并获取状态时，可启用**容器模式**。
+
+### 机制简述
+
+- **Manager**：通过宿主机 Docker（挂载 `docker.sock`）创建/启停 Runner 容器，并与 Runner 容器处于同一网络，通过 HTTP 访问容器内 **Agent** 获取 Runner 进程状态。
+- **Runner 容器**：基于 `Dockerfile.runner` 构建的镜像，内含 **Runner Agent**（提供 `/status`、`/start`、`/stop`）和 Runner 运行依赖；Runner 安装目录由 Manager 挂载到容器内 `/runner`。
+- **启停**：点击「启动」时 Manager 执行 `docker create`（若不存在）+ `docker start`，并请求 Agent 的 `POST /start` 启动 Runner 进程；「停止」时 `docker stop` 该容器。
+
+### 配置与构建
+
+1. **config.yaml 中启用并填写**（详见 `config.yaml.example`）：
+
+   ```yaml
+   runners:
+     base_path: /app/runners
+     container_mode: true
+     container_image: ghcr.io/soulteary/runner-fleet-runner:main   # 或 CI：ghcr.io/<owner>/<repo>:main-runner
+     container_network: runner-net
+     agent_port: 8081
+     dind_host: runner-dind
+     volume_host_path: /abs/path/on/host/to/runners   # Manager 在容器内时必填
+   ```
+
+2. **Runner 镜像**：与 Manager 同镜像名，tag 带 `-runner`（如 `ghcr.io/<owner>/<repo>:main-runner`、`:1.0.0-runner`），或本地构建：
+
+   ```bash
+   docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+   ```
+
+3. **部署要求**：
+   - Manager 必须能执行 `docker` 且能创建与 Manager 同网络的容器，故需挂载**宿主机** `docker.sock` 并设置 `DOCKER_HOST=unix:///var/run/docker.sock`（仓库内 `docker-compose.yml` 已按此配置）。
+   - Runner 容器与 Manager、DinD 在同一网络（如 `runner-net`），以便 Manager 访问 Agent、Runner Job 内访问 DinD。
+   - **Runner 名称**会映射为容器名（如 `github-runner-<名称>`），仅保留字母、数字、`-`、`_`。若两个名称映射后相同（如 `a.b` 与 `a-b`）会冲突，请使用可区分名称。
+
+### 与「本地进程」模式的区别
+
+| 能力       | 本地进程模式           | 容器模式                         |
+|------------|------------------------|----------------------------------|
+| Runner 载体 | Manager 容器内子进程   | 独立容器，每 Runner 一容器      |
+| 启停方式   | Manager 内 `run.sh`/pid | Docker 启停 + Agent `/start`     |
+| 状态来源   | 本机 pid/目录          | 请求容器内 Agent `/status`      |
+| Job 内 Docker | 同 Manager 的 DOCKER_HOST | 容器内 DOCKER_HOST 指向 DinD |
+
+---
+
 ## 本地构建镜像
+
+**Manager 镜像**（主程序）：
 
 ```bash
 # 默认构建（VERSION=dev）
@@ -125,7 +195,13 @@ docker build -t runner-manager .
 docker build --build-arg VERSION=1.0.0 -t runner-manager:1.0.0 .
 ```
 
-使用 Makefile：`make docker-build`（使用 Makefile 中 `VERSION` 变量，默认 `dev`，可 `VERSION=1.0.0 make docker-build`）。
+**Runner 容器镜像**（仅容器模式需要）：
+
+```bash
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+```
+
+使用 Makefile：`make docker-build`（构建 Manager 镜像；使用 Makefile 中 `VERSION` 变量，默认 `dev`，可 `VERSION=1.0.0 make docker-build`）。
 
 若使用 `make docker-build` 构建，镜像 tag 为 `runner-manager:$(VERSION)`，运行时可把上面命令中的 `ghcr.io/soulteary/runner-fleet:main` 改为 `runner-manager:dev`（或你传入的 VERSION）；或直接使用 `make docker-run`（使用当前目录的 `config.yaml` 与 `runners/`）。
 
