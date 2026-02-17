@@ -27,6 +27,9 @@ jobs:
       - name: Build
         run: go build -ldflags "-X main.Version=${{ github.sha }}" -o runner-manager .
 
+      - name: Init example config
+        run: cp config.yaml.example config.yaml
+
       - name: Verify binary
         run: |
           ./runner-manager -version
