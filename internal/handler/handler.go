@@ -243,6 +243,9 @@ func AddRunner(c echo.Context) error {
 			if msg == "" {
 				msg = err.Error()
 			}
+			if strings.Contains(string(out), "Must not run with sudo") {
+				msg += "（请以非 root 用户运行容器，或设置环境变量 RUNNER_ALLOW_RUNASROOT=1）"
+			}
 			writeRegistrationResult(installDir, false, msg)
 			return c.JSON(http.StatusOK, map[string]any{
 				"message":     "配置已保存，向 GitHub 注册失败（可能 token 过期或网络问题）: " + msg,

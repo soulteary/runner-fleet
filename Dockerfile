@@ -12,12 +12,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# 使用非 root 用户运行，避免 GitHub Actions Runner 报 "Must not run with sudo"
+# UID/GID 1000 与常见宿主机首用户一致，挂载 runners 卷时权限更易匹配
+RUN groupadd -g 1000 app && useradd -r -u 1000 -g app -d /app -s /bin/bash app
+
 WORKDIR /app
 COPY --from=builder /app/runner-manager .
 COPY --from=builder /app/config.yaml ./config.yaml
-RUN mkdir -p /app/scripts
+RUN mkdir -p /app/scripts /app/runners
 COPY scripts/install-runner.sh /app/scripts/install-runner.sh
-RUN chmod +x /app/scripts/install-runner.sh
+RUN chmod +x /app/scripts/install-runner.sh && chown -R app:app /app
+
+USER app
 EXPOSE 8080
 ENTRYPOINT ["./runner-manager"]
 CMD ["-config", "config.yaml"]
