@@ -6,5 +6,6 @@ server:
     port: 8080
     addr: 0.0.0.0
 runners:
+    # 本地运行可用 ./runners；Docker/docker-compose 请改为 /app/runners（与卷挂载一致）
     base_path: ./runners
     items: []   # 预置 Runner 列表，也可通过 Web 界面添加
