@@ -3,7 +3,7 @@
 ## 1. 在 GitHub 获取 Token
 
 1. 进入目标 **仓库** 或 **组织**：**Settings → Actions → Runners → New self-hosted runner**。
-2. 在注册说明中复制 **Token**（约 1 小时有效）。
+2. 在注册说明中复制 **Token**（约 1 小时有效）。**每个 Runner 必须使用新生成的 Token**（同一 Token 只能成功注册一个 Runner）。
 
 ## 2. 在本服务中添加
 
