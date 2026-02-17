@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/lab-dev/github-actions-runner-manager/internal/githubcheck"
 	"github.com/lab-dev/github-actions-runner-manager/internal/handler"
+	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -98,6 +100,8 @@ func main() {
 		}
 	}
 	srv := &http.Server{Addr: addr, Handler: e}
+	go runAutoStartRunners(*configPath)
+	go runRegistrationCheck(*configPath)
 	go func() {
 		log.Printf("监听 %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -114,4 +118,55 @@ func main() {
 		log.Fatal("关闭服务失败:", err)
 	}
 	log.Println("已退出")
+}
+
+// runAutoStartRunners 启动后延迟执行一次：将已注册但未在运行的 runner 全部拉起（便于 DinD/管理器重启后恢复）
+func runAutoStartRunners(configPath string) {
+	const delay = 15 * time.Second
+	time.Sleep(delay)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		log.Printf("自动启动 runner 时加载配置失败: %v", err)
+		return
+	}
+	list := runner.List(cfg)
+	for _, info := range list {
+		if info.Status == runner.StatusInstalled && !info.Running {
+			if err := runner.Start(info.InstallDir); err != nil {
+				log.Printf("自动启动 runner %s 失败: %v", info.Name, err)
+			} else {
+				log.Printf("已自动启动 runner: %s", info.Name)
+			}
+		}
+	}
+}
+
+// runRegistrationCheck 每 5 分钟加载配置并检查各 runner 是否已在 GitHub 显示，写入 .github_status.json 供界面展示
+func runRegistrationCheck(configPath string) {
+	const interval = 5 * time.Minute
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	// 启动后稍等再执行第一次，避免与 HTTP 启动竞争
+	time.Sleep(30 * time.Second)
+	firstRun := true
+	for {
+		cfg, err := config.Load(configPath)
+		if err == nil {
+			githubcheck.Run(cfg)
+			// 首次不执行拉起，避免与 runAutoStartRunners(15s) 重叠导致重复启动同一 runner
+			if !firstRun {
+				for _, info := range runner.List(cfg) {
+					if info.Status == runner.StatusInstalled && !info.Running {
+						if err := runner.Start(info.InstallDir); err != nil {
+							log.Printf("定时拉起 runner %s 失败: %v", info.Name, err)
+						} else {
+							log.Printf("已定时拉起 runner: %s", info.Name)
+						}
+					}
+				}
+			}
+			firstRun = false
+		}
+		<-ticker.C
+	}
 }

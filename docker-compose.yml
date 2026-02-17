@@ -1,0 +1,35 @@
+# 基于 docs/docker.md 中「方式二：DinD」编排
+# 使用前请确保 config.yaml 中 runners.base_path 为 /app/runners
+
+services:
+  runner-dind:
+    image: docker:dind
+    container_name: runner-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    # 显式关闭 TLS，仅在内网 runner-net 使用，消除弃用告警
+    command: ["--tls=false"]
+    networks:
+      - runner-net
+    restart: unless-stopped
+
+  runner-manager:
+    image: ghcr.io/soulteary/runner-fleet:main
+    container_name: runner-manager
+    depends_on:
+      - runner-dind
+    environment:
+      DOCKER_HOST: tcp://runner-dind:2375
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./runners:/app/runners
+    networks:
+      - runner-net
+    restart: unless-stopped
+
+networks:
+  runner-net:
+    driver: bridge
