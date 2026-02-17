@@ -21,8 +21,9 @@ cp config.yaml.example config.yaml
 
 # 2. 二选一：本地运行 或 Docker
 go run .                    # 需 Go 1.26
-# 或
+# 或 Docker（需挂载 config 与 runners，详见 docs/docker.md）
 make docker-build && make docker-run
+# 或使用已发布镜像：见 docs/docker.md 中的「运行容器」与 DinD 说明
 ```
 
 浏览器打开 http://localhost:8080。健康检查：`GET /health`；版本：`GET /version` 或 `./runner-manager -version`。
