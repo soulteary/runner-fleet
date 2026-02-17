@@ -41,6 +41,8 @@ type RunnerInfo struct {
 	Status                Status   `json:"status"`
 	InstallDir            string   `json:"install_dir"`
 	Running               bool     `json:"running"`                 // 进程是否在跑
+	ProbeError            string   `json:"probe_error"`             // 容器模式下状态探测失败原因（如 Docker 权限、Agent 不可达）
+	JobDockerBackend      string   `json:"job_docker_backend"`      // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
 	RegistrationMessage   string   `json:"registration_message"`    // 最近一次注册结果信息（成功或失败原因）
 	RegistrationCheckedAt string   `json:"registration_checked_at"` // 注册结果时间
 	RegisteredOnGitHub    *bool    `json:"registered_on_github"`    // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
@@ -64,6 +66,9 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 			Target:     item.Target,
 			Labels:     append([]string(nil), item.Labels...),
 			InstallDir: installDir,
+		}
+		if cfg.Runners.ContainerMode {
+			info.JobDockerBackend = cfg.Runners.JobDockerBackend
 		}
 		if item.Path == "" {
 			info.Path = item.Name
@@ -89,6 +94,9 @@ func List(cfg *config.Config) []RunnerInfo {
 			Target:     item.Target,
 			Labels:     append([]string(nil), item.Labels...),
 			InstallDir: installDir,
+		}
+		if cfg.Runners.ContainerMode {
+			info.JobDockerBackend = cfg.Runners.JobDockerBackend
 		}
 		if item.Path == "" {
 			info.Path = item.Name

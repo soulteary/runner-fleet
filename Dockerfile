@@ -1,11 +1,17 @@
 # Runner Fleet Manager：多阶段构建，编译 + Ubuntu 运行时（避免 Alpine 导致 GitHub Runner 运行异常）
-FROM golang:1.26-bookworm AS builder
+# 使用 BUILDPLATFORM 让 builder 在宿主机(amd64)上运行，TARGETOS/TARGETARCH 交叉编译，避免 QEMU 下 go build 失败
+ARG BUILDPLATFORM=linux/amd64
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
+# 显式复制构建 runner-manager 所需源码，避免 COPY . . 在部分构建上下文中未包含 cmd/internal
+COPY cmd ./cmd
+COPY internal ./internal
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags "-X main.Version=${VERSION}" -o runner-manager .
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION}" -o runner-manager ./cmd/runner-manager
 
 FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="Runner Fleet Manager" \

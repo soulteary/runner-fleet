@@ -4,8 +4,8 @@
 !README.md
 .gitignore
 .dockerignore
-runner-manager
-runner-agent
+/runner-manager
+/runner-agent
 *.exe
 runners
 config.yaml
@@ -13,3 +13,13 @@ config.yaml
 *.test
 *.out
 .DS_Store
+
+# Runner/Manager 镜像构建必须包含的路径（显式包含，避免被后续规则排除）
+!cmd
+!cmd/**
+# Manager 镜像还需 internal、配置与脚本
+!internal
+!internal/**
+!config.yaml.example
+!scripts
+!scripts/**

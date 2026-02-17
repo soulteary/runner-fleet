@@ -64,6 +64,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
+	if cfg.Runners.ContainerMode && runner.ManagerDockerHostIsDind() {
+		log.Printf("警告: 容器模式已开启，但 DOCKER_HOST 指向 TCP（DinD）。Manager 必须使用宿主机 Docker（socket）才能创建/启停 Runner 容器。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375")
+	}
 
 	e := echo.New()
 	e.HideBanner = true

@@ -12,11 +12,13 @@ runners:
     base_path: ./runners
     items: []   # 预置 Runner 列表，也可通过 Web 界面添加
 
-    # 容器模式：每个 Runner 运行在独立容器中，Manager 通过 Docker 启停并通过容器内 Agent 获取状态
-    # 启用后需保证 Manager 能执行 docker 且与 Runner 容器在同一网络（如 docker-compose 挂载宿主机 socket）
+    # 容器模式：每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker（socket）启停，并与 Runner 容器同网络
+    # 启用后 Manager 必须使用宿主机 docker（勿设 DOCKER_HOST=tcp://runner-dind:2375）
     # container_mode: true
     # container_image: ghcr.io/soulteary/runner-fleet-runner:main   # 或 CI：ghcr.io/<owner>/<repo>:main-runner
     # container_network: runner-net
     # agent_port: 8081
-    # dind_host: runner-dind
+    # Job 内 Docker 后端：dind（DinD 服务）、host-socket（挂载宿主机 socket）、none（不提供）
+    # job_docker_backend: dind   # 默认 dind；可选 host-socket、none
+    # dind_host: runner-dind     # 仅 job_docker_backend=dind 时有效
     # volume_host_path: /absolute/path/on/host/to/runners   # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径

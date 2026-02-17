@@ -3,7 +3,7 @@
 基于 Golang Echo 的 HTTP 管理界面，在一台机器上查看和管理多个 GitHub Actions 自托管 Runner。使用 YAML 配置，无需数据库。
 
 许可证：MIT，见 [LICENSE](LICENSE)。  
-CI：push 到 `main`/`master` 时通过 [GitHub Actions](.github/workflows/build.yml) 执行检查与构建；[publish-image](.github/workflows/publish-image.yml) 会构建并推送 Manager 与 Runner 容器镜像到 GHCR。
+CI：push 到 `main`/`master`/`develop` 时由 [CI (Manager)](.github/workflows/ci-manager.yml) 与 [CI (Runner)](.github/workflows/ci-agent.yml) 分别执行检查与构建；[Publish image (Manager)](.github/workflows/publish-image-manager.yml) / [Publish image (Runner)](.github/workflows/publish-image-agent.yml) 在 push 分支或 tag 时构建并推送对应容器镜像到 GHCR。推送 tag `v*.*.*` 时 [Release (Manager)](.github/workflows/release-manager.yml) 构建二进制与 Manager 镜像并创建 GitHub Release，[Release (Runner)](.github/workflows/release-agent.yml) 推送 Runner 镜像（tag 带 `-runner` 后缀）。
 
 ## 功能
 
@@ -21,7 +21,7 @@ CI：push 到 `main`/`master` 时通过 [GitHub Actions](.github/workflows/build
 cp config.yaml.example config.yaml
 
 # 2. 二选一：本地运行 或 Docker
-go run .                    # 需 Go 1.26
+go run ./cmd/runner-manager # 需 Go 1.26
 # 或 Docker（需挂载 config 与 runners，详见 docs/docker.md）
 make docker-build && make docker-run
 # 或使用已发布镜像：见 docs/docker.md 中的「运行容器」与 DinD 说明

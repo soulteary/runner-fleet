@@ -1,11 +1,14 @@
-// 容器模式：通过 Docker CLI 与 Runner 容器内 Agent 实现 C/S 控制与状态查询
+// 容器模式：通过 Docker CLI 与 Runner 容器内 Agent 实现 C/S 控制与状态查询。
+// 本包负责 Runner 容器的创建/启停/删除及与 Agent 的 HTTP 通信；Manager 仅编排，不承载 Runner 进程。
 package runner
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -49,7 +52,12 @@ func GetAgentStatus(ctx context.Context, containerName string, port int) (*Agent
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("agent 返回 %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return nil, fmt.Errorf("agent 返回 %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("agent 返回 %d: %s", resp.StatusCode, msg)
 	}
 	var out AgentStatus
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -75,7 +83,12 @@ func CallAgentStart(ctx context.Context, containerName string, port int) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("agent /start 返回 %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return fmt.Errorf("agent /start 返回 %d", resp.StatusCode)
+		}
+		return fmt.Errorf("agent /start 返回 %d: %s", resp.StatusCode, msg)
 	}
 	return nil
 }
@@ -85,20 +98,79 @@ func dockerCmd(ctx context.Context, args ...string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
+// containerNotFound 判断 docker 输出是否表示「容器不存在」（含英文/中文等）
+func containerNotFound(out []byte) bool {
+	s := string(out)
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "no such container") || strings.Contains(lower, "no such object") {
+		return true
+	}
+	// Docker 中文环境或其它 locale 的常见提示
+	if strings.Contains(s, "没有此容器") || strings.Contains(s, "没有找到容器") || strings.Contains(s, "未找到容器") {
+		return true
+	}
+	return false
+}
+
+// dockerPermissionDenied 判断是否为访问 Docker 权限/连接错误（宿主机 socket 需对 Manager 容器可访问）
+func dockerPermissionDenied(out []byte) bool {
+	s := string(out)
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "permission denied") || strings.Contains(lower, "permissions have not been granted") {
+		return true
+	}
+	if strings.Contains(lower, "cannot connect to the docker daemon") || strings.Contains(lower, "is the docker daemon running") {
+		return true
+	}
+	if strings.Contains(lower, "connection refused") {
+		return true
+	}
+	return false
+}
+
+func dockerCmdError(op string, out []byte, err error) error {
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		trimmed = "(无输出)"
+	}
+	if dockerPermissionDenied(out) {
+		return fmt.Errorf("%s 失败（权限不足或无法连接 daemon）。%s。输出: %s: %w", op, dockerAccessHint, trimmed, err)
+	}
+	return fmt.Errorf("%s 失败。输出: %s: %w", op, trimmed, err)
+}
+
+const dockerAccessHint = "若 Manager 在容器内，请为 runner-manager 配置 group_add 使用宿主机 docker 组 GID（.env 中 DOCKER_GID=$(getent group docker | cut -d: -f3)），或使用 user: \"0:0\" 以 root 访问 socket"
+
 // ContainerRunning 判断容器是否在运行
 func ContainerRunning(ctx context.Context, containerName string) (bool, error) {
 	out, err := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", containerName)
 	if err != nil {
-		if strings.Contains(string(out), "No such container") {
+		if containerNotFound(out) {
 			return false, nil
 		}
-		return false, fmt.Errorf("docker inspect: %w", err)
+		return false, dockerCmdError("docker inspect", out, err)
 	}
 	return strings.TrimSpace(string(out)) == "true", nil
 }
 
+// managerMustUseHostDocker 提示：容器模式下 Manager 必须用宿主机 Docker 创建 Runner 容器，不能把 DOCKER_HOST 设为 DinD
+const errContainerModeNeedHostDocker = "容器模式下 Manager 必须使用宿主机 Docker（unix socket）创建/启停 Runner 容器，不能使用 DinD。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375，使 Manager 使用默认 unix:///var/run/docker.sock；DinD 仅供 Runner 容器内 Job 的 docker build 等使用"
+
+func managerDockerHostIsDind() bool {
+	h := os.Getenv("DOCKER_HOST")
+	return strings.HasPrefix(strings.TrimSpace(h), "tcp://")
+}
+
+// ManagerDockerHostIsDind 供启动时检查：若为 true 且开启容器模式，Manager 无法创建 Runner 容器
+func ManagerDockerHostIsDind() bool {
+	return managerDockerHostIsDind()
+}
+
 // StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner
 func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
+	if cfg.Runners.ContainerMode && managerDockerHostIsDind() {
+		return fmt.Errorf("%s", errContainerModeNeedHostDocker)
+	}
 	cn := ContainerName(runnerName)
 	running, err := ContainerRunning(ctx, cn)
 	if err != nil {
@@ -112,17 +184,24 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	// 检查是否存在但已停止
 	out, err := dockerCmd(ctx, "ps", "-a", "-q", "-f", "name=^"+cn+"$")
 	if err != nil {
-		return fmt.Errorf("docker ps: %w", err)
+		return dockerCmdError("docker ps", out, err)
 	}
 	if len(strings.TrimSpace(string(out))) > 0 {
-		_, err := dockerCmd(ctx, "start", cn)
+		out, err := dockerCmd(ctx, "start", cn)
 		if err != nil {
-			return fmt.Errorf("docker start: %w", err)
+			return dockerCmdError("docker start", out, err)
 		}
 		time.Sleep(2 * time.Second)
 		return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
 	}
 	// 创建新容器
+	// 容器模式下若 Manager 在容器内（base_path 通常为 /app/runners），未设置 volume_host_path 会导致 docker create -v 使用容器内路径，宿主机上无效
+	if cfg.Runners.ContainerMode && strings.TrimSpace(cfg.Runners.VolumeHostPath) == "" {
+		baseClean := filepath.Clean(cfg.Runners.BasePath)
+		if strings.HasPrefix(baseClean, "/app") || strings.HasPrefix(filepath.Clean(installDir), "/app") {
+			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
+		}
+	}
 	img := cfg.Runners.ContainerImage
 	if img == "" {
 		img = "ghcr.io/soulteary/runner-fleet-runner:main"
@@ -130,6 +209,10 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	network := cfg.Runners.ContainerNetwork
 	if network == "" {
 		network = "runner-net"
+	}
+	jobBackend := strings.ToLower(strings.TrimSpace(cfg.Runners.JobDockerBackend))
+	if jobBackend == "" {
+		jobBackend = "dind"
 	}
 	dindHost := cfg.Runners.DindHost
 	if dindHost == "" {
@@ -149,22 +232,30 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			mountSrc = abs
 		}
 	}
-	// 容器内 DOCKER_HOST 指向 DinD，供 Job 内 docker build 等使用
 	createArgs := []string{
 		"create",
 		"--name", cn,
 		"-v", mountSrc + ":/runner",
 		"--network", network,
-		"-e", "DOCKER_HOST=tcp://" + dindHost + ":2375",
-		img,
 	}
+	switch jobBackend {
+	case "dind":
+		createArgs = append(createArgs, "-e", "DOCKER_HOST=tcp://"+dindHost+":2375")
+	case "host-socket":
+		createArgs = append(createArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock", "-e", "DOCKER_HOST=unix:///var/run/docker.sock")
+	case "none":
+		// Job 内不提供 Docker，不注入环境与挂载
+	default:
+		return fmt.Errorf("不支持的 runners.job_docker_backend=%q（仅支持 dind/host-socket/none）", cfg.Runners.JobDockerBackend)
+	}
+	createArgs = append(createArgs, img)
 	out, err = dockerCmd(ctx, createArgs...)
 	if err != nil {
-		return fmt.Errorf("docker create: %s: %w", string(out), err)
+		return dockerCmdError("docker create", out, err)
 	}
-	_, err = dockerCmd(ctx, "start", cn)
+	out, err = dockerCmd(ctx, "start", cn)
 	if err != nil {
-		return fmt.Errorf("docker start: %w", err)
+		return dockerCmdError("docker start", out, err)
 	}
 	// 等待 agent 就绪后调 /start
 	time.Sleep(3 * time.Second)
@@ -174,13 +265,13 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 // StopRunnerContainer 停止容器（不删除，便于下次 start）
 func StopRunnerContainer(ctx context.Context, runnerName string) error {
 	cn := ContainerName(runnerName)
-	_, err := dockerCmd(ctx, "stop", "-t", "30", cn)
+	out, err := dockerCmd(ctx, "stop", "-t", "30", cn)
 	if err != nil {
-		out, _ := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", cn)
-		if strings.Contains(string(out), "No such container") {
+		inspectOut, _ := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", cn)
+		if containerNotFound(inspectOut) {
 			return nil
 		}
-		return fmt.Errorf("docker stop: %w", err)
+		return dockerCmdError("docker stop", out, err)
 	}
 	return nil
 }
@@ -191,10 +282,10 @@ func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 	_, _ = dockerCmd(ctx, "stop", "-t", "30", cn)
 	out, err := dockerCmd(ctx, "rm", "-f", cn)
 	if err != nil {
-		if strings.Contains(string(out), "No such container") {
+		if containerNotFound(out) {
 			return nil
 		}
-		return fmt.Errorf("docker rm: %w", err)
+		return dockerCmdError("docker rm", out, err)
 	}
 	return nil
 }
@@ -204,12 +295,15 @@ func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, installDir string) (running bool, status Status, err error) {
 	cn := ContainerName(runnerName)
 	ok, err := ContainerRunning(ctx, cn)
-	if err != nil || !ok {
+	if err != nil {
+		return false, StatusUnknown, err
+	}
+	if !ok {
 		return false, StatusInstalled, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}
 	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort)
 	if err != nil {
-		return true, StatusInstalled, nil // 容器在跑但 agent 未响应，保守视为 installed
+		return true, StatusUnknown, err
 	}
 	switch agent.Status {
 	case "installed":

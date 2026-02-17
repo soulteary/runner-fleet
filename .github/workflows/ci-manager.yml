@@ -1,0 +1,112 @@
+# CI：Runner Manager 的测试与构建
+name: CI (Manager)
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  GO_VERSION: "1.26.0"
+  WORKING_DIR: .
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Detect Go module root
+        id: modroot
+        uses: ./.github/actions/detect-go-module-root
+        with:
+          working_dir: ${{ env.WORKING_DIR }}
+
+      - name: Set up Go
+        if: steps.modroot.outputs.found == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
+
+      - name: Vet
+        if: steps.modroot.outputs.found == 'true'
+        run: go vet ./cmd/runner-manager/... ./internal/...
+        working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Lint
+        if: steps.modroot.outputs.found == 'true'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: --max-same-issues=100000 ./cmd/runner-manager/... ./internal/...
+          working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Run tests
+        if: steps.modroot.outputs.found == 'true'
+        run: go test -v ./cmd/runner-manager/... ./internal/...
+        working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Skip (no project structure)
+        if: steps.modroot.outputs.found != 'true'
+        run: 'echo "Skipped: no go.mod + cmd/runner-manager in this repo."'
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Detect Go module root
+        id: modroot
+        uses: ./.github/actions/detect-go-module-root
+        with:
+          working_dir: ${{ env.WORKING_DIR }}
+
+      - name: Set up Go
+        if: steps.modroot.outputs.found == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
+
+      - name: Get version information
+        if: steps.modroot.outputs.found == 'true'
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Manager
+        if: steps.modroot.outputs.found == 'true'
+        run: |
+          go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" -o runner-manager ./cmd/runner-manager
+        working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Init example config
+        if: steps.modroot.outputs.found == 'true'
+        run: cp config.yaml.example config.yaml
+        working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Verify binary
+        if: steps.modroot.outputs.found == 'true'
+        run: |
+          ./runner-manager -version
+          ./runner-manager -config config.yaml &
+          PID=$!
+          trap "kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true" EXIT
+          for i in 1 2 3 4 5; do sleep 1; curl -sf http://localhost:8080/health | grep -q '"status":"ok"' && break; done
+          curl -sf http://localhost:8080/health | grep -q '"status":"ok"' || (echo "health check failed"; exit 1)
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+        working-directory: ${{ steps.modroot.outputs.root }}
+
+      - name: Skip (no project structure)
+        if: steps.modroot.outputs.found != 'true'
+        run: 'echo "Skipped: no go.mod + cmd/runner-manager in this repo."'

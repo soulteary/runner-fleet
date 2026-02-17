@@ -1,0 +1,118 @@
+# push main/master 或 tag 时：构建并推送 Manager 镜像到 GHCR
+name: Publish image (Manager)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-manager-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build and push Manager image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify build context (Dockerfile 所需源码与配置齐全)
+        id: verify
+        run: |
+          set -e
+          MISSING=""
+          [ ! -f go.mod ]                  && MISSING="${MISSING} go.mod"
+          [ ! -f go.sum ]                  && MISSING="${MISSING} go.sum"
+          [ ! -d cmd ]                     && MISSING="${MISSING} cmd/"
+          [ ! -d cmd/runner-manager ]      && MISSING="${MISSING} cmd/runner-manager/"
+          [ ! -d internal ]                && MISSING="${MISSING} internal/"
+          [ ! -f config.yaml.example ]    && MISSING="${MISSING} config.yaml.example"
+          [ ! -f scripts/install-runner.sh ] && MISSING="${MISSING} scripts/install-runner.sh"
+          if [ -z "$MISSING" ]; then
+            echo "has_go_source=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_go_source=false" >> $GITHUB_OUTPUT
+            echo "::warning::Manager 构建所需文件缺失（$MISSING），跳过构建。请在本仓库提交并推送完整源码后再构建。"
+          fi
+
+      - name: Set up QEMU
+        if: steps.verify.outputs.has_go_source == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.verify.outputs.has_go_source == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.verify.outputs.has_go_source == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute canonical image name (lowercase)
+        if: steps.verify.outputs.has_go_source == 'true'
+        id: vars
+        shell: bash
+        run: |
+          set -eu
+          IMAGE_REF="${IMAGE_NAME:-$GITHUB_REPOSITORY}"
+          CANONICAL_IMAGE="${REGISTRY}/${IMAGE_REF,,}"
+          echo "canonical=${CANONICAL_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Get version for build
+        if: steps.verify.outputs.has_go_source == 'true'
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Extract Docker metadata (tags, labels)
+        if: steps.verify.outputs.has_go_source == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.canonical }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
+
+      # Dockerfile 内已 COPY config.yaml.example 并 sed 为 config.yaml，无需在 workflow 中准备
+
+      - name: Build and push Manager image
+        if: steps.verify.outputs.has_go_source == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ github.workspace }}
+          file: ${{ github.workspace }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version || 'dev' }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
