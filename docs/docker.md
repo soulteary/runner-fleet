@@ -88,6 +88,10 @@ docker run -d --name runner-manager \
 - DinD 需 `--privileged`，且与宿主机 Docker 隔离，适合希望 Job 与宿主机环境隔离的场景。
 - **DinD 或管理器重启后**：runner-manager 启动后会延迟约 15 秒自动启动所有已注册的 Runner；之后每 5 分钟定时任务也会检查并拉起未在运行的已注册 Runner，无需手动点击「启动」。
 
+**DinD 模式下使用 docker/setup-qemu-action 等 Action**：本镜像已预装 **Docker CLI**（docker-ce-cli）。Runner 在 manager 容器内执行 Job 时，只要设置 `DOCKER_HOST`（如 docker-compose 中已配置 `DOCKER_HOST=tcp://runner-dind:2375`），即可在 PATH 中找到 `docker` 命令。因此 `docker/setup-qemu-action@v1`、`docker/build-push-action` 等依赖 `docker` 的 Action 在 DinD 模式下可正常使用，无需在 Job 中再安装 docker 客户端。
+
+**持久化 DinD 镜像缓存**：若使用仓库内 `docker-compose.yml` 编排，已为 `runner-dind` 挂载卷 `dind-storage` 到 `/var/lib/docker`。Runner 拉取的 action 容器镜像会保存在该卷中，DinD 或 compose 重启后仍可复用，减少重复下载。
+
 #### Docker/DinD 下「自动注册」
 
 本镜像**不包含** GitHub Actions runner 二进制，但**支持在 Web 界面一次完成安装与注册**：在「快速添加 Runner」中填写名称、目标、Token 并提交后，服务会先自动执行 `/app/scripts/install-runner.sh` 下载并解压 runner，再执行 `config.sh` 向 GitHub 注册并启动 Runner。无需事先手动安装。

@@ -13,6 +13,9 @@ services:
       DOCKER_TLS_CERTDIR: ""
     # 显式关闭 TLS，仅在内网 runner-net 使用，消除弃用告警
     command: ["--tls=false"]
+    volumes:
+      # 持久化 DinD 的镜像与容器层，Runner 拉取的 action 容器可复用，减少重复下载
+      - dind-storage:/var/lib/docker
     networks:
       - runner-net
     restart: unless-stopped
@@ -36,3 +39,7 @@ services:
 networks:
   runner-net:
     driver: bridge
+
+volumes:
+  dind-storage:
+    # DinD 数据卷，供 runner-dind 持久化 /var/lib/docker
