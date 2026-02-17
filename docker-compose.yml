@@ -1,6 +1,6 @@
 # 基于 docs/docker.md 中「方式二：DinD」编排
 # 使用前请确保 config.yaml 中 runners.base_path 为 /app/runners
-# 镜像以 UID 1000 运行，宿主机上请保证 ./runners 对该用户可写，例如：mkdir -p runners && chown 1000:1000 runners
+# 镜像以 UID 1001 运行，宿主机上请保证 ./runners 对该用户可写，例如：mkdir -p runners && chown 1001:1001 runners
 
 services:
   runner-dind:
@@ -26,7 +26,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config.yaml:/app/config.yaml
-      - ./runners:/app/runners  # 需对 UID 1000 可写，见顶部注释
+      - ./runners:/app/runners  # 需对 UID 1001 可写，见顶部注释
     networks:
       - runner-net
     restart: unless-stopped
