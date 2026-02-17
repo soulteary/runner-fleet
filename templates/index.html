@@ -414,6 +414,10 @@
         msgEl.className = 'msg ok';
         msgEl.innerHTML = data.message + (data.install_dir ? '<br><span class="path">' + data.install_dir + '</span>' : '');
         if (data.output) msgEl.innerHTML += '<pre style="margin-top:8px;font-size:12px">' + escapeHtml(data.output) + '</pre>';
+        if (data.queued) {
+          msgEl.innerHTML += '<br><span style="font-size:12px;color:var(--muted)">5 秒后自动刷新页面</span>';
+          setTimeout(function() { location.reload(); }, 5000);
+        }
         e.target.reset();
         if (submitBtn) submitBtn.disabled = false;
         msgWrap.style.display = 'block';

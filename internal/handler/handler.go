@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,6 +26,74 @@ var ConfigPath string
 
 // Version 由 main 注入，供 /version 使用
 var Version string
+
+// registrationJob 后台安装并注册 runner 的任务
+type registrationJob struct {
+	BasePath   string
+	InstallDir string
+	RunnerName string
+	URL        string
+	Token      string
+	Labels     []string
+}
+
+// registrationQueue 后台任务队列，单 worker 顺序执行，避免多任务同时占满资源且 API 不阻塞
+var registrationQueue = make(chan registrationJob, 128)
+
+// StartRegistrationWorker 启动后台 worker，应在 main 中调用一次
+func StartRegistrationWorker() {
+	go func() {
+		for j := range registrationQueue {
+			runRegistrationJob(j)
+		}
+	}()
+}
+
+// runRegistrationJob 执行单次安装+注册+启动（在后台 goroutine 中调用）
+func runRegistrationJob(j registrationJob) {
+	installDir := j.InstallDir
+	configScript := filepath.Join(installDir, runner.ConfigScriptName())
+	if _, err := os.Stat(configScript); err != nil {
+		runnerSegment := filepath.Base(installDir)
+		installOut, installErr := runInstallRunnerScript(j.BasePath, runnerSegment, 3*time.Minute)
+		if installErr != nil {
+			msg := "自动安装 Runner 失败: " + installErr.Error()
+			writeRegistrationResult(installDir, false, msg)
+			log.Printf("[registration] %s 安装失败: %v\noutput: %s", j.RunnerName, installErr, string(installOut))
+			return
+		}
+		if _, err2 := os.Stat(configScript); err2 != nil {
+			writeRegistrationResult(installDir, false, "安装完成但未找到 "+runner.ConfigScriptName())
+			log.Printf("[registration] %s 安装后未找到 config 脚本\noutput: %s", j.RunnerName, string(installOut))
+			return
+		}
+	}
+	out, err := runConfigScript(installDir, j.URL, j.Token, j.Labels, 2*time.Minute)
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		if strings.Contains(string(out), "Must not run with sudo") {
+			msg += "（请以非 root 用户运行容器，或设置环境变量 RUNNER_ALLOW_RUNASROOT=1）"
+		}
+		outLower := strings.ToLower(string(out))
+		if strings.Contains(outLower, "token") &&
+			(strings.Contains(outLower, "invalid") || strings.Contains(outLower, "expired") ||
+				strings.Contains(outLower, "already") || strings.Contains(outLower, "used")) {
+			msg += "。请为每个 Runner 在 GitHub 重新生成新的注册 Token"
+		}
+		writeRegistrationResult(installDir, false, msg)
+		log.Printf("[registration] %s 注册失败: %s", j.RunnerName, msg)
+		return
+	}
+	writeRegistrationResult(installDir, true, "注册成功")
+	if startErr := runner.Start(installDir); startErr != nil {
+		log.Printf("[registration] %s 注册成功但启动失败: %v", j.RunnerName, startErr)
+	} else {
+		log.Printf("[registration] %s 已注册并启动", j.RunnerName)
+	}
+}
 
 func getConfig(c echo.Context) (*config.Config, error) {
 	cfg, err := config.Load(ConfigPath)
@@ -210,82 +279,62 @@ func AddRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败: "+err.Error())
 	}
 	if req.RegistrationToken != "" {
-		// 在 installDir 执行 config 脚本
 		configScript := filepath.Join(installDir, runner.ConfigScriptName())
 		if _, err := os.Stat(configScript); err != nil {
-			// 目录为空时（如 Docker 部署）：若存在自动安装脚本则先安装 runner 再注册
+			// 目录为空时需先安装：若存在自动安装脚本则交给后台 worker 执行，避免阻塞请求
 			if _, scriptErr := os.Stat(installRunnerScriptPath); scriptErr == nil {
-				runnerSegment := filepath.Base(installDir)
-				installOut, installErr := runInstallRunnerScript(cfg.Runners.BasePath, runnerSegment, 3*time.Minute)
-				if installErr != nil {
+				url := "https://github.com/" + targetNorm
+				select {
+				case registrationQueue <- registrationJob{
+					BasePath:   cfg.Runners.BasePath,
+					InstallDir: installDir,
+					RunnerName: item.Name,
+					URL:        url,
+					Token:      req.RegistrationToken,
+					Labels:     item.Labels,
+				}:
 					return c.JSON(http.StatusOK, map[string]any{
-						"message":     "配置已保存，自动安装 Runner 失败（请检查网络或稍后手动安装）: " + installErr.Error(),
+						"message":     "Runner 已添加，正在后台安装并注册，请稍后刷新页面查看状态",
 						"name":        item.Name,
 						"install_dir": installDir,
-						"output":      string(installOut),
+						"queued":      true,
+					})
+				default:
+					return c.JSON(http.StatusServiceUnavailable, map[string]any{
+						"message": "当前注册任务队列已满，请稍后再试",
+						"name":    item.Name,
 					})
 				}
-				// 安装后再次检查 config 脚本
-				if _, err2 := os.Stat(configScript); err2 != nil {
-					return c.JSON(http.StatusOK, map[string]any{
-						"message":     "配置已保存，Runner 已安装但未找到 " + runner.ConfigScriptName() + "，请检查 " + installDir,
-						"name":        item.Name,
-						"install_dir": installDir,
-						"output":      string(installOut),
-					})
-				}
-				// 继续执行下方的 config 与启动逻辑
-			} else {
-				return c.JSON(http.StatusOK, map[string]any{
-					"message":     "配置已保存，Runner 目录已创建。请将 GitHub Actions runner 解压到 " + installDir + " 后，使用注册 token 再次提交或在该目录下手动执行 " + runner.ConfigScriptName(),
-					"name":        item.Name,
-					"install_dir": installDir,
-				})
 			}
-		}
-		url := "https://github.com/" + targetNorm
-		out, err := runConfigScript(installDir, url, req.RegistrationToken, item.Labels, 2*time.Minute)
-		if err != nil {
-			msg := strings.TrimSpace(string(out))
-			if msg == "" {
-				msg = err.Error()
-			}
-			if strings.Contains(string(out), "Must not run with sudo") {
-				msg += "（请以非 root 用户运行容器，或设置环境变量 RUNNER_ALLOW_RUNASROOT=1）"
-			}
-			// 若疑似 token 已用/无效/过期，提示为每个 Runner 使用新 Token
-			outLower := strings.ToLower(string(out))
-			if strings.Contains(outLower, "token") &&
-				(strings.Contains(outLower, "invalid") || strings.Contains(outLower, "expired") ||
-					strings.Contains(outLower, "already") || strings.Contains(outLower, "used")) {
-				msg += "。请为每个 Runner 在 GitHub 重新生成新的注册 Token（Settings → Actions → Runners → Add new runner）"
-			}
-			writeRegistrationResult(installDir, false, msg)
 			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "配置已保存，向 GitHub 注册失败: " + msg,
+				"message":     "配置已保存，Runner 目录已创建。请将 GitHub Actions runner 解压到 " + installDir + " 后，使用注册 token 再次提交或在该目录下手动执行 " + runner.ConfigScriptName(),
 				"name":        item.Name,
 				"install_dir": installDir,
-				"output":      string(out),
-				"registered":  false,
 			})
 		}
-		writeRegistrationResult(installDir, true, "注册成功")
-		// 注册成功后自动启动 runner
-		startErr := runner.Start(installDir)
-		msg := "Runner 已添加并完成向 GitHub 注册"
-		if startErr != nil {
-			msg += "，但自动启动失败: " + startErr.Error()
-		} else {
-			msg += "，已自动启动"
+		// 已有 config 脚本（目录非空）：仅需注册，也放入后台执行，避免长时间阻塞
+		url := "https://github.com/" + targetNorm
+		select {
+		case registrationQueue <- registrationJob{
+			BasePath:   cfg.Runners.BasePath,
+			InstallDir: installDir,
+			RunnerName: item.Name,
+			URL:        url,
+			Token:      req.RegistrationToken,
+			Labels:     item.Labels,
+		}:
+			return c.JSON(http.StatusOK, map[string]any{
+				"message":     "Runner 已添加，正在后台注册，请稍后刷新页面查看状态",
+				"name":        item.Name,
+				"install_dir": installDir,
+				"queued":      true,
+			})
+		default:
+			return c.JSON(http.StatusServiceUnavailable, map[string]any{
+				"message": "当前注册任务队列已满，请稍后再试",
+				"name":    item.Name,
+			})
 		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"message":     msg,
-			"name":        item.Name,
-			"install_dir": installDir,
-			"output":      string(out),
-			"registered":  true,
-			"started":     startErr == nil,
-		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"message":     "Runner 已添加，请将 runner 解压到目录后使用注册 token 完成注册",
