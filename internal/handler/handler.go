@@ -416,7 +416,7 @@ func UpdateRunner(c echo.Context) error {
 		if he, ok := err.(*echo.HTTPError); ok {
 			return he
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败")
+		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败: "+err.Error())
 	}
 	cfg, err := getConfig(c)
 	if err != nil {
@@ -457,7 +457,7 @@ func RemoveRunnerByName(c echo.Context) error {
 		if he, ok := err.(*echo.HTTPError); ok {
 			return he
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败")
+		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败: "+err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "已从配置中移除"})
 }
