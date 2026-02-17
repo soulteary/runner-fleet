@@ -169,11 +169,20 @@ func AddRunner(c echo.Context) error {
 				"install_dir": installDir,
 			})
 		}
+		// 注册成功后自动启动 runner
+		startErr := runner.Start(installDir)
+		msg := "Runner 已添加并完成注册"
+		if startErr != nil {
+			msg += "，但自动启动失败: " + startErr.Error()
+		} else {
+			msg += "，已自动启动"
+		}
 		return c.JSON(http.StatusOK, map[string]any{
-			"message":     "Runner 已添加并完成注册",
+			"message":     msg,
 			"name":        item.Name,
 			"install_dir": installDir,
 			"output":      string(out),
+			"started":     startErr == nil,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{
@@ -332,7 +341,23 @@ func UpdateRunner(c echo.Context) error {
 		return err
 	}
 	updated = runner.GetByName(cfg, name)
-	return c.JSON(http.StatusOK, map[string]any{"message": "已更新", "runner": updated})
+	// 若已注册且未在运行，自动启动 runner
+	msg := "已更新"
+	var started bool
+	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
+		startErr := runner.Start(updated.InstallDir)
+		started = (startErr == nil)
+		if startErr != nil {
+			msg += "，但自动启动失败: " + startErr.Error()
+		} else {
+			msg += "，已自动启动"
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"message": msg,
+		"runner":  updated,
+		"started": started,
+	})
 }
 
 // RemoveRunnerByName 从路径参数获取 name 并移除（DELETE /api/runners/:name）
