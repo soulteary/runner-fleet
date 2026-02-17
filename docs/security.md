@@ -13,6 +13,13 @@
 
 - **添加**：禁止与已有 Runner 同名。
 - **编辑**：名称不可修改，与磁盘目录名一致。
+- **容器模式**：Runner 名称会被规范化为容器名（前缀 `github-runner-`，并过滤特殊字符）；若两个名称映射后冲突（如 `a.b` 与 `a-b`），配置加载会直接报错并拒绝启动。
+
+## 配置一致性校验
+
+- `runners.job_docker_backend` 仅允许 `dind` / `host-socket` / `none`。
+- `container_mode=false` 时，`job_docker_backend` 必须为 `dind`，且不能设置 `volume_host_path`。
+- `container_mode=true` 且 `base_path` 为容器内路径（如 `/app/runners`）时，必须设置 `volume_host_path`，且需为宿主机绝对路径。
 
 ## Token 与敏感文件
 

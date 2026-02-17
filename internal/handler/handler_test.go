@@ -120,3 +120,47 @@ func TestUpdateRunner_NameImmutable(t *testing.T) {
 		t.Errorf("expected 400 when body name differs from URL, got %d", rec.Code)
 	}
 }
+
+func TestAddRunner_WhitespaceName(t *testing.T) {
+	e := echo.New()
+	e.POST("/api/runners", AddRunner)
+	body := map[string]string{
+		"name":        "   ",
+		"target_type": "org",
+		"target":      "myorg",
+	}
+	raw, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/runners", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for whitespace name, got %d", rec.Code)
+	}
+}
+
+func TestUpdateRunner_TrimmedBodyNameAccepted(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := &config.Config{
+		Runners: config.RunnersConfig{
+			BasePath: dir,
+			Items:    []config.RunnerItem{{Name: "r1", TargetType: "org", Target: "o1"}},
+		},
+	}
+	_ = cfg.Save(cfgPath)
+	ConfigPath = cfgPath
+	defer func() { ConfigPath = filepath.Join(os.TempDir(), "handler-test-config.yaml") }()
+
+	e := echo.New()
+	e.PUT("/api/runners/:name", UpdateRunner)
+	body := map[string]any{"name": "  r1  ", "target_type": "org", "target": "o1"}
+	raw, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/runners/r1", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 when body name trims to URL name, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}

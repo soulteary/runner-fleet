@@ -15,7 +15,7 @@ docker pull ghcr.io/soulteary/runner-fleet:main
 
 ## 使用 docker-compose 快速开始
 
-仓库根目录提供 `docker-compose.yml`，包含 Manager + DinD，开箱可用：
+仓库根目录提供 `docker-compose.yml`。**DinD 为可选**：仅当容器模式下 Job 需要 Docker 且使用 `job_docker_backend: dind` 时再启用 DinD。
 
 ```bash
 # 1. 复制配置并修改 base_path
@@ -26,13 +26,16 @@ cp config.yaml.example config.yaml
 chown 1001:1001 config.yaml
 mkdir -p runners && chown 1001:1001 runners
 
-# 3. 启动
+# 3. 启动（仅 Manager，适用于 job_docker_backend: host-socket 或 none）
 docker compose up -d
+
+# 若 config.yaml 中 job_docker_backend: dind，需同时启动 DinD：
+docker compose --profile dind up -d
 
 # 管理界面：http://localhost:8080
 ```
 
-若启用**容器模式**（每个 Runner 独立容器），还需：在 `config.yaml` 中取消注释 `container_mode`、`container_image` 等并设置 `volume_host_path` 为宿主机上 `runners` 的绝对路径。Runner 镜像与 Manager 同名，tag 带 `-runner` 后缀（如 `ghcr.io/<owner>/<repo>:main-runner`），或本地构建：`docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。详见 [容器模式](#容器模式runner-独立容器cs)。
+若启用**容器模式**（每个 Runner 独立容器），还需：在 `config.yaml` 中取消注释 `container_mode`、`container_image`、`job_docker_backend` 等并设置 `volume_host_path` 为宿主机上 `runners` 的绝对路径。Runner 镜像与 Manager 同名，tag 带 `-runner` 后缀（如 `ghcr.io/<owner>/<repo>:main-runner`），或本地构建：`docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。详见 [容器模式](#容器模式runner-独立容器cs)。
 
 ## 运行容器（完整参数）
 
@@ -109,7 +112,7 @@ docker run -d --name runner-manager \
 - DinD 需 `--privileged`，且与宿主机 Docker 隔离，适合希望 Job 与宿主机环境隔离的场景。
 - **DinD 或管理器重启后**：runner-manager 启动后会延迟约 15 秒自动启动所有已注册的 Runner；之后每 5 分钟定时任务也会检查并拉起未在运行的已注册 Runner，无需手动点击「启动」。
 
-**DinD 模式下使用 docker/setup-qemu-action 等 Action**：本镜像已预装 **Docker CLI**（docker-ce-cli）。Runner 在 manager 容器内执行 Job 时，只要设置 `DOCKER_HOST`（如 docker-compose 中已配置 `DOCKER_HOST=tcp://runner-dind:2375`），即可在 PATH 中找到 `docker` 命令。因此 `docker/setup-qemu-action@v1`、`docker/build-push-action` 等依赖 `docker` 的 Action 在 DinD 模式下可正常使用，无需在 Job 中再安装 docker 客户端。
+**DinD 模式下使用 docker/setup-qemu-action 等 Action**：本镜像已预装 **Docker CLI**（docker-ce-cli）。Runner 在 manager 容器内执行 Job 时，只要设置 `DOCKER_HOST`（例如在 `.env` 中设为 `tcp://runner-dind:2375`），即可在 PATH 中找到 `docker` 命令。因此 `docker/setup-qemu-action@v1`、`docker/build-push-action` 等依赖 `docker` 的 Action 在 DinD 模式下可正常使用，无需在 Job 中再安装 docker 客户端。
 
 **持久化 DinD 镜像缓存**：若使用仓库内 `docker-compose.yml` 编排，已为 `runner-dind` 挂载卷 `dind-storage` 到 `/var/lib/docker`。Runner 拉取的 action 容器镜像会保存在该卷中，DinD 或 compose 重启后仍可复用，减少重复下载。
 
@@ -143,7 +146,7 @@ docker run -d --name runner-manager \
 ### 机制简述
 
 - **Manager**：通过宿主机 Docker（挂载 `docker.sock`）创建/启停 Runner 容器，并与 Runner 容器处于同一网络，通过 HTTP 访问容器内 **Agent** 获取 Runner 进程状态。
-- **Runner 容器**：基于 `Dockerfile.runner` 构建的镜像，内含 **Runner Agent**（提供 `/status`、`/start`、`/stop`）和 Runner 运行依赖；Runner 安装目录由 Manager 挂载到容器内 `/runner`。
+- **Runner 容器**：基于 `Dockerfile.runner` 构建的镜像，内含 **Runner Agent**（提供 `/status`、`/start`、`/stop`）和 Runner 运行依赖；Agent 入口为 `/app/runner-agent`（故意不在 `/runner` 下，避免挂载 `-v host_path:/runner` 时覆盖入口）。Runner 安装目录由 Manager 挂载到容器内 `/runner`。
 - **启停**：点击「启动」时 Manager 执行 `docker create`（若不存在）+ `docker start`，并请求 Agent 的 `POST /start` 启动 Runner 进程；「停止」时 `docker stop` 该容器。
 
 ### 配置与构建
@@ -157,7 +160,8 @@ docker run -d --name runner-manager \
      container_image: ghcr.io/soulteary/runner-fleet-runner:main   # 或 CI：ghcr.io/<owner>/<repo>:main-runner
      container_network: runner-net
      agent_port: 8081
-     dind_host: runner-dind
+     job_docker_backend: dind   # dind | host-socket | none，默认 dind
+     dind_host: runner-dind     # 仅 job_docker_backend=dind 时有效
      volume_host_path: /abs/path/on/host/to/runners   # Manager 在容器内时必填
    ```
 
@@ -167,10 +171,13 @@ docker run -d --name runner-manager \
    docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
    ```
 
+   若曾用旧版镜像创建过 Runner 容器且出现 `stat /runner/runner-agent: no such file or directory`，需先删除该容器（如 `docker rm -f github-runner-<名称>`），再在界面点击「启动」由 Manager 用新镜像重新创建。
+
 3. **部署要求**：
-   - Manager 必须能执行 `docker` 且能创建与 Manager 同网络的容器，故需挂载**宿主机** `docker.sock` 并设置 `DOCKER_HOST=unix:///var/run/docker.sock`（仓库内 `docker-compose.yml` 已按此配置）。
+   - **Manager 必须使用宿主机 Docker**（`unix:///var/run/docker.sock`）创建/启停 Runner 容器，**不能**把 `DOCKER_HOST` 设为 DinD（`tcp://runner-dind:2375`）。DinD 仅供 **Runner 容器内** Job 的 `docker build` 等使用；若在 `.env` 中设置了 `DOCKER_HOST=tcp://runner-dind:2375`，点击「启动」会报错，请移除或注释该行。宿主机需挂载 `docker.sock` 并设置 `DOCKER_HOST=unix:///var/run/docker.sock`（仓库内 `docker-compose.yml` 默认已配置）。Manager 以非 root（UID 1001）运行，访问 socket 需加入宿主机 **docker 组**：`group_add: [ "${DOCKER_GID:-999}" ]`，GID 不对时在 `.env` 设 `DOCKER_GID=`；或改为 `user: "0:0"` 以 root 运行。
    - Runner 容器与 Manager、DinD 在同一网络（如 `runner-net`），以便 Manager 访问 Agent、Runner Job 内访问 DinD。
    - **Runner 名称**会映射为容器名（如 `github-runner-<名称>`），仅保留字母、数字、`-`、`_`。若两个名称映射后相同（如 `a.b` 与 `a-b`）会冲突，请使用可区分名称。
+   - **项目/目标与多实例**：每个配置项（`runners.items` 中一项）对应一个 Runner 容器；同一 target（org 或 repo）下可配置多个 Runner（多实例），由 GitHub 调度 Job，无内置并发上限。
 
 ### 与「本地进程」模式的区别
 
@@ -179,7 +186,39 @@ docker run -d --name runner-manager \
 | Runner 载体 | Manager 容器内子进程   | 独立容器，每 Runner 一容器      |
 | 启停方式   | Manager 内 `run.sh`/pid | Docker 启停 + Agent `/start`     |
 | 状态来源   | 本机 pid/目录          | 请求容器内 Agent `/status`      |
-| Job 内 Docker | 同 Manager 的 DOCKER_HOST | 容器内 DOCKER_HOST 指向 DinD |
+| Job 内 Docker | 同 Manager 的 DOCKER_HOST | 由 job_docker_backend 决定：dind / host-socket / none |
+
+---
+
+## 排障与迁移
+
+### root / 非 root、RUNNER_ALLOW_RUNASROOT
+
+- **推荐**：Manager 与 Runner 容器均以非 root（如 UID 1001）运行，避免 GitHub Runner 报「Must not run with sudo」。
+- 挂载目录需对运行用户可写：`chown 1001:1001 config.yaml runners`。
+- 若必须用 root 运行（例如 `user: "0:0"`），需在 Runner 容器或注册脚本执行环境中设置 **RUNNER_ALLOW_RUNASROOT=1**（仅影响注册/运行 Runner 进程，不影响 Manager 自身）。
+
+### 旧容器重建
+
+若曾用旧版 Runner 镜像创建过容器，出现 `stat /runner/runner-agent: no such file or directory` 或镜像结构变更时：
+
+1. 停止并删除该 Runner 容器：`docker stop github-runner-<名称> && docker rm github-runner-<名称>`。
+2. 在 Web 界面点击该 Runner 的「启动」，由 Manager 用当前 `container_image` 重新创建并启动容器。
+3. 无需删除 runner 目录或重新注册，配置与注册信息仍在 `volume_host_path` 下。
+
+### 从旧配置迁移到 Job Docker 后端
+
+- **默认行为**：未配置 `job_docker_backend` 时视为 `dind`（与旧版一致）。
+- **回滚**：将 `job_docker_backend` 设为 `dind` 并确保 DinD 已启动（`docker compose --profile dind up -d`）。
+- **可选**：改为 `host-socket` 时需在创建 Runner 容器时挂载宿主机 socket，Compose 已为 Manager 挂载；Runner 容器由 Manager 按 `host-socket` 自动注入挂载与 `DOCKER_HOST`。改为 `none` 时 Job 内无法使用 Docker。
+
+### 最小验收清单
+
+- [ ] WebUI 可新增一个项目下多个 Runner，并能独立启动/停止。
+- [ ] 每个 Runner 以独立容器运行时，状态在 UI 正确反映（含「Docker 后端」列）。
+- [ ] `job_docker_backend: dind` 时，至少完成一次含 Docker 的 workflow（需先 `docker compose --profile dind up -d`）。
+- [ ] `job_docker_backend: host-socket` 时，至少完成一次含 Docker 的 workflow。
+- [ ] Manager 重启后，已注册 Runner 可自动恢复拉起，无旧容器配置污染。
 
 ---
 

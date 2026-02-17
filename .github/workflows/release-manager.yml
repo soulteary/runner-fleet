@@ -1,11 +1,14 @@
-# 参考 https://github.com/soulteary/stargate
-# 推送 tag v*.*.* 时自动构建多架构 Docker 镜像并发布到 GHCR，同时创建 GitHub Release
-name: Release
+# 推送 tag v*.*.* 时：构建 Manager 二进制与镜像，并创建 GitHub Release
+name: Release (Manager)
 
 on:
   push:
     tags:
       - 'v*.*.*'
+
+concurrency:
+  group: release-manager-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   GO_VERSION: "1.26.0"
@@ -16,6 +19,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
       packages: write
@@ -33,7 +37,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -v ./cmd/runner-manager/... ./internal/...
 
       - name: Extract version from tag
         id: version
@@ -47,24 +51,25 @@ jobs:
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
           echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
 
-      - name: Build binaries
+      - name: Build Manager binaries
         run: |
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
-          COMMIT=${{ github.sha }}
           LDFLAGS="-s -w -X main.Version=v${VERSION}"
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-amd64 .
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-arm64 .
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-darwin-arm64 .
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-amd64 ./cmd/runner-manager
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-arm64 ./cmd/runner-manager
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-darwin-amd64 ./cmd/runner-manager
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-darwin-arm64 ./cmd/runner-manager
 
       - name: Generate checksums
         run: |
           cd dist
           sha256sum * > checksums.txt
 
-      - name: Prepare config for image
-        run: cp config.yaml.example config.yaml
+      # Dockerfile 内已 COPY config.yaml.example 并 sed 为 config.yaml，无需在 workflow 中准备
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -78,7 +83,9 @@ jobs:
 
       - name: Compute canonical image name (lowercase for GHCR)
         id: vars
+        shell: bash
         run: |
+          set -eu
           CANONICAL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "canonical=${CANONICAL,,}" >> "$GITHUB_OUTPUT"
 
@@ -97,32 +104,13 @@ jobs:
       - name: Build and push Manager Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ github.workspace }}
+          file: ${{ github.workspace }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-
-      - name: Prepare Runner tags (same image, tag suffix -runner)
-        id: runner-tags
-        run: |
-          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
-          echo "${{ steps.meta.outputs.tags }}" | sed '/./s/\(:.*\)$/\1-runner/' >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Runner Docker image (container mode)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.runner
-          push: true
-          tags: ${{ steps.runner-tags.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -145,7 +133,7 @@ jobs:
             ```bash
             docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}
             ```
-            - Runner 容器镜像（容器模式，同镜像名，tag 带 -runner 后缀）:
+            - Runner 容器镜像（容器模式，同镜像名，tag 带 -runner 后缀，由 Release (Runner) 工作流推送）:
             ```bash
             docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}-runner
             ```

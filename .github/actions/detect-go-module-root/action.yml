@@ -1,0 +1,53 @@
+# 检测 Go 模块根目录（含 go.mod 与 cmd/runner-manager 的目录），便于单仓或 monorepo 复用。
+# 使用方通过 env.WORKING_DIR 传入期望根目录（默认 .），若该目录下无 cmd/runner-manager 则自动查找。
+name: Detect Go module root
+description: 输出模块根路径 root 与是否找到 found (true/false)
+
+inputs:
+  working_dir:
+    description: 期望的模块根目录，如 . 或子目录
+    required: false
+    default: .
+
+outputs:
+  root:
+    description: 模块根目录路径
+    value: ${{ steps.detect.outputs.root }}
+  found:
+    description: 是否找到 (true/false)
+    value: ${{ steps.detect.outputs.found }}
+
+runs:
+  using: composite
+  steps:
+    - id: detect
+      shell: bash
+      run: |
+        set -e
+        cd "$GITHUB_WORKSPACE"
+        WORKING_DIR="${{ inputs.working_dir }}"
+        ROOT=""
+        if [ -d "$GITHUB_WORKSPACE/${WORKING_DIR}/cmd/runner-manager" ]; then
+          ROOT="${WORKING_DIR}"
+        fi
+        if [ -z "$ROOT" ]; then
+          ROOT=$(find . -name go.mod 2>/dev/null | while IFS= read -r f; do
+            d=$(dirname "$f")
+            if [ -d "$d/cmd/runner-manager" ]; then echo "$d"; break; fi
+          done | head -1)
+        fi
+        if [ -z "$ROOT" ]; then
+          FOUND_DIR=$(find . -type d -path '*/cmd/runner-manager' 2>/dev/null | head -1)
+          if [ -n "$FOUND_DIR" ]; then
+            ROOT=$(dirname "$(dirname "$FOUND_DIR")")
+          fi
+        fi
+        if [ -n "$ROOT" ]; then
+          echo "root=$ROOT" >> $GITHUB_OUTPUT
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "Using Go module root: $ROOT"
+        else
+          echo "root=." >> $GITHUB_OUTPUT
+          echo "found=false" >> $GITHUB_OUTPUT
+          echo "::notice::No go.mod + cmd/runner-manager found, skipping."
+        fi

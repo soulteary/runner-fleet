@@ -165,6 +165,7 @@
     .parse-msg.err { color: var(--danger); }
     .reg-ok { color: var(--success); font-size: 12px; }
     .reg-err { color: var(--danger); font-size: 12px; }
+    .probe-err { color: var(--danger); font-size: 12px; }
     .github-yes { color: var(--success); }
     .github-no { color: var(--warn); }
     .github-unknown { color: var(--muted); }
@@ -182,6 +183,7 @@
           <th>名称</th>
           <th>目标</th>
           <th>状态</th>
+          {{if .Config.Runners.ContainerMode}}<th>Docker 后端</th>{{end}}
           <th>注册 / GitHub</th>
           <th>安装目录</th>
           <th></th>
@@ -195,7 +197,9 @@
           <td>
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">运行中</span>{{end}}
+            {{if .ProbeError}}<br><span class="probe-err" title="{{.ProbeError}}">探测失败</span>{{end}}
           </td>
+          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
             {{if .RegistrationMessage}}
               <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}已注册{{else}}注册失败{{end}}</span>
@@ -225,7 +229,7 @@
         </tr>
         {{end}}
         {{if not .Runners}}
-        <tr><td colspan="6" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
+        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
         {{end}}
       </tbody>
     </table>
@@ -279,7 +283,9 @@
           <div class="row"><label>目标</label><div class="val" id="vTarget"></div></div>
           <div class="row"><label>标签</label><div class="val" id="vLabels"></div></div>
           <div class="row"><label>安装目录</label><div class="val path" id="vInstallDir"></div></div>
+          <div class="row" id="vJobDockerBackendRow" style="display:none"><label>Docker 后端</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>状态</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+          <div class="row"><label>探测错误</label><div class="val" id="vProbeError"></div></div>
           <div class="row"><label>注册结果</label><div class="val" id="vRegistrationMessage"></div></div>
           <div class="row"><label>注册检查时间</label><div class="val" id="vRegistrationCheckedAt"></div></div>
           <div class="row"><label>GitHub 显示</label><div class="val" id="vRegisteredOnGitHub"></div></div>
@@ -463,8 +469,17 @@
             document.getElementById('vTarget').textContent = data.target || '';
             document.getElementById('vLabels').textContent = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
             document.getElementById('vInstallDir').textContent = data.install_dir || '';
+            var jdbRow = document.getElementById('vJobDockerBackendRow');
+            var jdbEl = document.getElementById('vJobDockerBackend');
+            if (data.job_docker_backend) {
+              jdbRow.style.display = '';
+              jdbEl.textContent = data.job_docker_backend;
+            } else {
+              jdbRow.style.display = 'none';
+            }
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">运行中</span>' : '';
+            document.getElementById('vProbeError').textContent = data.probe_error || '—';
             document.getElementById('vRegistrationMessage').textContent = data.registration_message || '—';
             document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
             var gh = data.registered_on_github;
@@ -584,7 +599,12 @@
       try {
         const r = await fetch('/api/runners/' + encodeURIComponent(name) + '/' + action, { method: 'POST' });
         const data = await r.json().catch(() => ({}));
-        if (r.ok) { location.reload(); }
+        if (r.ok) {
+          if (data && data.probe_error) {
+            alert((data.message || '操作已执行') + '\n\n探测错误：' + data.probe_error);
+          }
+          location.reload();
+        }
         else { alert(data.message || r.statusText || '请求失败'); }
       } catch (e) { alert(e.message); }
     }

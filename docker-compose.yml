@@ -12,14 +12,19 @@
 #      - 取消 config.yaml 中 container_mode 等注释
 #      - 设置 volume_host_path 为宿主机 runners 绝对路径（例如：realpath runners 或 $(cd . && pwd)/runners）
 #      - 设置 container_image 为 CI 推送的 ghcr.io/<owner>/<repo>:main-runner（与 Manager 同镜像名，tag 带 -runner），或本地构建的镜像 tag
+#      - Manager 需能访问宿主机 Docker（创建/启停 Runner 容器）：下方已配置 group_add，请将 999 改为宿主机 docker 组 GID（getent group docker | cut -d: -f3）；或改用 user: "0:0" 以 root 运行
 #
 # === 两种运行模式 ===
-# - 默认（container_mode: false）：Runner 进程在 Manager 容器内运行，Job 需 Docker 时使用 DOCKER_HOST（当前为宿主机 socket）
-# - 容器模式（container_mode: true）：每个 Runner 独立容器，Manager 通过宿主机 Docker 启停（需 socket，已配置）
-# 非容器模式且希望 Job 内 docker 使用 DinD：在 .env 中设置 DOCKER_HOST=tcp://runner-dind:2375（仅非容器模式；容器模式须用宿主机 socket）
+# - 默认（container_mode: false）：Runner 进程在 Manager 容器内运行，Job 需 Docker 时可在 .env 设 DOCKER_HOST=tcp://runner-dind:2375 使用 DinD
+# - 容器模式（container_mode: true）：每个 Runner 独立容器，Manager 必须用宿主机 Docker（socket）创建/启停 Runner；DinD 仅供 Runner 容器内 Job 使用。请勿在 .env 中设置 DOCKER_HOST=tcp://runner-dind:2375，否则点击启动会报错
 
+# DinD 为可选：仅当 config.yaml 中 job_docker_backend: dind 时需要。
+# 启动 DinD：docker compose --profile dind up -d
+# 仅 Manager（host-socket 或 none）：docker compose up -d
 services:
   runner-dind:
+    profiles:
+      - dind
     image: docker:dind
     container_name: runner-dind
     privileged: true
@@ -36,8 +41,8 @@ services:
     # 使用本仓库 CI 镜像时可设 .env：MANAGER_IMAGE=ghcr.io/<owner>/<repo>:main
     image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:main}
     container_name: runner-manager
-    depends_on:
-      - runner-dind
+    # 使用 job_docker_backend: dind 时请先启动 DinD：docker compose --profile dind up -d
+    # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375
     environment:
       DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
     ports:
@@ -46,6 +51,9 @@ services:
       - ./config.yaml:/app/config.yaml
       - ./runners:/app/runners
       - /var/run/docker.sock:/var/run/docker.sock
+    # 容器模式需 Manager 访问宿主机 Docker：加入宿主机 docker 组（GID 用 getent group docker 查看，常见为 999）
+    group_add:
+      - "${DOCKER_GID:-999}"
     networks:
       - runner-net
     restart: unless-stopped

@@ -41,6 +41,10 @@ func TestList_WithItems(t *testing.T) {
 	if list[0].Status != StatusMissing {
 		t.Errorf("expected StatusMissing for missing dir, got %s", list[0].Status)
 	}
+	// 非容器模式下不应暴露 job_docker_backend
+	if list[0].JobDockerBackend != "" || list[1].JobDockerBackend != "" {
+		t.Errorf("expected empty JobDockerBackend in non-container mode, got %q and %q", list[0].JobDockerBackend, list[1].JobDockerBackend)
+	}
 }
 
 func TestGetByName_NotFound(t *testing.T) {
@@ -80,6 +84,30 @@ func TestGetByName_Found(t *testing.T) {
 	}
 	if info.Status != StatusMissing {
 		t.Errorf("expected StatusMissing, got %s", info.Status)
+	}
+	if info.JobDockerBackend != "" {
+		t.Errorf("expected empty JobDockerBackend in non-container mode, got %q", info.JobDockerBackend)
+	}
+}
+
+func TestList_ContainerModeShowsJobBackend(t *testing.T) {
+	base := t.TempDir()
+	cfg := &config.Config{
+		Runners: config.RunnersConfig{
+			BasePath:         base,
+			ContainerMode:    true,
+			JobDockerBackend: "host-socket",
+			Items: []config.RunnerItem{
+				{Name: "r1", TargetType: "org", Target: "o1"},
+			},
+		},
+	}
+	list := List(cfg)
+	if len(list) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(list))
+	}
+	if list[0].JobDockerBackend != "host-socket" {
+		t.Fatalf("expected JobDockerBackend host-socket, got %q", list[0].JobDockerBackend)
 	}
 }
 
