@@ -1,17 +1,23 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
 )
+
+// installRunnerScriptPath 容器内自动安装 runner 的脚本路径（Docker 镜像中有）
+const installRunnerScriptPath = "/app/scripts/install-runner.sh"
 
 // ConfigPath 配置文件路径，由 main 注入
 var ConfigPath string
@@ -46,6 +52,50 @@ func runnerNameExists(cfg *config.Config, name string) bool {
 		}
 	}
 	return false
+}
+
+// runInstallRunnerScript 执行容器内 install-runner.sh，下载并解压 runner 到 basePath/runnerName；超时返回 error
+func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, installRunnerScriptPath, runnerName)
+	cmd.Env = append(os.Environ(), "RUNNERS_BASE_PATH="+basePath)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, context.DeadlineExceeded
+	}
+	return out, err
+}
+
+// runConfigScript 在 installDir 下执行 config 脚本向 GitHub 注册，超时 2 分钟；返回输出与 error
+func runConfigScript(installDir, url, token string, labels []string, timeout time.Duration) ([]byte, error) {
+	configScript := filepath.Join(installDir, runner.ConfigScriptName())
+	args := []string{"--url", url, "--token", token}
+	if len(labels) > 0 {
+		args = append(args, "--labels", strings.Join(labels, ","))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, configScript, args...)
+	cmd.Dir = installDir
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, context.DeadlineExceeded
+	}
+	return out, err
+}
+
+// writeRegistrationResult 将本次注册结果写入 runner 目录
+func writeRegistrationResult(installDir string, success bool, message string) {
+	p := filepath.Join(installDir, runner.RegistrationResultFile)
+	body := struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		At      string `json:"at"`
+	}{Success: success, Message: message, At: time.Now().Format(time.RFC3339)}
+	b, _ := json.Marshal(body)
+	_ = os.WriteFile(p, b, 0644)
 }
 
 // Health 健康检查，供负载均衡或 K8s 探针使用
@@ -108,9 +158,14 @@ func AddRunner(c echo.Context) error {
 	if req.Name == "" || req.TargetType == "" || req.Target == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、target_type、target 必填")
 	}
+	targetTypeNorm := strings.ToLower(strings.TrimSpace(req.TargetType))
+	if err := validateTarget(targetTypeNorm, req.Target); err != nil {
+		return err
+	}
 	if !isValidNameOrPath(req.Name) || (req.Path != "" && !isValidNameOrPath(req.Path)) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、path 不可包含 / \\ .. 等非法字符")
 	}
+	targetNorm := strings.TrimSpace(req.Target)
 	// 若已存在同名 runner，自动添加短随机后缀直至名称唯一
 	name := req.Name
 	for i := 0; i < 20; i++ {
@@ -125,8 +180,8 @@ func AddRunner(c echo.Context) error {
 	item := config.RunnerItem{
 		Name:       name,
 		Path:       req.Path,
-		TargetType: req.TargetType,
-		Target:     req.Target,
+		TargetType: targetTypeNorm,
+		Target:     targetNorm,
 		Labels:     req.Labels,
 	}
 	installDir, err := runner.EnsureRunnerDir(cfg, item.Name, item.Path)
@@ -151,27 +206,56 @@ func AddRunner(c echo.Context) error {
 		// 在 installDir 执行 config 脚本
 		configScript := filepath.Join(installDir, runner.ConfigScriptName())
 		if _, err := os.Stat(configScript); err != nil {
-			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "配置已保存，Runner 目录已创建。请将 GitHub Actions runner 解压到 " + installDir + " 后，使用注册 token 再次提交或在该目录下手动执行 " + runner.ConfigScriptName(),
-				"name":        item.Name,
-				"install_dir": installDir,
-			})
+			// 目录为空时（如 Docker 部署）：若存在自动安装脚本则先安装 runner 再注册
+			if _, scriptErr := os.Stat(installRunnerScriptPath); scriptErr == nil {
+				runnerSegment := filepath.Base(installDir)
+				installOut, installErr := runInstallRunnerScript(cfg.Runners.BasePath, runnerSegment, 3*time.Minute)
+				if installErr != nil {
+					return c.JSON(http.StatusOK, map[string]any{
+						"message":     "配置已保存，自动安装 Runner 失败（请检查网络或稍后手动安装）: " + installErr.Error(),
+						"name":        item.Name,
+						"install_dir": installDir,
+						"output":      string(installOut),
+					})
+				}
+				// 安装后再次检查 config 脚本
+				if _, err2 := os.Stat(configScript); err2 != nil {
+					return c.JSON(http.StatusOK, map[string]any{
+						"message":     "配置已保存，Runner 已安装但未找到 " + runner.ConfigScriptName() + "，请检查 " + installDir,
+						"name":        item.Name,
+						"install_dir": installDir,
+						"output":      string(installOut),
+					})
+				}
+				// 继续执行下方的 config 与启动逻辑
+			} else {
+				return c.JSON(http.StatusOK, map[string]any{
+					"message":     "配置已保存，Runner 目录已创建。请将 GitHub Actions runner 解压到 " + installDir + " 后，使用注册 token 再次提交或在该目录下手动执行 " + runner.ConfigScriptName(),
+					"name":        item.Name,
+					"install_dir": installDir,
+				})
+			}
 		}
-		url := "https://github.com/" + req.Target
-		cmd := exec.Command(configScript, "--url", url, "--token", req.RegistrationToken)
-		cmd.Dir = installDir
-		cmd.Env = os.Environ()
-		out, err := cmd.CombinedOutput()
+		url := "https://github.com/" + targetNorm
+		out, err := runConfigScript(installDir, url, req.RegistrationToken, item.Labels, 2*time.Minute)
 		if err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg == "" {
+				msg = err.Error()
+			}
+			writeRegistrationResult(installDir, false, msg)
 			return c.JSON(http.StatusOK, map[string]any{
-				"message":     "配置已保存，注册执行失败（可能 token 过期或网络问题）: " + string(out),
+				"message":     "配置已保存，向 GitHub 注册失败（可能 token 过期或网络问题）: " + msg,
 				"name":        item.Name,
 				"install_dir": installDir,
+				"output":      string(out),
+				"registered":  false,
 			})
 		}
+		writeRegistrationResult(installDir, true, "注册成功")
 		// 注册成功后自动启动 runner
 		startErr := runner.Start(installDir)
-		msg := "Runner 已添加并完成注册"
+		msg := "Runner 已添加并完成向 GitHub 注册"
 		if startErr != nil {
 			msg += "，但自动启动失败: " + startErr.Error()
 		} else {
@@ -182,6 +266,7 @@ func AddRunner(c echo.Context) error {
 			"name":        item.Name,
 			"install_dir": installDir,
 			"output":      string(out),
+			"registered":  true,
 			"started":     startErr == nil,
 		})
 	}
@@ -190,29 +275,6 @@ func AddRunner(c echo.Context) error {
 		"name":        item.Name,
 		"install_dir": installDir,
 	})
-}
-
-// RemoveRunnerRequest 删除 runner 请求（仅从配置移除，不执行 remove-token）
-type RemoveRunnerRequest struct {
-	Name string `json:"name" form:"name"`
-}
-
-// RemoveRunner 从配置中移除 runner（POST body 或 form 提供 name）
-func RemoveRunner(c echo.Context) error {
-	var req RemoveRunnerRequest
-	_ = c.Bind(&req)
-	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
-	}
-	if err := config.LoadAndSave(ConfigPath, func(cfg *config.Config) error {
-		return removeRunnerFromConfig(cfg, req.Name)
-	}); err != nil {
-		if he, ok := err.(*echo.HTTPError); ok {
-			return he
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败")
-	}
-	return c.JSON(http.StatusOK, map[string]any{"message": "已从配置中移除"})
 }
 
 // GetRunner 查看单个 runner 配置与状态（GET /api/runners/:name）
@@ -224,6 +286,9 @@ func GetRunner(c echo.Context) error {
 	name := c.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
+	}
+	if !isValidNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
 	if info == nil {
@@ -241,6 +306,9 @@ func StartRunner(c echo.Context) error {
 	name := c.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
+	}
+	if !isValidNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
 	if info == nil {
@@ -267,6 +335,9 @@ func StopRunner(c echo.Context) error {
 	name := c.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
+	}
+	if !isValidNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
 	if info == nil {
@@ -296,6 +367,9 @@ func UpdateRunner(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
+	if !isValidNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
+	}
 	var req UpdateRunnerRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "参数错误: "+err.Error())
@@ -307,9 +381,14 @@ func UpdateRunner(c echo.Context) error {
 	if req.TargetType == "" || req.Target == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "target_type、target 必填")
 	}
+	targetTypeNorm := strings.ToLower(strings.TrimSpace(req.TargetType))
+	if err := validateTarget(targetTypeNorm, req.Target); err != nil {
+		return err
+	}
 	if req.Path != "" && !isValidNameOrPath(req.Path) {
 		return echo.NewHTTPError(http.StatusBadRequest, "path 不可包含 / \\ .. 等非法字符")
 	}
+	targetNorm := strings.TrimSpace(req.Target)
 	var updated *runner.RunnerInfo
 	if err := config.LoadAndSave(ConfigPath, func(cfg *config.Config) error {
 		idx := -1
@@ -325,8 +404,8 @@ func UpdateRunner(c echo.Context) error {
 		cfg.Runners.Items[idx] = config.RunnerItem{
 			Name:       name,
 			Path:       req.Path,
-			TargetType: req.TargetType,
-			Target:     req.Target,
+			TargetType: targetTypeNorm,
+			Target:     targetNorm,
 			Labels:     req.Labels,
 		}
 		return nil
@@ -366,6 +445,9 @@ func RemoveRunnerByName(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
+	if !isValidNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
+	}
 	if err := config.LoadAndSave(ConfigPath, func(cfg *config.Config) error {
 		return removeRunnerFromConfig(cfg, name)
 	}); err != nil {
@@ -386,6 +468,32 @@ func isValidNameOrPath(s string) bool {
 		return false
 	}
 	return true
+}
+
+// validateTarget 校验 target 格式：org 为组织名（不含 /），repo 为 owner/repo（恰好一个斜杠且两端非空）
+func validateTarget(targetType, target string) error {
+	t := strings.TrimSpace(target)
+	if t == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "target 不能为空")
+	}
+	switch targetType {
+	case "org":
+		if strings.Contains(t, "/") {
+			return echo.NewHTTPError(http.StatusBadRequest, "目标类型为组织(org)时，target 应为组织名，不能包含 /")
+		}
+		return nil
+	case "repo":
+		parts := strings.SplitN(t, "/", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "目标类型为仓库(repo)时，target 应为 owner/repo 格式（且 owner 与 repo 均非空）")
+		}
+		if strings.Contains(parts[1], "/") {
+			return echo.NewHTTPError(http.StatusBadRequest, "target 只能包含一个 /，格式为 owner/repo")
+		}
+		return nil
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, "target_type 必须为 org 或 repo")
+	}
 }
 
 // removeRunnerFromConfig 从内存中的配置移除指定 runner，不写文件（由 LoadAndSave 负责保存）

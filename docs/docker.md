@@ -1,5 +1,8 @@
 # Docker 部署
 
+- **基础镜像**：运行时使用 **Ubuntu**（非 Alpine），避免 GitHub Runner 在 Alpine 下运行异常。
+- **自动拉起 Runner**：服务启动约 15 秒后会自动启动所有「已注册但未在运行」的 Runner；定时任务每 5 分钟也会再次检查并拉起未运行的已注册 Runner，便于 DinD 或管理器重启后恢复。
+
 ## 使用已发布镜像（推荐）
 
 从 GitHub Container Registry 拉取并运行，无需本地构建：
@@ -82,39 +85,28 @@ docker run -d --name runner-manager \
 
 - Runner 子进程会继承 `DOCKER_HOST`，Job 中的 `docker` 命令将使用 `runner-dind` 容器内的守护进程。
 - DinD 需 `--privileged`，且与宿主机 Docker 隔离，适合希望 Job 与宿主机环境隔离的场景。
+- **DinD 或管理器重启后**：runner-manager 启动后会延迟约 15 秒自动启动所有已注册的 Runner；之后每 5 分钟定时任务也会检查并拉起未在运行的已注册 Runner，无需手动点击「启动」。
 
-#### Docker/DinD 下「自动注册」的前提
+#### Docker/DinD 下「自动注册」
 
-本镜像**不包含** GitHub Actions runner 二进制。添加 Runner 时若在表单中填写了 Token，服务只会在**已存在 runner 程序的目录**里执行 `config.sh` 完成注册；若该目录为空（刚由服务创建），则只会保存配置并返回提示「请将 runner 解压到某目录后再次提交或手动执行 config.sh」。
+本镜像**不包含** GitHub Actions runner 二进制，但**支持在 Web 界面一次完成安装与注册**：在「快速添加 Runner」中填写名称、目标、Token 并提交后，服务会先自动执行 `/app/scripts/install-runner.sh` 下载并解压 runner，再执行 `config.sh` 向 GitHub 注册并启动 Runner。无需事先手动安装。
 
-因此在使用 Docker/DinD 时，若希望**一次提交就完成注册**，请按以下顺序操作：
+若自动安装失败（例如网络不可达 GitHub releases），可改为手动安装后再在界面提交 Token，或手动执行注册：
 
-1. **方式 A：容器内使用安装脚本**（推荐）  
-   在宿主机执行以下命令，会在挂载的 `runners/<名称>/` 下自动下载并解压 runner（默认版本 2.331.0，可选校验哈希）：
+1. **容器内执行安装脚本**（推荐）  
    ```bash
    docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
    ```
-   若 `config.yaml` 中 `runners.base_path` 不是 `/app/runners`，可设置环境变量后执行，例如：
+   若 `config.yaml` 中 `runners.base_path` 不是 `/app/runners`，可设置环境变量：
    ```bash
    docker exec -e RUNNERS_BASE_PATH=/app/runners runner-manager /app/scripts/install-runner.sh my-runner
    ```
+2. **或在宿主机**创建 `runners/<名称>/` 并解压 [actions-runner Linux 包](https://github.com/actions/runner/releases)，再在界面填写名称、目标、Token 提交。
 
-2. **方式 B：在宿主机**（挂载 `runners` 的那台机器）上，先创建对应子目录并解压 runner：
-   ```bash
-   mkdir -p runners/<名称>
-   cd runners/<名称>
-   # 从 https://github.com/actions/runner/releases 下载 Linux x64 包并解压到当前目录
-   curl -sL https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz | tar xz
-   ```
-3. 再在管理界面「快速添加 Runner」中填写名称（与上面使用的 `<名称>` 一致）、目标、Token 并提交，此时服务会检测到 `config.sh` 并自动执行注册。
-
-若已先在界面添加了 Runner（目录已创建但为空），可：
-
-- 在宿主机进入 `runners/<名称>/`，解压 runner 后，到 GitHub 重新获取一份 Token，在该目录下手动执行：
+若已先在界面添加了 Runner（目录已创建但为空），可删除该 Runner 后重新在界面填写 Token 提交（会触发自动安装），或在目录内解压 runner 后到 GitHub 重新获取 Token，手动执行：
   ```bash
   ./config.sh --url https://github.com/<目标> --token <新TOKEN>
   ```
-- 或删除该 Runner 配置后，按上面 1/2→3 顺序重新添加（可改用方式 A 在容器内执行安装脚本）。
 
 ---
 

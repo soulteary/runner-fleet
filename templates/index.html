@@ -124,6 +124,45 @@
     .msg.ok { background: rgba(63, 185, 80, 0.15); color: var(--success); }
     .msg.err { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
     .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+    .parse-box {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .parse-box label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+    .parse-box code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .parse-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .parse-row textarea {
+      flex: 1;
+      min-width: 280px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      resize: vertical;
+    }
+    .btn-parse {
+      padding: 10px 16px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .btn-parse:hover { opacity: 0.9; }
+    .parse-msg { margin-top: 8px; font-size: 13px; }
+    .parse-msg.ok { color: var(--success); }
+    .parse-msg.err { color: var(--danger); }
+    .reg-ok { color: var(--success); font-size: 12px; }
+    .reg-err { color: var(--danger); font-size: 12px; }
+    .github-yes { color: var(--success); }
+    .github-no { color: var(--warn); }
+    .github-unknown { color: var(--muted); }
   </style>
 </head>
 <body>
@@ -131,12 +170,14 @@
 
   <div class="card">
     <h2>Runner 列表</h2>
+    <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">注册结果由添加时写入；「GitHub 显示」由定时任务每 5 分钟检查（需在 <code>config.yaml</code> 中配置 <code>github.token</code>）。</p>
     <table>
       <thead>
         <tr>
           <th>名称</th>
           <th>目标</th>
           <th>状态</th>
+          <th>注册 / GitHub</th>
           <th>安装目录</th>
           <th></th>
         </tr>
@@ -150,6 +191,24 @@
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">运行中</span>{{end}}
           </td>
+          <td>
+            {{if .RegistrationMessage}}
+              <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}已注册{{else}}注册失败{{end}}</span>
+            {{else}}
+              <span class="github-unknown">—</span>
+            {{end}}
+            {{if .GitHubCheckAt}}
+              {{if .RegisteredOnGitHub}}
+                <br><span class="github-yes">GitHub ✓</span>
+              {{else}}
+                <br><span class="github-no">GitHub 未显示</span>
+              {{end}}
+            {{else}}
+              {{if .RegistrationMessage}}
+                <br><span class="github-unknown">GitHub 待检查</span>
+              {{end}}
+            {{end}}
+          </td>
           <td class="path">{{.InstallDir}}</td>
           <td>
             {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="启动 Runner">启动</button>{{end}}
@@ -161,7 +220,7 @@
         </tr>
         {{end}}
         {{if not .Runners}}
-        <tr><td colspan="5" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
+        <tr><td colspan="6" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
         {{end}}
       </tbody>
     </table>
@@ -169,22 +228,30 @@
 
   <div class="card">
     <h2>快速添加 Runner</h2>
+    <div class="parse-box">
+      <label>从 GitHub 复制命令解析（粘贴 <code>./config.sh --url ... --token ...</code> 后点击解析）</label>
+      <div class="parse-row">
+        <textarea id="githubCommandInput" rows="3" placeholder="./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN"></textarea>
+        <button type="button" id="parseCommandBtn" class="btn-parse">解析并填充</button>
+      </div>
+      <div id="parseMsg" class="parse-msg"></div>
+    </div>
     <form id="addForm">
       <label>名称 (name) *</label>
-      <input name="name" required placeholder="例如 runner-1">
+      <input name="name" id="addFormName" required placeholder="例如 runner-1">
       <label>子路径 (path，可选，默认用名称)</label>
-      <input name="path" placeholder="例如 runner-1">
+      <input name="path" id="addFormPath" placeholder="例如 runner-1">
       <label>目标类型 (target_type) *</label>
-      <select name="target_type" required>
+      <select name="target_type" id="addFormTargetType" required>
         <option value="org">组织 (org)</option>
         <option value="repo">仓库 (repo)</option>
       </select>
       <label>目标 (target) *</label>
-      <input name="target" required placeholder="组织名 或 owner/repo">
+      <input name="target" id="addFormTarget" required placeholder="组织名 或 owner/repo">
       <label>标签 (labels，逗号分隔，可选)</label>
-      <input name="labelsStr" placeholder="self-hosted, linux, x64">
+      <input name="labelsStr" id="addFormLabelsStr" placeholder="self-hosted, linux, x64">
       <label>注册 Token（可选，从 GitHub 设置 → Actions → Runners 复制，1 小时有效）</label>
-      <input name="registration_token" type="password" placeholder="选填，有则自动执行注册">
+      <input name="registration_token" id="addFormToken" type="password" placeholder="选填；填写后将自动安装（Docker 下）并注册、启动">
       <button type="submit">添加 Runner</button>
     </form>
     <div id="addMsg"></div>
@@ -205,6 +272,10 @@
           <div class="row"><label>标签</label><div class="val" id="vLabels"></div></div>
           <div class="row"><label>安装目录</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row"><label>状态</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+          <div class="row"><label>注册结果</label><div class="val" id="vRegistrationMessage"></div></div>
+          <div class="row"><label>注册检查时间</label><div class="val" id="vRegistrationCheckedAt"></div></div>
+          <div class="row"><label>GitHub 显示</label><div class="val" id="vRegisteredOnGitHub"></div></div>
+          <div class="row"><label>GitHub 检查时间</label><div class="val" id="vGitHubCheckAt"></div></div>
         </div>
         <form id="modalEditForm" style="display:none">
           <input type="hidden" name="name" id="eName">
@@ -229,6 +300,74 @@
   </div>
 
   <script>
+    // 解析 GitHub config.sh 命令，填充到添加 Runner 表单
+    // 与后端 isValidNameOrPath 一致：不允许含 .. / \
+    function sanitizeRunnerName(s) {
+      if (!s || typeof s !== 'string') return '';
+      return s.replace(/\.\./g, '').replace(/[/\\]/g, '-').trim() || 'runner';
+    }
+
+    function parseGitHubConfigCommand(text) {
+      if (!text || typeof text !== 'string') return { ok: false, message: '请输入命令' };
+      const trimmed = text.trim();
+      // 匹配 --url <URL> 和 --token <TOKEN>（兼容多余空格、换行、引号）
+      const urlMatch = trimmed.match(/\-\-url\s+["']?([^\s"']+)["']?/);
+      const tokenMatch = trimmed.match(/\-\-token\s+["']?([^\s"']+)["']?/);
+      if (!urlMatch) return { ok: false, message: '未找到 --url 参数' };
+      const url = urlMatch[1].trim();
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch (e) {
+        return { ok: false, message: 'URL 格式无效' };
+      }
+      // pathname 不含 query/hash，支持 GitHub 与 GitHub Enterprise
+      const pathParts = parsedUrl.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      let targetType = 'org';
+      let target = '';
+      let suggestedName = '';
+      if (pathParts.length >= 2) {
+        targetType = 'repo';
+        target = pathParts[0] + '/' + pathParts[1];
+        suggestedName = sanitizeRunnerName(pathParts[1]);
+      } else if (pathParts.length === 1) {
+        target = pathParts[0];
+        suggestedName = sanitizeRunnerName(pathParts[0]);
+      } else {
+        return { ok: false, message: '无法从 URL 解析出组织或仓库' };
+      }
+      const token = tokenMatch ? tokenMatch[1].trim() : '';
+      return {
+        ok: true,
+        target_type: targetType,
+        target: target,
+        registration_token: token,
+        suggested_name: suggestedName || 'runner'
+      };
+    }
+
+    document.getElementById('parseCommandBtn').addEventListener('click', function() {
+      const input = document.getElementById('githubCommandInput');
+      const msgEl = document.getElementById('parseMsg');
+      const result = parseGitHubConfigCommand(input.value);
+      msgEl.textContent = '';
+      msgEl.className = 'parse-msg';
+      if (!result.ok) {
+        msgEl.className = 'parse-msg err';
+        msgEl.textContent = result.message;
+        return;
+      }
+      document.getElementById('addFormTargetType').value = result.target_type;
+      document.getElementById('addFormTarget').value = result.target;
+      document.getElementById('addFormToken').value = result.registration_token || '';
+      if (result.suggested_name && !document.getElementById('addFormName').value) {
+        document.getElementById('addFormName').value = result.suggested_name;
+        document.getElementById('addFormPath').value = '';
+      }
+      msgEl.className = 'parse-msg ok';
+      msgEl.textContent = '已填充：目标类型 ' + result.target_type + '，目标 ' + result.target + (result.registration_token ? '，Token 已填入' : '');
+    });
+
     document.getElementById('addForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -296,6 +435,14 @@
             document.getElementById('vInstallDir').textContent = data.install_dir || '';
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">运行中</span>' : '';
+            document.getElementById('vRegistrationMessage').textContent = data.registration_message || '—';
+            document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
+            var gh = data.registered_on_github;
+            var ghEl = document.getElementById('vRegisteredOnGitHub');
+            if (gh === true) ghEl.innerHTML = '<span class="github-yes">已在 GitHub 显示</span>';
+            else if (gh === false) ghEl.innerHTML = '<span class="github-no">未在 GitHub 显示</span>';
+            else ghEl.textContent = '未检查（请配置 config.yaml 中 github.token 并等待定时检查）';
+            document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');
             const stopBtn = document.getElementById('modalStopBtnFooter');

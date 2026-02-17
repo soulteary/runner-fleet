@@ -1,0 +1,107 @@
+package githubcheck
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
+)
+
+const (
+	apiBase    = "https://api.github.com"
+	apiTimeout = 30 * time.Second
+	apiPerPage = 100 // 单页数量，减少漏判（GitHub 默认 30）
+)
+
+// githubRunnersResponse 与 GitHub API 返回结构一致
+type githubRunnersResponse struct {
+	TotalCount int `json:"total_count"`
+	Runners    []struct {
+		ID     int64  `json:"id"`
+		Name   string `json:"name"`
+		OS     string `json:"os"`
+		Status string `json:"status"`
+	} `json:"runners"`
+}
+
+// Run 根据配置对每个 runner 调用 GitHub API 检查是否已在 GitHub 显示，并写入 .github_status.json
+func Run(cfg *config.Config) {
+	if cfg == nil || cfg.GitHub.Token == "" {
+		return
+	}
+	client := &http.Client{Timeout: apiTimeout}
+	for _, item := range cfg.Runners.Items {
+		installDir := item.InstallPath(cfg.Runners.BasePath)
+		registered := checkOne(client, cfg.GitHub.Token, item.TargetType, item.Target, item.Name)
+		_ = runner.WriteGitHubStatus(installDir, registered)
+	}
+}
+
+// isValidTargetFormat 与 handler.validateTarget 规则一致，避免对无效 target 发起 API 请求；targetType 会规范为小写
+func isValidTargetFormat(targetType, target string) bool {
+	raw := strings.TrimSpace(target)
+	if raw == "" {
+		return false
+	}
+	tt := strings.ToLower(strings.TrimSpace(targetType))
+	switch tt {
+	case "org":
+		return !strings.Contains(raw, "/")
+	case "repo":
+		parts := strings.SplitN(raw, "/", 2)
+		if len(parts) != 2 {
+			return false
+		}
+		if strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return false
+		}
+		return !strings.Contains(parts[1], "/")
+	default:
+		return false
+	}
+}
+
+func checkOne(client *http.Client, token, targetType, target, runnerName string) bool {
+	raw := strings.TrimSpace(target)
+	tt := strings.ToLower(strings.TrimSpace(targetType))
+	if !isValidTargetFormat(tt, target) {
+		return false
+	}
+	var path string
+	if tt == "org" {
+		path = "/orgs/" + raw + "/actions/runners"
+	} else {
+		// repo
+		path = "/repos/" + raw + "/actions/runners"
+	}
+	url := apiBase + path + "?per_page=" + strconv.Itoa(apiPerPage)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var data githubRunnersResponse
+	if json.NewDecoder(resp.Body).Decode(&data) != nil {
+		return false
+	}
+	for _, r := range data.Runners {
+		if r.Name == runnerName {
+			return true
+		}
+	}
+	return false
+}

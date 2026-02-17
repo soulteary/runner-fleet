@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,8 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+)
+
+// 与 handler 写入的文件名一致，供 cron 与 API 读取
+const (
+	RegistrationResultFile = ".registration_result.json"
+	GitHubStatusFile       = ".github_status.json"
 )
 
 // Status 表示 runner 目录状态
@@ -25,14 +33,18 @@ const (
 
 // RunnerInfo 供前端展示的 runner 信息
 type RunnerInfo struct {
-	Name       string   `json:"name"`
-	Path       string   `json:"path"`
-	TargetType string   `json:"target_type"`
-	Target     string   `json:"target"`
-	Labels     []string `json:"labels"`
-	Status     Status   `json:"status"`
-	InstallDir string   `json:"install_dir"`
-	Running    bool     `json:"running"` // 进程是否在跑（简化：仅看 pid 文件或 run.sh 进程）
+	Name                  string   `json:"name"`
+	Path                  string   `json:"path"`
+	TargetType            string   `json:"target_type"`
+	Target                string   `json:"target"`
+	Labels                []string `json:"labels"`
+	Status                Status   `json:"status"`
+	InstallDir            string   `json:"install_dir"`
+	Running               bool     `json:"running"`                 // 进程是否在跑
+	RegistrationMessage   string   `json:"registration_message"`    // 最近一次注册结果信息（成功或失败原因）
+	RegistrationCheckedAt string   `json:"registration_checked_at"` // 注册结果时间
+	RegisteredOnGitHub    *bool    `json:"registered_on_github"`    // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
+	GitHubCheckAt         string   `json:"github_check_at"`         // 最近一次 GitHub 检查时间
 }
 
 // GetByName 根据名称获取单个 runner 信息，不存在返回 nil；cfg 为 nil 时安全返回 nil
@@ -57,6 +69,8 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 			info.Path = item.Name
 		}
 		info.Status, info.Running = getStatus(installDir)
+		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
+		info.RegisteredOnGitHub, info.GitHubCheckAt = readGitHubStatus(installDir)
 		return info
 	}
 	return nil
@@ -80,6 +94,8 @@ func List(cfg *config.Config) []RunnerInfo {
 			info.Path = item.Name
 		}
 		info.Status, info.Running = getStatus(installDir)
+		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
+		info.RegisteredOnGitHub, info.GitHubCheckAt = readGitHubStatus(installDir)
 		list = append(list, info)
 	}
 	return list
@@ -100,6 +116,54 @@ func getStatus(installDir string) (Status, bool) {
 		return StatusInstalled, running
 	}
 	return StatusNew, false
+}
+
+// readRegistrationResult 读取 handler 写入的注册结果，返回 message 与 at
+func readRegistrationResult(installDir string) (message, at string) {
+	b, err := os.ReadFile(filepath.Join(installDir, RegistrationResultFile))
+	if err != nil {
+		return "", ""
+	}
+	var v struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		At      string `json:"at"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return "", ""
+	}
+	return v.Message, v.At
+}
+
+// readGitHubStatus 读取 cron 写入的 GitHub 检查结果
+func readGitHubStatus(installDir string) (registered *bool, checkAt string) {
+	b, err := os.ReadFile(filepath.Join(installDir, GitHubStatusFile))
+	if err != nil {
+		return nil, ""
+	}
+	var v struct {
+		Registered bool   `json:"registered"`
+		LastCheck  string `json:"last_check"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return nil, ""
+	}
+	reg := v.Registered
+	return &reg, v.LastCheck
+}
+
+// WriteGitHubStatus 由 cron 调用，写入 GitHub 检查结果到 runner 目录
+func WriteGitHubStatus(installDir string, registered bool) error {
+	p := filepath.Join(installDir, GitHubStatusFile)
+	body := struct {
+		Registered bool   `json:"registered"`
+		LastCheck  string `json:"last_check"`
+	}{Registered: registered, LastCheck: time.Now().Format(time.RFC3339)}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, b, 0644)
 }
 
 // isProcessRunning 检测 Runner 进程是否存活：读取 pid 文件并校验进程存在（非 Windows）；
@@ -159,7 +223,8 @@ func RunScriptName() string {
 	return "run.sh"
 }
 
-// readRunnerPid 读取 runner 的 pid 文件（Runner.Listener.pid 或 .path），返回 pid，无效则 0 与 error
+// readRunnerPid 读取 runner 的 pid 文件，返回 pid，无效则 0 与 error。
+// Runner.Listener.pid 为官方 runner 使用；.path 为部分版本或兼容用途。
 func readRunnerPid(installDir string) (int, error) {
 	for _, name := range []string{"Runner.Listener.pid", ".path"} {
 		f := filepath.Join(installDir, name)
