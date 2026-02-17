@@ -170,7 +170,7 @@
 
   <div class="card">
     <h2>Runner 列表</h2>
-    <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">注册结果由添加时写入；「GitHub 显示」由定时任务每 5 分钟检查（需在 <code>config.yaml</code> 中配置 <code>github.token</code>）。</p>
+    <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">「注册结果」由添加时若填写 Token 执行注册并写入。「GitHub 显示」由定时任务约每 5 分钟检查（可选：在该 runner 目录下放置 <code>.github_check_token</code> 后即会检查）。</p>
     <table>
       <thead>
         <tr>
@@ -205,7 +205,7 @@
               {{end}}
             {{else}}
               {{if .RegistrationMessage}}
-                <br><span class="github-unknown">GitHub 待检查</span>
+                <br><span class="github-unknown">GitHub 待检查（可选）</span>
               {{end}}
             {{end}}
           </td>
@@ -441,7 +441,7 @@
             var ghEl = document.getElementById('vRegisteredOnGitHub');
             if (gh === true) ghEl.innerHTML = '<span class="github-yes">已在 GitHub 显示</span>';
             else if (gh === false) ghEl.innerHTML = '<span class="github-no">未在 GitHub 显示</span>';
-            else ghEl.textContent = '未检查（请配置 config.yaml 中 github.token 并等待定时检查）';
+            else ghEl.textContent = 'GitHub 显示未检查（可选：在该 runner 目录下放置 .github_check_token 后，由定时任务约每 5 分钟检查）';
             document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');

@@ -28,7 +28,7 @@ docker run -d --name runner-manager \
 
 - **`-p 8080:8080`**：宿主机端口映射，保证能从本机访问管理界面。
 - **`-v $(pwd)/config.yaml:/app/config.yaml`**：挂载配置文件，修改后重启容器即可生效；不挂载则使用镜像内默认配置，无法持久化。
-- **`-v $(pwd)/runners:/app/runners`**：挂载 Runner 安装目录，Runner 二进制与注册信息都保存在此；不挂载则容器删除后所有 Runner 丢失。
+- **`-v $(pwd)/runners:/app/runners`**：挂载 Runner 安装目录，Runner 二进制与注册信息都保存在此；不挂载则容器删除后所有 Runner 丢失。若需界面「GitHub 显示」状态检查，请在各自 runner 子目录（如 `runners/xxx/`）下放置 `.github_check_token` 文件。
 - 镜像内工作目录为 `/app`，`-config` 默认为 `/app/config.yaml`。`config.yaml` 中 `runners.base_path` 需为 `/app/runners`（或与挂载路径一致）。
 
 ### 前台调试（带 -it）

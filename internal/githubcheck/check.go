@@ -3,6 +3,8 @@ package githubcheck
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,9 +14,10 @@ import (
 )
 
 const (
-	apiBase    = "https://api.github.com"
-	apiTimeout = 30 * time.Second
-	apiPerPage = 100 // 单页数量，减少漏判（GitHub 默认 30）
+	apiBase         = "https://api.github.com"
+	apiTimeout      = 30 * time.Second
+	apiPerPage      = 100                   // 单页数量，减少漏判（GitHub 默认 30）
+	runnerTokenFile = ".github_check_token" // 各 runner 目录下可选文件，内容为用于 List runners API 的 PAT
 )
 
 // githubRunnersResponse 与 GitHub API 返回结构一致
@@ -29,16 +32,30 @@ type githubRunnersResponse struct {
 }
 
 // Run 根据配置对每个 runner 调用 GitHub API 检查是否已在 GitHub 显示，并写入 .github_status.json
+// Token 仅从该 runner 目录下的 .github_check_token 读取，无则跳过该 runner
 func Run(cfg *config.Config) {
-	if cfg == nil || cfg.GitHub.Token == "" {
+	if cfg == nil {
 		return
 	}
 	client := &http.Client{Timeout: apiTimeout}
 	for _, item := range cfg.Runners.Items {
 		installDir := item.InstallPath(cfg.Runners.BasePath)
-		registered := checkOne(client, cfg.GitHub.Token, item.TargetType, item.Target, item.Name)
+		token := tokenForRunner(installDir)
+		if token == "" {
+			continue
+		}
+		registered := checkOne(client, token, item.TargetType, item.Target, item.Name)
 		_ = runner.WriteGitHubStatus(installDir, registered)
 	}
+}
+
+// tokenForRunner 返回该 runner 用于 GitHub 检查的 token：从 installDir 下的 .github_check_token 读取，不存在或为空则返回空
+func tokenForRunner(installDir string) string {
+	b, err := os.ReadFile(filepath.Join(installDir, runnerTokenFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // isValidTargetFormat 与 handler.validateTarget 规则一致，避免对无效 target 发起 API 请求；targetType 会规范为小写
