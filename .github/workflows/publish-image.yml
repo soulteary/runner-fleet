@@ -74,7 +74,7 @@ jobs:
       - name: Prepare config for image
         run: cp config.yaml.example config.yaml
 
-      - name: Build and push
+      - name: Build and push Manager image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -84,6 +84,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Prepare Runner tags (same image, tag suffix -runner)
+        id: runner-tags
+        run: |
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${{ steps.meta.outputs.tags }}" | sed '/./s/\(:.*\)$/\1-runner/' >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Runner image (container mode)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.runner
+          push: true
+          tags: ${{ steps.runner-tags.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max

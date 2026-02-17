@@ -1,5 +1,6 @@
 # 可执行文件
 runner-manager
+runner-agent
 *.exe
 
 # Runner 数据目录（按需取消注释）

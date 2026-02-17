@@ -27,6 +27,14 @@ type ServerConfig struct {
 type RunnersConfig struct {
 	BasePath string       `yaml:"base_path"` // 所有 runner 安装的根目录
 	Items    []RunnerItem `yaml:"items"`
+
+	// 容器模式：Runner 运行在独立容器中，Manager 通过 Docker API 启停并透过 Agent 获取状态
+	ContainerMode    bool   `yaml:"container_mode"`    // 为 true 时启停与状态均走容器
+	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，默认 ghcr.io/soulteary/runner-fleet-runner:main
+	ContainerNetwork string `yaml:"container_network"` // 容器所在网络，与 Manager 同网以便访问 Agent，默认 runner-net
+	AgentPort        int    `yaml:"agent_port"`        // 容器内 Agent 端口，默认 8081
+	DindHost         string `yaml:"dind_host"`         // 容器内 DOCKER_HOST 指向的 DinD 主机名，Job 内 Docker 用，默认 runner-dind
+	VolumeHostPath   string `yaml:"volume_host_path"`  // 容器模式下宿主机上 runners 根路径，供 docker create -v 使用；Manager 自身在容器内时必填（如 /data/runners）
 }
 
 // RunnerItem 单个 Runner 配置
@@ -63,6 +71,18 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Runners.BasePath == "" {
 		c.Runners.BasePath = "./runners"
+	}
+	if c.Runners.ContainerMode && c.Runners.ContainerImage == "" {
+		c.Runners.ContainerImage = "ghcr.io/soulteary/runner-fleet-runner:main"
+	}
+	if c.Runners.ContainerNetwork == "" {
+		c.Runners.ContainerNetwork = "runner-net"
+	}
+	if c.Runners.AgentPort <= 0 {
+		c.Runners.AgentPort = 8081
+	}
+	if c.Runners.ContainerMode && c.Runners.DindHost == "" {
+		c.Runners.DindHost = "runner-dind"
 	}
 	return &c, nil
 }

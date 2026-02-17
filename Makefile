@@ -2,10 +2,13 @@
 BINARY  := runner-manager
 VERSION ?= dev
 
-.PHONY: build test run docker-build docker-run docker-stop clean help
+# 本地构建 Runner 镜像的默认 tag；使用 CI 推送的镜像时为同仓库名、tag 带 -runner，如 ghcr.io/<owner>/<repo>:main-runner
+RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet-runner:main
+
+.PHONY: build test run docker-build docker-build-runner docker-run docker-stop clean help
 
 help:
-	@echo "targets: build test run docker-build docker-run docker-stop clean"
+	@echo "targets: build test run docker-build docker-build-runner docker-run docker-stop clean"
 
 build:
 	go build -ldflags "-X main.Version=$(VERSION)" -o $(BINARY) .
@@ -18,6 +21,9 @@ run: build
 
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) -t runner-manager:$(VERSION) .
+
+docker-build-runner:
+	docker build -f Dockerfile.runner -t $(RUNNER_IMAGE) .
 
 docker-run: docker-stop
 	docker run -d --name runner-manager -p 8080:8080 \

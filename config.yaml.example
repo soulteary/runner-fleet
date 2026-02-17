@@ -1,11 +1,22 @@
-# 示例配置。生产环境请复制为 config.yaml 后按需修改。
-# cp config.yaml.example config.yaml
+# 示例配置。使用前请复制为 config.yaml 后按需修改。
+#   cp config.yaml.example config.yaml
 # 详细字段说明见 docs/config.md
+#
+# Docker / docker-compose：请将 runners.base_path 改为 /app/runners（与镜像内卷挂载一致）
 
 server:
     port: 8080
     addr: 0.0.0.0
 runners:
-    # 本地运行可用 ./runners；Docker/docker-compose 请改为 /app/runners（与卷挂载一致）
+    # 本地运行：./runners；Docker 部署：/app/runners
     base_path: ./runners
     items: []   # 预置 Runner 列表，也可通过 Web 界面添加
+
+    # 容器模式：每个 Runner 运行在独立容器中，Manager 通过 Docker 启停并通过容器内 Agent 获取状态
+    # 启用后需保证 Manager 能执行 docker 且与 Runner 容器在同一网络（如 docker-compose 挂载宿主机 socket）
+    # container_mode: true
+    # container_image: ghcr.io/soulteary/runner-fleet-runner:main   # 或 CI：ghcr.io/<owner>/<repo>:main-runner
+    # container_network: runner-net
+    # agent_port: 8081
+    # dind_host: runner-dind
+    # volume_host_path: /absolute/path/on/host/to/runners   # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径

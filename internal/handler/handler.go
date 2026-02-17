@@ -88,7 +88,16 @@ func runRegistrationJob(j registrationJob) {
 		return
 	}
 	writeRegistrationResult(installDir, true, "注册成功")
-	if startErr := runner.Start(installDir); startErr != nil {
+	cfg, _ := config.Load(ConfigPath)
+	if cfg != nil && cfg.Runners.ContainerMode {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if startErr := runner.StartRunnerContainer(ctx, cfg, j.RunnerName, installDir); startErr != nil {
+			log.Printf("[registration] %s 注册成功但启动 Runner 容器失败: %v", j.RunnerName, startErr)
+		} else {
+			log.Printf("[registration] %s 已注册并启动 Runner 容器", j.RunnerName)
+		}
+	} else if startErr := runner.Start(installDir); startErr != nil {
 		log.Printf("[registration] %s 注册成功但启动失败: %v", j.RunnerName, startErr)
 	} else {
 		log.Printf("[registration] %s 已注册并启动", j.RunnerName)
@@ -188,23 +197,39 @@ func VersionInfo(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"version": v})
 }
 
-// ListRunners 列出所有 runner
+// ListRunners 列出所有 runner；容器模式下用容器内 Agent 状态覆盖 Running/Status
 func ListRunners(c echo.Context) error {
 	cfg, err := getConfig(c)
 	if err != nil {
 		return err
 	}
 	list := runner.List(cfg)
+	if cfg.Runners.ContainerMode {
+		ctx := c.Request().Context()
+		for i := range list {
+			running, status, _ := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
+			list[i].Running = running
+			list[i].Status = status
+		}
+	}
 	return c.JSON(http.StatusOK, map[string]any{"runners": list})
 }
 
-// Index 管理界面首页
+// Index 管理界面首页；容器模式下用容器内 Agent 状态覆盖
 func Index(c echo.Context) error {
 	cfg, err := getConfig(c)
 	if err != nil {
 		return err
 	}
 	list := runner.List(cfg)
+	if cfg.Runners.ContainerMode {
+		ctx := c.Request().Context()
+		for i := range list {
+			running, status, _ := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
+			list[i].Running = running
+			list[i].Status = status
+		}
+	}
 	return c.Render(http.StatusOK, "index.html", map[string]any{
 		"Runners": list,
 		"Config":  cfg,
@@ -343,7 +368,7 @@ func AddRunner(c echo.Context) error {
 	})
 }
 
-// GetRunner 查看单个 runner 配置与状态（GET /api/runners/:name）
+// GetRunner 查看单个 runner 配置与状态（GET /api/runners/:name）；容器模式下用 Agent 状态覆盖
 func GetRunner(c echo.Context) error {
 	cfg, err := getConfig(c)
 	if err != nil {
@@ -360,10 +385,16 @@ func GetRunner(c echo.Context) error {
 	if info == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
+	if cfg.Runners.ContainerMode {
+		ctx := c.Request().Context()
+		running, status, _ := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+		info.Running = running
+		info.Status = status
+	}
 	return c.JSON(http.StatusOK, info)
 }
 
-// StartRunner 启动指定 runner（POST /api/runners/:name/start）
+// StartRunner 启动指定 runner（POST /api/runners/:name/start）；容器模式下启动 Runner 容器并调 Agent /start
 func StartRunner(c echo.Context) error {
 	cfg, err := getConfig(c)
 	if err != nil {
@@ -380,11 +411,25 @@ func StartRunner(c echo.Context) error {
 	if info == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
+	if cfg.Runners.ContainerMode {
+		ctx := c.Request().Context()
+		running, status, _ := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+		info.Running = running
+		info.Status = status
+	}
 	if info.Status != runner.StatusInstalled {
 		return echo.NewHTTPError(http.StatusBadRequest, "仅已注册的 runner 可启动，当前状态: "+string(info.Status))
 	}
 	if info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 已在运行中"})
+	}
+	if cfg.Runners.ContainerMode {
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+		defer cancel()
+		if err := runner.StartRunnerContainer(ctx, cfg, name, info.InstallDir); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "启动 Runner 容器失败: "+err.Error())
+		}
+		return c.JSON(http.StatusOK, map[string]any{"message": "已启动 Runner 容器并通知 Agent 启动"})
 	}
 	if err := runner.Start(info.InstallDir); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "启动失败: "+err.Error())
@@ -392,7 +437,7 @@ func StartRunner(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"message": "已发起启动"})
 }
 
-// StopRunner 停止指定 runner（POST /api/runners/:name/stop）
+// StopRunner 停止指定 runner（POST /api/runners/:name/stop）；容器模式下停止 Runner 容器
 func StopRunner(c echo.Context) error {
 	cfg, err := getConfig(c)
 	if err != nil {
@@ -409,8 +454,22 @@ func StopRunner(c echo.Context) error {
 	if info == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
+	if cfg.Runners.ContainerMode {
+		ctx := c.Request().Context()
+		running, status, _ := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+		info.Running = running
+		info.Status = status
+	}
 	if !info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 未在运行"})
+	}
+	if cfg.Runners.ContainerMode {
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 35*time.Second)
+		defer cancel()
+		if err := runner.StopRunnerContainer(ctx, name); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "停止 Runner 容器失败: "+err.Error())
+		}
+		return c.JSON(http.StatusOK, map[string]any{"message": "已停止 Runner 容器"})
 	}
 	if err := runner.Stop(info.InstallDir); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "停止失败: "+err.Error())
@@ -486,16 +545,28 @@ func UpdateRunner(c echo.Context) error {
 		return err
 	}
 	updated = runner.GetByName(cfg, name)
-	// 若已注册且未在运行，自动启动 runner
+	// 若已注册且未在运行，自动启动 runner（容器模式则启动容器）
 	msg := "已更新"
 	var started bool
 	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
-		startErr := runner.Start(updated.InstallDir)
-		started = (startErr == nil)
-		if startErr != nil {
-			msg += "，但自动启动失败: " + startErr.Error()
+		if cfg.Runners.ContainerMode {
+			ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+			defer cancel()
+			startErr := runner.StartRunnerContainer(ctx, cfg, name, updated.InstallDir)
+			started = (startErr == nil)
+			if startErr != nil {
+				msg += "，但自动启动 Runner 容器失败: " + startErr.Error()
+			} else {
+				msg += "，已自动启动 Runner 容器"
+			}
 		} else {
-			msg += "，已自动启动"
+			startErr := runner.Start(updated.InstallDir)
+			started = (startErr == nil)
+			if startErr != nil {
+				msg += "，但自动启动失败: " + startErr.Error()
+			} else {
+				msg += "，已自动启动"
+			}
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
@@ -524,8 +595,14 @@ func RemoveRunnerByName(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
 	installDir := info.InstallDir
-	// 先停止 runner 进程（若在运行）
-	_ = runner.Stop(installDir)
+	// 先停止 runner：容器模式下停止并删除容器，否则停止本地进程
+	if cfg.Runners.ContainerMode {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		_ = runner.RemoveRunnerContainer(ctx, name)
+	} else {
+		_ = runner.Stop(installDir)
+	}
 	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
 	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {
 		_ = os.RemoveAll(installDir)

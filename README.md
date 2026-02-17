@@ -3,7 +3,7 @@
 基于 Golang Echo 的 HTTP 管理界面，在一台机器上查看和管理多个 GitHub Actions 自托管 Runner。使用 YAML 配置，无需数据库。
 
 许可证：MIT，见 [LICENSE](LICENSE)。  
-CI：push 到 `main`/`master` 时通过 [GitHub Actions](.github/workflows/build.yml) 自动执行 vet、测试与构建。
+CI：push 到 `main`/`master` 时通过 [GitHub Actions](.github/workflows/build.yml) 执行检查与构建；[publish-image](.github/workflows/publish-image.yml) 会构建并推送 Manager 与 Runner 容器镜像到 GHCR。
 
 ## 功能
 
@@ -12,6 +12,7 @@ CI：push 到 `main`/`master` 时通过 [GitHub Actions](.github/workflows/build
 - **快速添加**：名称 + 目标（组织/仓库）+ 可选 Token，一键添加并可自动注册
 - **删除**：从配置中移除（不删磁盘目录）
 - **启停**：对已注册 Runner 启动/停止
+- **容器模式**（可选）：每个 Runner 运行在独立容器中，Manager 通过 C/S 控制并获取状态；Runner 与 Manager 同镜像名，CI 推送 tag 带 `-runner` 后缀（如 `:main-runner`、`:1.0.0-runner`）
 
 ## 快速开始
 

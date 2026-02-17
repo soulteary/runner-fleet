@@ -1,4 +1,4 @@
-# 多阶段构建：编译 + Ubuntu 运行时（避免 Alpine 导致 GitHub Runner 运行异常）
+# Runner Fleet Manager：多阶段构建，编译 + Ubuntu 运行时（避免 Alpine 导致 GitHub Runner 运行异常）
 FROM golang:1.26-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -8,7 +8,10 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -ldflags "-X main.Version=${VERSION}" -o runner-manager .
 
 FROM ubuntu:24.04
-# GitHub Actions Runner 需 .NET Core 6.0 依赖（libicu 等），与 installdependencies.sh 一致
+LABEL org.opencontainers.image.title="Runner Fleet Manager" \
+      org.opencontainers.image.description="GitHub Actions Runner 管理服务"
+
+# GitHub Actions Runner 需 .NET Core 6.0 依赖（libicu 等）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -19,8 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-# Docker CLI：DinD 模式下 Job 内 docker/setup-qemu-action、docker build 等需在容器内调用 docker 命令，通过 DOCKER_HOST 连接 DinD 守护进程
-# 基础镜像是 ubuntu:24.04，对应 codename noble
+# Docker CLI：Job 内 docker build 等通过 DOCKER_HOST 连接 DinD 或宿主机 Docker
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod 644 /etc/apt/keyrings/docker.asc \
@@ -28,18 +30,23 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
-# 使用非 root 用户运行，避免 GitHub Actions Runner 报 "Must not run with sudo"
-# UID/GID 1001 挂载 runners 卷时可按需 chown
+# 非 root 运行，避免 Runner 报 "Must not run with sudo"；挂载卷时宿主机建议 chown 1001:1001
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /app -s /bin/bash app
 
 WORKDIR /app
 COPY --from=builder /app/runner-manager .
-COPY --from=builder /app/config.yaml ./config.yaml
+
+# 默认配置：基于 example 生成，base_path 设为 /app/runners（与下方卷挂载一致）；运行时可挂载自己的 config.yaml 覆盖
+COPY config.yaml.example ./config.yaml
+RUN sed -i 's|base_path: ./runners|base_path: /app/runners|' config.yaml
+
 RUN mkdir -p /app/scripts /app/runners
 COPY scripts/install-runner.sh /app/scripts/install-runner.sh
 RUN chmod +x /app/scripts/install-runner.sh && chown -R app:app /app
 
 USER app
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["./runner-manager"]
-CMD ["-config", "config.yaml"]
+CMD ["-config", "/app/config.yaml"]
