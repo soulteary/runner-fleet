@@ -1,13 +1,10 @@
-# Runner 容器镜像（容器模式用）：仅包含 Agent + Runner 运行依赖，Runner 目录由 Manager 挂载到 /runner
-# Agent 二进制必须放在非 /runner 路径（如 /app/runner-agent），否则挂载 -v host_path:/runner 会覆盖镜像内 /runner，导致入口程序丢失
-# 使用 BUILDPLATFORM 在宿主机(amd64)上构建，TARGETOS/TARGETARCH 交叉编译，避免 QEMU 下 go build 失败
+# Runner 容器镜像：仅 Agent + 运行依赖，/runner 由 Manager 挂载；Agent 放 /app 避免挂载覆盖入口
 ARG BUILDPLATFORM=linux/amd64
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-# 显式复制构建 runner-agent 所需源码，避免 COPY . . 在部分构建上下文中未包含 cmd
-COPY cmd ./cmd
+COPY cmd/runner-agent ./cmd/runner-agent
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o runner-agent ./cmd/runner-agent
@@ -17,15 +14,8 @@ LABEL org.opencontainers.image.title="Runner Fleet Runner" \
       org.opencontainers.image.description="GitHub Actions Runner 单实例容器，内含 Agent 供 Manager 控制"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    libicu74 \
-    libkrb5-3 \
-    liblttng-ust1 \
-    libssl3 \
-    zlib1g \
+    ca-certificates curl libicu74 libkrb5-3 liblttng-ust1 libssl3 zlib1g \
     && rm -rf /var/lib/apt/lists/*
-
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod 644 /etc/apt/keyrings/docker.asc \
@@ -34,15 +24,11 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /runner -s /bin/bash app
-
-# Agent 放在 /app，避免被 -v mountSrc:/runner 挂载覆盖导致 exec 找不到入口
-RUN install -m 0755 -d /app
+RUN install -m 0755 -d /app && install -m 0755 -d /runner
 COPY --from=builder /app/runner-agent /app/runner-agent
-RUN chown app:app /app/runner-agent
+RUN chown app:app /app/runner-agent /runner
 
 WORKDIR /runner
-RUN chown app:app /runner
-
 ENV RUNNER_INSTALL_DIR=/runner
 ENV AGENT_PORT=8081
 

@@ -171,6 +171,60 @@ func TestValidate_VolumeHostPathRules(t *testing.T) {
 	}
 }
 
+func TestNormalizedContainerName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"r1", "github-runner-r1"},
+		{"a.b", "github-runner-a-b"},
+		{"a-b", "github-runner-a-b"},
+		{"x_y", "github-runner-x_y"},
+		{"..", "github-runner-runner"}, // sanitize 后为空，fallback 为 "runner"
+		{"", "github-runner-runner"},
+	}
+	for _, tt := range tests {
+		got := NormalizedContainerName(tt.name)
+		if got != tt.want {
+			t.Errorf("NormalizedContainerName(%q) = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestIsSafeRunnerNameOrPath(t *testing.T) {
+	for _, s := range []string{"", "..", "/", "\\", "a/b", "a..b"} {
+		if IsSafeRunnerNameOrPath(s) {
+			t.Errorf("IsSafeRunnerNameOrPath(%q) should be false", s)
+		}
+	}
+	for _, s := range []string{"a", "r1", "a-b", "x_y"} {
+		if !IsSafeRunnerNameOrPath(s) {
+			t.Errorf("IsSafeRunnerNameOrPath(%q) should be true", s)
+		}
+	}
+}
+
+func TestValidateTarget(t *testing.T) {
+	if err := ValidateTarget("org", "myorg"); err != nil {
+		t.Errorf("org myorg: %v", err)
+	}
+	if err := ValidateTarget("org", "owner/repo"); err == nil || !strings.Contains(err.Error(), "不能包含 /") {
+		t.Errorf("org owner/repo should error: %v", err)
+	}
+	if err := ValidateTarget("repo", "owner/repo"); err != nil {
+		t.Errorf("repo owner/repo: %v", err)
+	}
+	if err := ValidateTarget("repo", "owner"); err == nil || !strings.Contains(err.Error(), "owner/repo") {
+		t.Errorf("repo owner should error: %v", err)
+	}
+	if err := ValidateTarget("invalid", "x"); err == nil {
+		t.Error("invalid type should error")
+	}
+	if err := ValidateTarget("org", ""); err == nil {
+		t.Error("empty target should error")
+	}
+}
+
 func TestValidate_ContainerNameConflict(t *testing.T) {
 	cfg := &Config{
 		Runners: RunnersConfig{

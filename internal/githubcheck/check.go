@@ -58,28 +58,10 @@ func tokenForRunner(installDir string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// isValidTargetFormat 与 handler.validateTarget 规则一致，避免对无效 target 发起 API 请求；targetType 会规范为小写
+// isValidTargetFormat 与 config.ValidateTarget 规则一致，避免对无效 target 发起 API 请求
 func isValidTargetFormat(targetType, target string) bool {
-	raw := strings.TrimSpace(target)
-	if raw == "" {
-		return false
-	}
 	tt := strings.ToLower(strings.TrimSpace(targetType))
-	switch tt {
-	case "org":
-		return !strings.Contains(raw, "/")
-	case "repo":
-		parts := strings.SplitN(raw, "/", 2)
-		if len(parts) != 2 {
-			return false
-		}
-		if strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return false
-		}
-		return !strings.Contains(parts[1], "/")
-	default:
-		return false
-	}
+	return config.ValidateTarget(tt, target) == nil
 }
 
 func checkOne(client *http.Client, token, targetType, target, runnerName string) bool {

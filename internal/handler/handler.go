@@ -91,18 +91,14 @@ func runRegistrationJob(j registrationJob) {
 	}
 	writeRegistrationResult(installDir, true, "注册成功")
 	cfg, _ := config.Load(ConfigPath)
-	if cfg != nil && cfg.Runners.ContainerMode {
+	if cfg != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		if startErr := runner.StartRunnerContainer(ctx, cfg, j.RunnerName, installDir); startErr != nil {
-			log.Printf("[registration] %s 注册成功但启动 Runner 容器失败: %v", j.RunnerName, startErr)
+		if startErr := runner.StartIfInstalled(ctx, cfg, j.RunnerName, installDir); startErr != nil {
+			log.Printf("[registration] %s 注册成功但启动失败: %v", j.RunnerName, startErr)
 		} else {
-			log.Printf("[registration] %s 已注册并启动 Runner 容器", j.RunnerName)
+			log.Printf("[registration] %s 已注册并启动", j.RunnerName)
 		}
-	} else if startErr := runner.Start(installDir); startErr != nil {
-		log.Printf("[registration] %s 注册成功但启动失败: %v", j.RunnerName, startErr)
-	} else {
-		log.Printf("[registration] %s 已注册并启动", j.RunnerName)
 	}
 }
 
@@ -129,6 +125,26 @@ func applyProbeFailure(info *runner.RunnerInfo, statusErr error) {
 
 func clearProbe(info *runner.RunnerInfo) {
 	info.Probe = nil
+}
+
+// applyContainerStatus 容器模式下用 Agent 状态覆盖 list 中每项的 Running/Status，就地修改
+func applyContainerStatus(ctx context.Context, cfg *config.Config, list []runner.RunnerInfo) {
+	for i := range list {
+		applyContainerStatusOne(ctx, cfg, &list[i])
+	}
+}
+
+// applyContainerStatusOne 容器模式下用 Agent 状态覆盖单条 info 的 Running/Status/Probe
+func applyContainerStatusOne(ctx context.Context, cfg *config.Config, info *runner.RunnerInfo) {
+	running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+	if statusErr != nil {
+		log.Printf("[container-status] name=%s: %v", info.Name, statusErr)
+		applyProbeFailure(info, statusErr)
+		return
+	}
+	clearProbe(info)
+	info.Running = running
+	info.Status = status
 }
 
 // shortRandomSuffix 生成 6 位小写字母+数字的随机后缀，用于 runner 名称去重
@@ -224,18 +240,7 @@ func ListRunners(c echo.Context) error {
 	}
 	list := runner.List(cfg)
 	if cfg.Runners.ContainerMode {
-		ctx := c.Request().Context()
-		for i := range list {
-			running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
-			if statusErr != nil {
-				log.Printf("[list] 获取容器 Runner 状态失败 name=%s: %v", list[i].Name, statusErr)
-				applyProbeFailure(&list[i], statusErr)
-				continue
-			}
-			clearProbe(&list[i])
-			list[i].Running = running
-			list[i].Status = status
-		}
+		applyContainerStatus(c.Request().Context(), cfg, list)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"runners": list})
 }
@@ -248,18 +253,7 @@ func Index(c echo.Context) error {
 	}
 	list := runner.List(cfg)
 	if cfg.Runners.ContainerMode {
-		ctx := c.Request().Context()
-		for i := range list {
-			running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
-			if statusErr != nil {
-				log.Printf("[index] 获取容器 Runner 状态失败 name=%s: %v", list[i].Name, statusErr)
-				applyProbeFailure(&list[i], statusErr)
-				continue
-			}
-			clearProbe(&list[i])
-			list[i].Running = running
-			list[i].Status = status
-		}
+		applyContainerStatus(c.Request().Context(), cfg, list)
 	}
 	return c.Render(http.StatusOK, "index.html", map[string]any{
 		"Runners": list,
@@ -296,10 +290,10 @@ func AddRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、target_type、target 必填")
 	}
 	targetTypeNorm := strings.ToLower(strings.TrimSpace(req.TargetType))
-	if err := validateTarget(targetTypeNorm, req.Target); err != nil {
-		return err
+	if err := config.ValidateTarget(targetTypeNorm, req.Target); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if !isValidNameOrPath(req.Name) || (req.Path != "" && !isValidNameOrPath(req.Path)) {
+	if !config.IsSafeRunnerNameOrPath(req.Name) || (req.Path != "" && !config.IsSafeRunnerNameOrPath(req.Path)) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、path 不可包含 / \\ .. 等非法字符")
 	}
 	targetNorm := req.Target
@@ -414,7 +408,7 @@ func GetRunner(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
-	if !isValidNameOrPath(name) {
+	if !config.IsSafeRunnerNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
@@ -422,15 +416,7 @@ func GetRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
 	if cfg.Runners.ContainerMode {
-		ctx := c.Request().Context()
-		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
-		if statusErr != nil {
-			applyProbeFailure(info, statusErr)
-			return c.JSON(http.StatusOK, info)
-		}
-		clearProbe(info)
-		info.Running = running
-		info.Status = status
+		applyContainerStatusOne(c.Request().Context(), cfg, info)
 	}
 	return c.JSON(http.StatusOK, info)
 }
@@ -445,7 +431,7 @@ func StartRunner(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
-	if !isValidNameOrPath(name) {
+	if !config.IsSafeRunnerNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
@@ -454,16 +440,10 @@ func StartRunner(c echo.Context) error {
 	}
 	probeFailed := false
 	if cfg.Runners.ContainerMode {
-		ctx := c.Request().Context()
-		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
-		if statusErr != nil {
+		applyContainerStatusOne(c.Request().Context(), cfg, info)
+		if info.Probe != nil {
 			probeFailed = true
-			applyProbeFailure(info, statusErr)
-			log.Printf("[start] 容器 Runner 状态探测失败 name=%s，将继续尝试启动: %v", info.Name, statusErr)
-		} else {
-			clearProbe(info)
-			info.Running = running
-			info.Status = status
+			log.Printf("[start] 容器 Runner 状态探测失败 name=%s，将继续尝试启动: %v", info.Name, info.Probe.Error)
 		}
 	}
 	if info.Status != runner.StatusInstalled {
@@ -472,22 +452,16 @@ func StartRunner(c echo.Context) error {
 	if info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 已在运行中"})
 	}
-	if cfg.Runners.ContainerMode {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
-		defer cancel()
-		if err := runner.StartRunnerContainer(ctx, cfg, name, info.InstallDir); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "启动 Runner 容器失败: "+err.Error())
-		}
-		if probeFailed {
-			return c.JSON(http.StatusOK, map[string]any{
-				"message": "状态探测失败，但已尝试启动 Runner 容器并通知 Agent 启动",
-				"probe":   info.Probe,
-			})
-		}
-		return c.JSON(http.StatusOK, map[string]any{"message": "已启动 Runner 容器并通知 Agent 启动"})
-	}
-	if err := runner.Start(info.InstallDir); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+	defer cancel()
+	if err := runner.StartIfInstalled(ctx, cfg, name, info.InstallDir); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "启动失败: "+err.Error())
+	}
+	if probeFailed {
+		return c.JSON(http.StatusOK, map[string]any{
+			"message": "状态探测失败，但已尝试启动 Runner 并通知 Agent",
+			"probe":   info.Probe,
+		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "已发起启动"})
 }
@@ -502,7 +476,7 @@ func StopRunner(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
-	if !isValidNameOrPath(name) {
+	if !config.IsSafeRunnerNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	info := runner.GetByName(cfg, name)
@@ -511,16 +485,10 @@ func StopRunner(c echo.Context) error {
 	}
 	probeFailed := false
 	if cfg.Runners.ContainerMode {
-		ctx := c.Request().Context()
-		running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
-		if statusErr != nil {
+		applyContainerStatusOne(c.Request().Context(), cfg, info)
+		if info.Probe != nil {
 			probeFailed = true
-			applyProbeFailure(info, statusErr)
-			log.Printf("[stop] 容器 Runner 状态探测失败 name=%s，将继续尝试停止: %v", info.Name, statusErr)
-		} else {
-			clearProbe(info)
-			info.Running = running
-			info.Status = status
+			log.Printf("[stop] 容器 Runner 状态探测失败 name=%s，将继续尝试停止: %v", info.Name, info.Probe.Error)
 		}
 	}
 	if !info.Running && !probeFailed {
@@ -561,7 +529,7 @@ func UpdateRunner(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
-	if !isValidNameOrPath(name) {
+	if !config.IsSafeRunnerNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	var req UpdateRunnerRequest
@@ -581,10 +549,10 @@ func UpdateRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "target_type、target 必填")
 	}
 	targetTypeNorm := strings.ToLower(strings.TrimSpace(req.TargetType))
-	if err := validateTarget(targetTypeNorm, req.Target); err != nil {
-		return err
+	if err := config.ValidateTarget(targetTypeNorm, req.Target); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if req.Path != "" && !isValidNameOrPath(req.Path) {
+	if req.Path != "" && !config.IsSafeRunnerNameOrPath(req.Path) {
 		return echo.NewHTTPError(http.StatusBadRequest, "path 不可包含 / \\ .. 等非法字符")
 	}
 	targetNorm := req.Target
@@ -619,28 +587,18 @@ func UpdateRunner(c echo.Context) error {
 		return err
 	}
 	updated = runner.GetByName(cfg, name)
-	// 若已注册且未在运行，自动启动 runner（容器模式则启动容器）
+	// 若已注册且未在运行，自动启动（容器/进程模式统一走 StartIfInstalled）
 	msg := "已更新"
 	var started bool
 	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
-		if cfg.Runners.ContainerMode {
-			ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
-			defer cancel()
-			startErr := runner.StartRunnerContainer(ctx, cfg, name, updated.InstallDir)
-			started = (startErr == nil)
-			if startErr != nil {
-				msg += "，但自动启动 Runner 容器失败: " + startErr.Error()
-			} else {
-				msg += "，已自动启动 Runner 容器"
-			}
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+		defer cancel()
+		startErr := runner.StartIfInstalled(ctx, cfg, name, updated.InstallDir)
+		started = (startErr == nil)
+		if startErr != nil {
+			msg += "，但自动启动失败: " + startErr.Error()
 		} else {
-			startErr := runner.Start(updated.InstallDir)
-			started = (startErr == nil)
-			if startErr != nil {
-				msg += "，但自动启动失败: " + startErr.Error()
-			} else {
-				msg += "，已自动启动"
-			}
+			msg += "，已自动启动"
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
@@ -657,7 +615,7 @@ func RemoveRunnerByName(c echo.Context) error {
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
 	}
-	if !isValidNameOrPath(name) {
+	if !config.IsSafeRunnerNameOrPath(name) {
 		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
 	}
 	cfg, err := config.Load(ConfigPath)
@@ -709,17 +667,6 @@ func isUnderBasePath(basePath, dir string) bool {
 	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// isValidNameOrPath 校验 name/path 不含路径穿越或非法字符
-func isValidNameOrPath(s string) bool {
-	if s == "" {
-		return true
-	}
-	if strings.Contains(s, "..") || strings.Contains(s, "/") || strings.Contains(s, "\\") {
-		return false
-	}
-	return true
-}
-
 func normalizeLabels(labels []string) []string {
 	if len(labels) == 0 {
 		return nil
@@ -735,32 +682,6 @@ func normalizeLabels(labels []string) []string {
 		return nil
 	}
 	return out
-}
-
-// validateTarget 校验 target 格式：org 为组织名（不含 /），repo 为 owner/repo（恰好一个斜杠且两端非空）
-func validateTarget(targetType, target string) error {
-	t := strings.TrimSpace(target)
-	if t == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "target 不能为空")
-	}
-	switch targetType {
-	case "org":
-		if strings.Contains(t, "/") {
-			return echo.NewHTTPError(http.StatusBadRequest, "目标类型为组织(org)时，target 应为组织名，不能包含 /")
-		}
-		return nil
-	case "repo":
-		parts := strings.SplitN(t, "/", 2)
-		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "目标类型为仓库(repo)时，target 应为 owner/repo 格式（且 owner 与 repo 均非空）")
-		}
-		if strings.Contains(parts[1], "/") {
-			return echo.NewHTTPError(http.StatusBadRequest, "target 只能包含一个 /，格式为 owner/repo")
-		}
-		return nil
-	default:
-		return echo.NewHTTPError(http.StatusBadRequest, "target_type 必须为 org 或 repo")
-	}
 }
 
 // removeRunnerFromConfig 从内存中的配置移除指定 runner，不写文件（由 LoadAndSave 负责保存）
