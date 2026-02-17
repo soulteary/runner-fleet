@@ -1,6 +1,7 @@
 # Docker 部署
 
 - **基础镜像**：运行时使用 **Ubuntu**（非 Alpine），避免 GitHub Runner 在 Alpine 下运行异常。
+- **非 root 运行**：镜像内以 UID 1000（用户 `app`）运行，避免 GitHub Actions Runner 报错「Must not run with sudo」。挂载 `runners` 目录时，请确保宿主机上该目录对 UID 1000 可写（常见做法：`mkdir runners && chown 1000:1000 runners`）；若你自定义为 root 运行容器，需设置环境变量 `RUNNER_ALLOW_RUNASROOT=1`。
 - **自动拉起 Runner**：服务启动约 15 秒后会自动启动所有「已注册但未在运行」的 Runner；定时任务每 5 分钟也会再次检查并拉起未运行的已注册 Runner，便于 DinD 或管理器重启后恢复。
 
 ## 使用已发布镜像（推荐）
@@ -28,7 +29,7 @@ docker run -d --name runner-manager \
 
 - **`-p 8080:8080`**：宿主机端口映射，保证能从本机访问管理界面。
 - **`-v $(pwd)/config.yaml:/app/config.yaml`**：挂载配置文件，修改后重启容器即可生效；不挂载则使用镜像内默认配置，无法持久化。
-- **`-v $(pwd)/runners:/app/runners`**：挂载 Runner 安装目录，Runner 二进制与注册信息都保存在此；不挂载则容器删除后所有 Runner 丢失。若需界面「GitHub 显示」状态检查，请在各自 runner 子目录（如 `runners/xxx/`）下放置 `.github_check_token` 文件。
+- **`-v $(pwd)/runners:/app/runners`**：挂载 Runner 安装目录，Runner 二进制与注册信息都保存在此；不挂载则容器删除后所有 Runner 丢失。镜像以 UID 1000 运行，宿主机上请保证该目录对 UID 1000 可写（例如 `chown 1000:1000 runners`）。若需界面「GitHub 显示」状态检查，请在各自 runner 子目录（如 `runners/xxx/`）下放置 `.github_check_token` 文件。
 - 镜像内工作目录为 `/app`，`-config` 默认为 `/app/config.yaml`。`config.yaml` 中 `runners.base_path` 需为 `/app/runners`（或与挂载路径一致）。
 
 ### 前台调试（带 -it）
