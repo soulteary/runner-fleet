@@ -279,7 +279,11 @@ func Start(installDir string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	_ = cmd.Process.Release()
+	// 必须对子进程 Wait，否则在容器内（主进程为 PID 1）退出的 run.sh 会变成僵尸进程。
+	// 在后台 goroutine 中 Wait，不阻塞 Start 返回。
+	go func() {
+		_ = cmd.Wait()
+	}()
 	return nil
 }
 

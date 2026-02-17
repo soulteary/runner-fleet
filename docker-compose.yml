@@ -15,6 +15,7 @@ services:
     command: ["--tls=false"]
     volumes:
       # 持久化 DinD 的镜像与容器层，Runner 拉取的 action 容器可复用，减少重复下载
+      # 务必使用命名卷或单独宿主机路径，不要挂载宿主机 /var/lib/docker，否则与宿主 Docker 争用 metadata.db 导致启动 timeout
       - dind-storage:/var/lib/docker
     networks:
       - runner-net
