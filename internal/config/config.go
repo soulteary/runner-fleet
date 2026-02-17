@@ -150,26 +150,14 @@ func Validate(c *Config) error {
 		if name == "" {
 			return fmt.Errorf("runners.items[%d].name 不能为空", i)
 		}
-		if !isSafeRunnerNameOrPath(name) {
+		if !IsSafeRunnerNameOrPath(name) {
 			return fmt.Errorf("runners.items[%d].name 包含非法字符（不允许 .. / \\\\）: %s", i, name)
 		}
-		if path != "" && !isSafeRunnerNameOrPath(path) {
+		if path != "" && !IsSafeRunnerNameOrPath(path) {
 			return fmt.Errorf("runners.items[%d].path 包含非法字符（不允许 .. / \\\\）: %s", i, path)
 		}
-		if targetType != "org" && targetType != "repo" {
-			return fmt.Errorf("runners.items[%d].target_type 必须为 org 或 repo", i)
-		}
-		if target == "" {
-			return fmt.Errorf("runners.items[%d].target 不能为空", i)
-		}
-		if targetType == "org" && strings.Contains(target, "/") {
-			return fmt.Errorf("runners.items[%d].target_type=org 时，target 不能包含 /", i)
-		}
-		if targetType == "repo" {
-			parts := strings.SplitN(target, "/", 2)
-			if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || strings.Contains(parts[1], "/") {
-				return fmt.Errorf("runners.items[%d].target_type=repo 时，target 必须为 owner/repo", i)
-			}
+		if err := ValidateTarget(targetType, target); err != nil {
+			return fmt.Errorf("runners.items[%d]: %w", i, err)
 		}
 		if seen[name] {
 			return fmt.Errorf("runners.items 中存在同名 Runner: %s", name)
@@ -182,7 +170,7 @@ func Validate(c *Config) error {
 		}
 		seenInstallPaths[installKey] = name
 		if c.Runners.ContainerMode {
-			containerName := normalizedContainerName(name)
+			containerName := NormalizedContainerName(name)
 			if existing, ok := seenContainerNames[containerName]; ok {
 				return fmt.Errorf("runners.items 中 Runner 名称映射后容器名冲突: %s 与 %s 均映射为 %s", existing, name, containerName)
 			}
@@ -192,7 +180,8 @@ func Validate(c *Config) error {
 	return nil
 }
 
-func normalizedContainerName(name string) string {
+// NormalizedContainerName 将 runner 名称转为合法容器名（仅保留字母数字横线，并加前缀），供 config 与 runner 包共用
+func NormalizedContainerName(name string) string {
 	safe := runnerContainerNameSanitizeRe.ReplaceAllString(name, "-")
 	safe = strings.Trim(safe, "-")
 	if safe == "" {
@@ -201,11 +190,39 @@ func normalizedContainerName(name string) string {
 	return "github-runner-" + safe
 }
 
-func isSafeRunnerNameOrPath(s string) bool {
+// IsSafeRunnerNameOrPath 校验 name/path 不含路径穿越或非法字符（禁止 .. / \）
+func IsSafeRunnerNameOrPath(s string) bool {
 	if s == "" {
 		return false
 	}
 	return !strings.Contains(s, "..") && !strings.Contains(s, "/") && !strings.Contains(s, "\\")
+}
+
+// ValidateTarget 校验 target 格式：org 为组织名（不含 /），repo 为 owner/repo（恰好一个斜杠且两端非空）
+func ValidateTarget(targetType, target string) error {
+	t := strings.TrimSpace(target)
+	if t == "" {
+		return fmt.Errorf("target 不能为空")
+	}
+	tt := strings.ToLower(strings.TrimSpace(targetType))
+	switch tt {
+	case "org":
+		if strings.Contains(t, "/") {
+			return fmt.Errorf("目标类型为组织(org)时，target 应为组织名，不能包含 /")
+		}
+		return nil
+	case "repo":
+		parts := strings.SplitN(t, "/", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return fmt.Errorf("目标类型为仓库(repo)时，target 应为 owner/repo 格式（且 owner 与 repo 均非空）")
+		}
+		if strings.Contains(parts[1], "/") {
+			return fmt.Errorf("target 只能包含一个 /，格式为 owner/repo")
+		}
+		return nil
+	default:
+		return fmt.Errorf("target_type 必须为 org 或 repo")
+	}
 }
 
 // Save 将配置写回文件（调用方需自行加锁，写操作请使用 LoadAndSave）

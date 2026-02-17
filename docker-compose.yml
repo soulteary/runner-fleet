@@ -64,9 +64,11 @@ services:
       start_period: 15s
       retries: 3
 
+# runner-net 设为 external，避免 compose down 时删除网络导致已注册的 Runner 容器
+#（由 Manager 动态创建、未在 compose 中定义）无法启动。首次使用请执行：docker network create runner-net
 networks:
   runner-net:
-    driver: bridge
+    external: true
 
 volumes:
   dind-storage:

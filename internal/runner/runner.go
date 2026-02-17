@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -302,6 +303,17 @@ func Start(installDir string) error {
 		_ = cmd.Wait()
 	}()
 	return nil
+}
+
+// StartIfInstalled 若已注册则启动：容器模式调 StartRunnerContainer，否则调 Start。供 main 与 handler 统一“已注册未运行则启动”逻辑
+func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir string) error {
+	if cfg == nil {
+		return fmt.Errorf("配置为空")
+	}
+	if cfg.Runners.ContainerMode {
+		return StartRunnerContainer(ctx, cfg, name, installDir)
+	}
+	return Start(installDir)
 }
 
 // Stop 向 runner 进程发送停止信号（读取 pid 后 SIGTERM；Windows 用 taskkill）

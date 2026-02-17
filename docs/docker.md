@@ -26,7 +26,10 @@ cp config.yaml.example config.yaml
 chown 1001:1001 config.yaml
 mkdir -p runners && chown 1001:1001 runners
 
-# 3. 启动（仅 Manager，适用于 job_docker_backend: host-socket 或 none）
+# 3. 创建网络（仅首次；compose 中 runner-net 为 external，避免 down 时删网导致已注册 Runner 容器无法启动）
+docker network create runner-net 2>/dev/null || true
+
+# 4. 启动（仅 Manager，适用于 job_docker_backend: host-socket 或 none）
 docker compose up -d
 
 # 若 config.yaml 中 job_docker_backend: dind，需同时启动 DinD：
@@ -191,6 +194,14 @@ docker run -d --name runner-manager \
 ---
 
 ## 排障与迁移
+
+### docker compose down 后 Runner 容器无法启动（状态为 Created）
+
+原因：`docker compose down` 会删除 compose 创建的网络 `runner-net`，而由 Manager 动态创建的 Runner 容器不在 compose 中，不会被删除，仍引用已删除的网络，导致无法启动。
+
+**预防**：仓库内 `docker-compose.yml` 已将 `runner-net` 设为 **external**，`compose down` 不会删除该网络。首次使用前执行一次：`docker network create runner-net`。
+
+**已出现问题时**：在 Web 界面点击该 Runner 的「启动」即可——Manager 会检测到 `docker start` 因网络失效而失败，自动删除旧容器并用当前配置重新创建并启动，无需手动 `docker rm`。若仍失败，可手动删除后再点「启动」：`docker rm -f github-runner-<名称>`。无需删除 `runners/` 下对应目录或重新注册。
 
 ### root / 非 root、RUNNER_ALLOW_RUNASROOT
 

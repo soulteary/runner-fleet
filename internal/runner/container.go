@@ -11,22 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 )
 
-// ContainerName 将 runner 名称转为合法容器名（仅保留字母数字横线，并加前缀）
+// ContainerName 将 runner 名称转为合法容器名，与 config 包规则一致
 func ContainerName(name string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
-	safe := re.ReplaceAllString(name, "-")
-	safe = strings.Trim(safe, "-")
-	if safe == "" {
-		safe = "runner"
-	}
-	return "github-runner-" + safe
+	return config.NormalizedContainerName(name)
 }
 
 // AgentStatus 容器内 Agent /status 返回结构
@@ -112,6 +105,22 @@ func containerNotFound(out []byte) bool {
 	return false
 }
 
+// containerStartUnrecoverable 判断 docker start 失败是否因网络已删除等导致无法恢复，需删容器后重建
+func containerStartUnrecoverable(out []byte) bool {
+	s := string(out)
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "network") && (strings.Contains(lower, "not found") || strings.Contains(lower, "no such")) {
+		return true
+	}
+	if strings.Contains(lower, "could not find network") || strings.Contains(lower, "could not attach to network") {
+		return true
+	}
+	if strings.Contains(lower, "failed to create endpoint") || strings.Contains(lower, "failed to get network") {
+		return true
+	}
+	return false
+}
+
 // dockerPermissionDenied 判断是否为访问 Docker 权限/连接错误（宿主机 socket 需对 Manager 容器可访问）
 func dockerPermissionDenied(out []byte) bool {
 	s := string(out)
@@ -187,12 +196,18 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return dockerCmdError("docker ps", out, err)
 	}
 	if len(strings.TrimSpace(string(out))) > 0 {
-		out, err := dockerCmd(ctx, "start", cn)
-		if err != nil {
-			return dockerCmdError("docker start", out, err)
+		startOut, startErr := dockerCmd(ctx, "start", cn)
+		if startErr == nil {
+			time.Sleep(2 * time.Second)
+			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
 		}
-		time.Sleep(2 * time.Second)
-		return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
+		// start 失败且为网络已删除等不可恢复原因时，删除旧容器并走下方「创建新容器」流程（如 compose down 后网络被删）
+		if containerStartUnrecoverable(startOut) {
+			_, _ = dockerCmd(ctx, "rm", "-f", cn)
+			// fall through to create new container
+		} else {
+			return dockerCmdError("docker start", startOut, startErr)
+		}
 	}
 	// 创建新容器
 	// 容器模式下若 Manager 在容器内（base_path 通常为 /app/runners），未设置 volume_host_path 会导致 docker create -v 使用容器内路径，宿主机上无效
