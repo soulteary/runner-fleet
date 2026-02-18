@@ -10,6 +10,7 @@
 
 # 本地配置（若含敏感信息建议加入）
 config.yaml
+.env
 
 # IDE
 .idea/

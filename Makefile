@@ -30,6 +30,7 @@ docker-build:
 docker-build-runner:
 	docker build -f Dockerfile.runner -t $(RUNNER_IMAGE) .
 
+# 需 Basic Auth 时请使用 docker compose（会读取 .env），或在本 target 的 docker run 中增加 -e BASIC_AUTH_PASSWORD=... -e BASIC_AUTH_USER=admin
 docker-run: docker-stop
 	docker run -d --name runner-manager -p 8080:8080 \
 		-v $(PWD)/config.yaml:/app/config.yaml \

@@ -36,6 +36,7 @@ docker compose up -d
 docker compose --profile dind up -d
 
 # 管理界面：http://localhost:8080
+# 若需鉴权，可在 .env 中设置 BASIC_AUTH_USER 与 BASIC_AUTH_PASSWORD，详见 docs/security.md
 ```
 
 若启用**容器模式**（每个 Runner 独立容器），还需：在 `config.yaml` 中取消注释 `container_mode`、`container_image`、`job_docker_backend` 等并设置 `volume_host_path` 为宿主机上 `runners` 的绝对路径。Runner 镜像与 Manager 同名，tag 带 `-runner` 后缀（如 `ghcr.io/<owner>/<repo>:main-runner`），或本地构建：`docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。详见 [容器模式](#容器模式runner-独立容器cs)。
@@ -55,6 +56,7 @@ docker run -d --name runner-manager \
 ```
 
 - **`-p 8080:8080`**：宿主机端口映射，保证能从本机访问管理界面。
+- 若需 Basic Auth，可增加 `-e BASIC_AUTH_PASSWORD=你的密码`、`-e BASIC_AUTH_USER=admin`（用户名可选，默认 `admin`）。详见 [安全与校验](security.md)。
 - **`-v $(pwd)/config.yaml:/app/config.yaml`**：挂载配置文件，修改后重启容器即可生效；不挂载则使用镜像内默认配置，无法持久化。镜像以 UID 1001 运行，**添加/删除/更新 Runner 时会写回该文件**，宿主机上请保证该文件对 UID 1001 可写（例如 `chown 1001:1001 config.yaml`），否则会报 500「保存配置失败」。
 - **`-v $(pwd)/runners:/app/runners`**：挂载 Runner 安装目录，Runner 二进制与注册信息都保存在此；不挂载则容器删除后所有 Runner 丢失。镜像以 UID 1001 运行，宿主机上请保证该目录对 UID 1001 可写（例如 `chown 1001:1001 runners`）。若需界面「GitHub 显示」状态检查，请在各自 runner 子目录（如 `runners/xxx/`）下放置 `.github_check_token` 文件。
 - 镜像内工作目录为 `/app`，`-config` 默认为 `/app/config.yaml`。`config.yaml` 中 `runners.base_path` 需为 `/app/runners`（或与挂载路径一致）。

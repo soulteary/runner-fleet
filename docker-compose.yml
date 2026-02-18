@@ -45,6 +45,8 @@ services:
     # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375
     environment:
       DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
     ports:
       - "${MANAGER_PORT:-8080}:8080"
     volumes:
