@@ -1,5 +1,7 @@
 # 使用指南
 
+**文档 / Docs:** [EN](../guide.md) · 中文 · [Français](../fr/guide.md) · [Deutsch](../de/guide.md) · [한국어](../ko/guide.md) · [日本語](../ja/guide.md)
+
 部署、配置、添加 Runner 与安全说明合并于此。面向贡献者的构建与 API 见 [开发与构建](development.md)。
 
 ---

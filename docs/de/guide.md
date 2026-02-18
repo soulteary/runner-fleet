@@ -1,5 +1,7 @@
 # Benutzerhandbuch
 
+**文档 / Docs:** [EN](../guide.md) · [中文](../zh/guide.md) · [Français](../fr/guide.md) · Deutsch · [한국어](../ko/guide.md) · [日本語](../ja/guide.md)
+
 Bereitstellung, Konfiguration, Hinzufügen von Runnern und Sicherheit werden hier behandelt. Für Build und API für Mitwirkende siehe [Entwicklung & Build](development.md).
 
 ---

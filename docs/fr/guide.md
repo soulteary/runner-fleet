@@ -1,5 +1,7 @@
 # Guide d'utilisation
 
+**文档 / Docs:** [EN](../guide.md) · [中文](../zh/guide.md) · Français · [Deutsch](../de/guide.md) · [한국어](../ko/guide.md) · [日本語](../ja/guide.md)
+
 Déploiement, configuration, ajout de runners et sécurité sont traités ici. Pour la build et l'API côté contributeur, voir [Développement et build](development.md).
 
 ---

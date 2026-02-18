@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,12 @@ import (
 	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
 )
+
+// Supported UI languages, same as docs (en, zh, fr, ja, ko, de).
+var supportedLangs = []string{"en", "zh", "fr", "ja", "ko", "de"}
+
+// I18nLoader loads translations for a language code (e.g. "en", "zh"). Set by main from embed.
+var I18nLoader func(lang string) (map[string]string, error)
 
 // installRunnerScriptPath 容器内自动安装 runner 的脚本路径（Docker 镜像中有）
 const installRunnerScriptPath = "/app/scripts/install-runner.sh"
@@ -245,6 +252,44 @@ func ListRunners(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"runners": list})
 }
 
+// resolveLang returns the UI language: Cookie "lang" > Query "lang" > Accept-Language > "en".
+func resolveLang(c echo.Context) string {
+	if v, err := c.Cookie("lang"); err == nil && v != nil && v.Value != "" {
+		vv := strings.ToLower(strings.TrimSpace(v.Value))
+		for _, supported := range supportedLangs {
+			if vv == supported {
+				return vv
+			}
+		}
+	}
+	if v := c.QueryParam("lang"); v != "" {
+		vv := strings.ToLower(strings.TrimSpace(v))
+		for _, supported := range supportedLangs {
+			if vv == supported {
+				return vv
+			}
+		}
+	}
+	if ah := c.Request().Header.Get("Accept-Language"); ah != "" {
+		for _, part := range strings.Split(ah, ",") {
+			part = strings.TrimSpace(part)
+			if i := strings.Index(part, ";"); i >= 0 {
+				part = strings.TrimSpace(part[:i])
+			}
+			code := strings.ToLower(part)
+			if i := strings.Index(code, "-"); i >= 0 {
+				code = code[:i]
+			}
+			for _, supported := range supportedLangs {
+				if code == supported {
+					return supported
+				}
+			}
+		}
+	}
+	return "en"
+}
+
 // Index 管理界面首页；容器模式下用容器内 Agent 状态覆盖
 func Index(c echo.Context) error {
 	cfg, err := getConfig(c)
@@ -255,9 +300,24 @@ func Index(c echo.Context) error {
 	if cfg.Runners.ContainerMode {
 		applyContainerStatus(c.Request().Context(), cfg, list)
 	}
+	lang := resolveLang(c)
+	var T map[string]string
+	if I18nLoader != nil {
+		T, _ = I18nLoader(lang)
+	}
+	if T == nil && I18nLoader != nil {
+		T, _ = I18nLoader("en")
+	}
+	if T == nil {
+		T = make(map[string]string)
+	}
+	tjson, _ := json.Marshal(T)
 	return c.Render(http.StatusOK, "index.html", map[string]any{
 		"Runners": list,
 		"Config":  cfg,
+		"T":       T,
+		"Lang":    lang,
+		"TJSON":   template.JS(tjson),
 	})
 }
 

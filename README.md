@@ -1,5 +1,9 @@
 # Runner Fleet - GitHub Actions Runner Manager
 
+**文档 (Docs):** [中文](docs/zh/) · [Français](docs/fr/) · [Deutsch](docs/de/) · [한국어](docs/ko/) · [日本語](docs/ja/)
+
+![](.github/assets/fleet.jpg)
+
 HTTP management UI built with Golang Echo to view and manage multiple self-hosted GitHub Actions Runners on one machine. YAML-based config, no database required.
 
 ## Highlights
@@ -43,16 +47,6 @@ Open http://localhost:8080. For more options (docker run, DinD, container mode) 
 
 - **[User Guide](docs/guide.md)** — Deployment (Docker/docker-compose), config, adding runners, security & troubleshooting
 - **[Development & Build](docs/development.md)** — Go build, local debug, HTTP API, Makefile
-
-Documentation in other languages (each contains User Guide and Development & Build):
-
-| Language   | Docs |
-|------------|------|
-| 中文       | [docs/zh/](docs/zh/) |
-| Français   | [docs/fr/](docs/fr/) |
-| Deutsch    | [docs/de/](docs/de/) |
-| 한국어      | [docs/ko/](docs/ko/) |
-| 日本語     | [docs/ja/](docs/ja/) |
 
 ## Other
 
