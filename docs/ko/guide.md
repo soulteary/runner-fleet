@@ -68,7 +68,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 각 Runner는 자체 컨테이너에서 실행됩니다. Manager는 호스트 Docker로 시작/중지하고, 컨테이너 내 Agent로부터 HTTP로 상태를 가져옵니다.
 
 **방법 1: env만 사용 (전체 컨테이너 시 권장)**
-config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.0.1 → v1.0.1-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
+config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `config/config.yaml`을 만들지 않아도 위 변수를 `.env`에 설정해 두면 첫 실행 시 자동 생성됩니다. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.0.1 → v1.0.1-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
 
 **방법 2: config/config.yaml에서 활성화** (`config.yaml.example` 참조):
 

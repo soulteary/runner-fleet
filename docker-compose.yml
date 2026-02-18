@@ -2,7 +2,7 @@
 # 详见 docs/docker.md
 #
 # === 首次使用 ===
-# 1. 复制配置：mkdir -p config && cp config.yaml.example config/config.yaml
+# 1. 复制配置：mkdir -p config && cp config.yaml.example config/config.yaml（若仅用 .env 可省略此步，首次启动将自动生成 config/config.yaml）
 # 2. 确认 config/config.yaml 中 runners.base_path 为 /app/runners（与下方 volumes 一致）
 # 3. 宿主机目录权限（Manager 以 UID 1001 运行）：
 #      chown 1001:1001 config runners

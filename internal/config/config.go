@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -143,10 +144,45 @@ func (r RunnerItem) InstallPath(basePath string) string {
 	return filepath.Join(basePath, filepath.Clean(dir))
 }
 
-// Load 从文件加载配置
+// defaultConfig 返回与 Load 中默认值一致的配置（不读文件、不应用环境变量），用于文件不存在时从 env 生成配置。
+func defaultConfig() *Config {
+	return &Config{
+		Server: ServerConfig{
+			Port: 8080,
+			Addr: "0.0.0.0",
+		},
+		Runners: RunnersConfig{
+			BasePath:         "./runners",
+			Items:            []RunnerItem{},
+			ContainerMode:    false,
+			ContainerImage:   "",
+			ContainerNetwork: "runner-net",
+			AgentPort:        8081,
+			JobDockerBackend: "dind",
+			DindHost:         "runner-dind",
+			VolumeHostPath:   "",
+		},
+	}
+}
+
+// Load 从文件加载配置。若文件不存在，则基于默认配置与环境变量生成配置并写入 path，然后返回。
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			c := defaultConfig()
+			applyEnvOverrides(c)
+			if err := Validate(c); err != nil {
+				return nil, err
+			}
+			dir := filepath.Dir(path)
+			if mkdirErr := os.MkdirAll(dir, 0755); mkdirErr != nil {
+				log.Printf("警告: 无法创建配置目录 %s: %v，将不写入 config 文件", dir, mkdirErr)
+			} else if saveErr := c.Save(path); saveErr != nil {
+				log.Printf("警告: 无法将配置写入 %s: %v，使用内存配置继续运行", path, saveErr)
+			}
+			return c, nil
+		}
 		return nil, err
 	}
 	var c Config
