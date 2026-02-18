@@ -1,6 +1,8 @@
-# 文档
+# Documentation
 
-- **[使用指南](guide.md)**：部署、配置、添加 Runner、安全与排障
-- **[开发与构建](development.md)**：构建、API、Makefile
+- **[User Guide](guide.md)** — Deployment, configuration, adding runners, security & troubleshooting
+- **[Development & Build](development.md)** — Build, API, Makefile
 
-[← 返回项目首页](../README.md)
+**Language:** English (default) | [中文](zh/) | [Français](fr/) | [Deutsch](de/) | [한국어](ko/) | [日本語](ja/)
+
+[← Back to project home](../README.md)
