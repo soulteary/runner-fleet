@@ -10,7 +10,7 @@
 
 ## 1. デプロイ (Docker)
 
-- イメージは **Ubuntu** ベースで .NET Core 6.0 の依存関係を含み、**UID 1001** で実行されます。ホストにマウントするディレクトリはこのユーザーが書き込み可能である必要があります（例: `chown 1001:1001 config.yaml runners`）。
+- イメージは **Ubuntu** ベースで .NET Core 6.0 の依存関係を含み、**UID 1001** で実行されます。ホストにマウントするディレクトリはこのユーザーが書き込み可能である必要があります（例: `chown 1001:1001 config runners`）。
 - 起動から約 15 秒後に、登録済みだが停止している Runner が自動で起動し、5 分ごとに定期チェックされます。
 
 ### 公開イメージを使う（推奨）
@@ -26,10 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
 リポジトリルートに `docker-compose.yml` があります。コンテナモードで Job に Docker が必要で `job_docker_backend: dind` のときだけ DinD を有効にしてください。
 
 ```bash
-cp config.yaml.example config.yaml
-# config.yaml を編集: runners.base_path を /app/runners に設定
+mkdir -p config && cp config.yaml.example config/config.yaml
+# config/config.yaml を編集: runners.base_path を /app/runners に設定
 
-chown 1001:1001 config.yaml
+chown 1001:1001 config runners
 mkdir -p runners && chown 1001:1001 runners
 
 docker network create runner-net 2>/dev/null || true
@@ -41,12 +41,12 @@ UI: http://localhost:8080。認証の詳細は [4. セキュリティと検証](
 
 ### コンテナの実行（フル引数）
 
-`config.yaml` と `runners` をマウントする必要があります。ポートは設定の `server.port` と一致させてください（デフォルト 8080）。
+`config` ディレクトリと `runners` をマウントしてください（ディレクトリのみ。config/config.yaml を単体でマウントすると、ホストにファイルがない場合 Docker が空ファイルを作成して起動に失敗します）。ポートは設定の `server.port` と一致させてください（デフォルト 8080）。
 
 ```bash
 docker run -d --name runner-manager \
   -p 8080:8080 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
@@ -68,9 +68,9 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 各 Runner は専用コンテナで動作します。Manager はホストの Docker で起動/停止し、コンテナ内の Agent から HTTP で状態を取得します。
 
 **方法1: 環境変数のみ（フルコンテナ時推奨）**
-config.yaml の編集は不要。`cp .env.example .env` のあと、例: `CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<runners のホスト絶対パス>`（`realpath runners` など）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net` を設定。`RUNNER_IMAGE` を設定しない場合、Runner イメージは `MANAGER_IMAGE` から自動導出（例: v1.0.1 → v1.0.1-runner）。マウントする `config.yaml` と `runners` は引き続き `chown 1001:1001` が必要。詳細は `.env.example` のオーバーライド変数を参照。
+config/config.yaml の編集は不要。`cp .env.example .env` のあと、例: `CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<runners のホスト絶対パス>`（`realpath runners` など）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net` を設定。`RUNNER_IMAGE` を設定しない場合、Runner イメージは `MANAGER_IMAGE` から自動導出（例: v1.0.1 → v1.0.1-runner）。マウントする `config` と `runners` は引き続き `chown 1001:1001` が必要。詳細は `.env.example` のオーバーライド変数を参照。
 
-**方法2: config.yaml で有効化**（`config.yaml.example` 参照）:
+**方法2: config/config.yaml で有効化**（`config.yaml.example` 参照）:
 
 ```yaml
 runners:
@@ -107,7 +107,7 @@ Make: `make docker-build`、`make docker-run`、`make docker-stop`。
 ## 2. 設定
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 ```
 
 | フィールド | 説明 | デフォルト |
@@ -161,6 +161,6 @@ runners:
 
 **パスと一意性**: name/path に `..`、`/`、`\` は不可。ディレクトリは `runners.base_path` 以下である必要あり。名前の重複不可。編集時は名前は読み取り専用。コンテナモードでは名前はコンテナ名に正規化され、マッピング後の重複はエラーになります。
 
-**機密ファイル**: config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
+**機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 
 [← プロジェクトホームへ](../../README.md)

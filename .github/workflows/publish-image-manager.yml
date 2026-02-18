@@ -100,7 +100,7 @@ jobs:
             type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
 
-      # Dockerfile 内已 COPY config.yaml.example 并 sed 为 config.yaml，无需在 workflow 中准备
+      # Dockerfile 内已 COPY config.yaml.example 为 config/config.yaml 并 sed，无需在 workflow 中准备
 
       - name: Build and push Manager image
         if: steps.verify.outputs.has_go_source == 'true'

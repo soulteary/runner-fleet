@@ -10,7 +10,7 @@
 
 ## 1. 배포 (Docker)
 
-- 이미지는 **Ubuntu** 기반이며 .NET Core 6.0 의존성이 포함되어 있습니다. **UID 1001**로 실행되며, 호스트에 마운트된 디렉터리는 해당 사용자가 쓸 수 있어야 합니다(예: `chown 1001:1001 config.yaml runners`).
+- 이미지는 **Ubuntu** 기반이며 .NET Core 6.0 의존성이 포함되어 있습니다. **UID 1001**로 실행되며, 호스트에 마운트된 디렉터리는 해당 사용자가 쓸 수 있어야 합니다(예: `chown 1001:1001 config runners`).
 - 시작 후 약 15초 뒤에 등록되었지만 중지된 Runner가 자동으로 시작되며, 5분마다 주기적으로 검사합니다.
 
 ### 공개 이미지 사용 (권장)
@@ -26,10 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
 저장소 루트에 `docker-compose.yml`이 있습니다. 컨테이너 모드에서 Job에 Docker가 필요하고 `job_docker_backend: dind`일 때만 DinD를 활성화하세요.
 
 ```bash
-cp config.yaml.example config.yaml
-# config.yaml 편집: runners.base_path를 /app/runners로 설정
+mkdir -p config && cp config.yaml.example config/config.yaml
+# config/config.yaml 편집: runners.base_path를 /app/runners로 설정
 
-chown 1001:1001 config.yaml
+chown 1001:1001 config runners
 mkdir -p runners && chown 1001:1001 runners
 
 docker network create runner-net 2>/dev/null || true
@@ -41,12 +41,12 @@ UI: http://localhost:8080. 인증 세부사항은 [4. 보안 및 검증](#4-보�
 
 ### 컨테이너 실행 (전체 인자)
 
-`config.yaml`과 `runners`를 마운트해야 합니다. 포트는 설정의 `server.port`와 일치해야 합니다(기본 8080).
+`config` 디렉터리와 `runners`를 마운트하세요(디렉터리만 마운트하고 config/config.yaml 단일 파일은 마운트하지 마세요. 없으면 Docker가 빈 파일을 만들어 실행이 실패합니다). 포트는 설정의 `server.port`와 일치해야 합니다(기본 8080).
 
 ```bash
 docker run -d --name runner-manager \
   -p 8080:8080 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
@@ -68,9 +68,9 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 각 Runner는 자체 컨테이너에서 실행됩니다. Manager는 호스트 Docker로 시작/중지하고, 컨테이너 내 Agent로부터 HTTP로 상태를 가져옵니다.
 
 **방법 1: env만 사용 (전체 컨테이너 시 권장)**
-config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.0.1 → v1.0.1-runner). 마운트한 `config.yaml`과 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
+config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.0.1 → v1.0.1-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
 
-**방법 2: config.yaml에서 활성화** (`config.yaml.example` 참조):
+**방법 2: config/config.yaml에서 활성화** (`config.yaml.example` 참조):
 
 ```yaml
 runners:
@@ -107,7 +107,7 @@ Make: `make docker-build`, `make docker-run`, `make docker-stop`.
 ## 2. 설정
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 ```
 
 | 필드 | 설명 | 기본값 |
@@ -161,6 +161,6 @@ runners:
 
 **경로 및 고유성**: name/path에 `..`, `/`, `\` 포함 불가. 디렉터리는 `runners.base_path` 아래에 있어야 함. 중복 이름 불가. 편집 시 이름은 읽기 전용. 컨테이너 모드에서 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 오류.
 
-**민감한 파일**: config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
+**민감한 파일**: config/config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
 
 [← 프로젝트 홈으로](../../README.md)

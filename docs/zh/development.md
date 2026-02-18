@@ -30,7 +30,7 @@ go build -o runner-agent ./cmd/runner-agent
 ## 本地开发与调试
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 go run ./cmd/runner-manager
 # 或 make run（先 build 再运行）；指定配置：./runner-manager -config /path/to/config.yaml
 ```

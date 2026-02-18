@@ -10,7 +10,7 @@
 
 ## 一、部署（Docker）
 
-- 镜像基于 **Ubuntu**，预装 .NET Core 6.0 依赖；以 **UID 1001** 运行，宿主机挂载目录需对该用户可写（如 `chown 1001:1001 config.yaml runners`）。
+- 镜像基于 **Ubuntu**，预装 .NET Core 6.0 依赖；以 **UID 1001** 运行，宿主机挂载目录需对该用户可写（如 `chown 1001:1001 config runners`）。
 - 启动约 15 秒后自动拉起已注册未运行的 Runner，并每 5 分钟定时检查。
 
 ### 使用已发布镜像（推荐）
@@ -26,10 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
 仓库根目录有 `docker-compose.yml`。仅当容器模式且 Job 需要 Docker 并配置 `job_docker_backend: dind` 时再启用 DinD。
 
 ```bash
-cp config.yaml.example config.yaml
-# 编辑 config.yaml：runners.base_path 改为 /app/runners
+mkdir -p config && cp config.yaml.example config/config.yaml
+# 编辑 config/config.yaml：runners.base_path 改为 /app/runners
 
-chown 1001:1001 config.yaml
+chown 1001:1001 config runners
 mkdir -p runners && chown 1001:1001 runners
 
 docker network create runner-net 2>/dev/null || true
@@ -41,12 +41,12 @@ docker compose up -d
 
 ### 运行容器（完整参数）
 
-必须挂载 `config.yaml` 与 `runners`；端口与 `config.yaml` 中 `server.port` 一致（默认 8080）。
+必须挂载 `config` 目录与 `runners`（仅挂载目录，勿单独挂载 config/config.yaml，否则宿主机无该文件时 Docker 会创建空文件导致启动失败）；端口与配置中 `server.port` 一致（默认 8080）。
 
 ```bash
 docker run -d --name runner-manager \
   -p 8080:8080 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
@@ -68,9 +68,9 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker 启停，经 HTTP 访问容器内 Agent 获取状态。
 
 **方式一：仅用 .env（推荐全容器时使用）**
-无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.0.1` → `v1.0.1-runner`）。挂载的 `config.yaml` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
+无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.0.1` → `v1.0.1-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
 
-**方式二：在 config.yaml 中启用**（见 `config.yaml.example`）：
+**方式二：在 config/config.yaml 中启用**（见 `config.yaml.example`）：
 
 ```yaml
 runners:
@@ -107,7 +107,7 @@ Make：`make docker-build`、`make docker-run`、`make docker-stop`。
 ## 二、配置
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 ```
 
 | 字段 | 说明 | 默认 |
@@ -124,7 +124,7 @@ cp config.yaml.example config.yaml
 | `runners.dind_host` | `job_docker_backend=dind` 时 DinD 主机名 | `runner-dind` |
 | `runners.volume_host_path` | 容器模式下宿主机 runners 绝对路径（必填） | 空 |
 
-以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config.yaml，见 `.env.example`。
+以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config/config.yaml，见 `.env.example`。
 
 **校验**：不得同名；容器模式会校验名称映射后容器名冲突。`job_docker_backend` 仅允许 `dind`/`host-socket`/`none`；容器模式且 `base_path` 为容器内路径时必填 `volume_host_path`。未配 `job_docker_backend` 视为 `dind`；改后端后需在界面重新启动 Runner。
 
@@ -161,6 +161,6 @@ runners:
 
 **路径与唯一性**：name/path 禁止 `..`、`/`、`\`；目录强制落在 `runners.base_path` 下。禁止同名；编辑时名称不可改。容器模式下名称规范为容器名，映射后重名会报错。
 
-**敏感文件**：config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
+**敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
 
 [← 返回项目首页](../../README.md)

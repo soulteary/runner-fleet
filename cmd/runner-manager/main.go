@@ -54,7 +54,7 @@ func newTemplateRenderer() *templateRenderer {
 }
 
 func main() {
-	configPath := flag.String("config", "config.yaml", "配置文件路径")
+	configPath := flag.String("config", "config/config.yaml", "配置文件路径")
 	showVersion := flag.Bool("version", false, "显示版本号后退出")
 	flag.Parse()
 

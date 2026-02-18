@@ -66,7 +66,7 @@ jobs:
           cd dist
           sha256sum * > checksums.txt
 
-      # Dockerfile 内已 COPY config.yaml.example 并 sed 为 config.yaml，无需在 workflow 中准备
+      # Dockerfile 内已 COPY config.yaml.example 为 config/config.yaml 并 sed，无需在 workflow 中准备
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

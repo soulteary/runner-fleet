@@ -30,7 +30,7 @@ Les templates sont intégrés dans le binaire Manager (`cmd/runner-manager/templ
 ## Exécution et débogage locaux
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 go run ./cmd/runner-manager
 # Ou make run (build puis exécution) ; config personnalisée : ./runner-manager -config /path/to/config.yaml
 ```

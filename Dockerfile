@@ -29,9 +29,9 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /app -s /bin/bash app
 WORKDIR /app
 COPY --from=builder /app/runner-manager .
-COPY config.yaml.example ./config.yaml
+COPY config.yaml.example ./config/config.yaml
 COPY scripts/install-runner.sh /app/scripts/install-runner.sh
-RUN sed -i 's|base_path: ./runners|base_path: /app/runners|' config.yaml \
+RUN sed -i 's|base_path: ./runners|base_path: /app/runners|' config/config.yaml \
     && mkdir -p /app/runners \
     && chmod +x /app/scripts/install-runner.sh && chown -R app:app /app
 
@@ -40,4 +40,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["./runner-manager"]
-CMD ["-config", "/app/config.yaml"]
+CMD ["-config", "/app/config/config.yaml"]

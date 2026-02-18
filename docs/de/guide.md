@@ -10,7 +10,7 @@ Bereitstellung, Konfiguration, Hinzufügen von Runnern und Sicherheit werden hie
 
 ## 1. Bereitstellung (Docker)
 
-- Das Image basiert auf **Ubuntu** mit .NET Core 6.0-Abhängigkeiten; läuft unter **UID 1001** – gemountete Host-Verzeichnisse müssen für diesen Benutzer schreibbar sein (z. B. `chown 1001:1001 config.yaml runners`).
+- Das Image basiert auf **Ubuntu** mit .NET Core 6.0-Abhängigkeiten; läuft unter **UID 1001** – gemountete Host-Verzeichnisse müssen für diesen Benutzer schreibbar sein (z. B. `chown 1001:1001 config runners`).
 - Etwa 15 Sekunden nach dem Start werden registrierte, aber gestoppte Runner automatisch gestartet; periodische Prüfung alle 5 Minuten.
 
 ### Veröffentlichtes Image verwenden (empfohlen)
@@ -26,10 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
 Im Repo-Root liegt `docker-compose.yml`. DinD nur aktivieren, wenn Sie den Containermodus nutzen und Jobs Docker mit `job_docker_backend: dind` benötigen.
 
 ```bash
-cp config.yaml.example config.yaml
-# config.yaml bearbeiten: runners.base_path auf /app/runners setzen
+mkdir -p config && cp config.yaml.example config/config.yaml
+# config/config.yaml bearbeiten: runners.base_path auf /app/runners setzen
 
-chown 1001:1001 config.yaml
+chown 1001:1001 config runners
 mkdir -p runners && chown 1001:1001 runners
 
 docker network create runner-net 2>/dev/null || true
@@ -41,12 +41,12 @@ UI: http://localhost:8080. Auth-Details in [4. Sicherheit und Validierung](#4-si
 
 ### Container starten (volle Parameter)
 
-`config.yaml` und `runners` müssen gemountet werden; der Port muss mit `server.port` in der Config übereinstimmen (Standard 8080).
+`config`-Verzeichnis (nicht die Datei `config/config.yaml` einzeln, sonst erzeugt Docker bei fehlender Datei eine leere Datei) und `runners` müssen gemountet werden; der Port muss mit `server.port` in der Config übereinstimmen (Standard 8080).
 
 ```bash
 docker run -d --name runner-manager \
   -p 8080:8080 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
@@ -68,9 +68,9 @@ Oder auf dem Host [actions-runner](https://github.com/actions/runner/releases) u
 Jeder Runner läuft in seinem eigenen Container; der Manager startet/stoppt über Host-Docker und holt den Status per HTTP vom Agent im Container.
 
 **Option 1: Nur Env (empfohlen für Full-Container)**
-config.yaml muss nicht geändert werden. `cp .env.example .env` und z. B. setzen: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<absoluter Host-Pfad zu runners>` (z. B. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Wenn `RUNNER_IMAGE` nicht gesetzt ist, wird das Runner-Image aus `MANAGER_IMAGE` abgeleitet (z. B. `v1.0.1` → `v1.0.1-runner`). Gemountete `config.yaml` und `runners` benötigen weiterhin `chown 1001:1001`. Siehe `.env.example` für alle Override-Variablen.
+config/config.yaml muss nicht geändert werden. `cp .env.example .env` und z. B. setzen: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<absoluter Host-Pfad zu runners>` (z. B. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Wenn `RUNNER_IMAGE` nicht gesetzt ist, wird das Runner-Image aus `MANAGER_IMAGE` abgeleitet (z. B. `v1.0.1` → `v1.0.1-runner`). Gemountete `config` und `runners` benötigen weiterhin `chown 1001:1001`. Siehe `.env.example` für alle Override-Variablen.
 
-**Option 2: In config.yaml aktivieren** (siehe `config.yaml.example`):
+**Option 2: In config/config.yaml aktivieren** (siehe `config.yaml.example`):
 
 ```yaml
 runners:
@@ -107,7 +107,7 @@ Make: `make docker-build`, `make docker-run`, `make docker-stop`.
 ## 2. Konfiguration
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 ```
 
 | Feld | Beschreibung | Standard |
@@ -161,6 +161,6 @@ Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 
 **Pfade und Eindeutigkeit**: name/path dürfen nicht `..`, `/`, `\` enthalten; Verzeichnisse müssen unter `runners.base_path` liegen. Keine doppelten Namen; Name beim Bearbeiten schreibgeschützt. Im Containermodus werden Namen zu Containernamen normalisiert; Duplikate nach Mapping führen zu Fehler.
 
-**Sensible Dateien**: config.yaml und .env stehen in `.gitignore`. Für `.github_check_token` jedes Runners `chmod 600` verwenden; `**/.github_check_token` zu `.gitignore` hinzufügen, wenn unter Versionskontrolle.
+**Sensible Dateien**: config/config.yaml und .env stehen in `.gitignore`. Für `.github_check_token` jedes Runners `chmod 600` verwenden; `**/.github_check_token` zu `.gitignore` hinzufügen, wenn unter Versionskontrolle.
 
 [← Zurück zur Projektstartseite](../../README.md)
