@@ -1,41 +1,41 @@
-# 使用指南
+# User Guide
 
-部署、配置、添加 Runner 与安全说明合并于此。面向贡献者的构建与 API 见 [开发与构建](development.md)。
+Deployment, configuration, adding runners, and security are covered here. For contributor build and API details see [Development & Build](development.md).
 
 ---
 
-## 一、部署（Docker）
+## 1. Deployment (Docker)
 
-- 镜像基于 **Ubuntu**，预装 .NET Core 6.0 依赖；以 **UID 1001** 运行，宿主机挂载目录需对该用户可写（如 `chown 1001:1001 config.yaml runners`）。
-- 启动约 15 秒后自动拉起已注册未运行的 Runner，并每 5 分钟定时检查。
+- Image is **Ubuntu**-based with .NET Core 6.0 dependencies; runs as **UID 1001**—host-mounted dirs must be writable by that user (e.g. `chown 1001:1001 config.yaml runners`).
+- ~15 seconds after start, registered but stopped runners are auto-started; periodic check every 5 minutes.
 
-### 使用已发布镜像（推荐）
+### Use published image (recommended)
 
 ```bash
 docker pull ghcr.io/soulteary/runner-fleet:main
 ```
 
-### docker-compose 快速开始
+### docker-compose quick start
 
-仓库根目录有 `docker-compose.yml`。仅当容器模式且 Job 需要 Docker 并配置 `job_docker_backend: dind` 时再启用 DinD。
+The repo root has `docker-compose.yml`. Enable DinD only when using container mode and jobs need Docker with `job_docker_backend: dind`.
 
 ```bash
 cp config.yaml.example config.yaml
-# 编辑 config.yaml：runners.base_path 改为 /app/runners
+# Edit config.yaml: set runners.base_path to /app/runners
 
 chown 1001:1001 config.yaml
 mkdir -p runners && chown 1001:1001 runners
 
 docker network create runner-net 2>/dev/null || true
 docker compose up -d
-# 若 job_docker_backend: dind，则：docker compose --profile dind up -d
+# If job_docker_backend: dind: docker compose --profile dind up -d
 ```
 
-管理界面：http://localhost:8080。鉴权见 [四、安全与校验](#四安全与校验)。
+UI: http://localhost:8080. Auth details in [4. Security & validation](#4-security-and-validation).
 
-### 运行容器（完整参数）
+### Run container (full args)
 
-必须挂载 `config.yaml` 与 `runners`；端口与 `config.yaml` 中 `server.port` 一致（默认 8080）。
+Mount `config.yaml` and `runners`; port must match `server.port` in config (default 8080).
 
 ```bash
 docker run -d --name runner-manager \
@@ -45,23 +45,23 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:main
 ```
 
-宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。镜像已预装 Docker CLI，DinD 下常见 Action 可直接使用。
+Host dirs must be writable by UID 1001. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. For Docker in jobs add `-v /var/run/docker.sock:/var/run/docker.sock`, or use DinD (see repo `docker-compose.yml` `--profile dind`). Image includes Docker CLI; common Actions work with DinD.
 
-### 自动安装与注册
+### Auto install & register
 
-界面「快速添加 Runner」填写名称、目标、Token 提交后，会先执行安装脚本再注册并启动。失败时可：
+In the UI "Quick Add Runner" enter name, target, token and submit; the install script runs first, then register and start. On failure:
 
 ```bash
-docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
+docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 ```
 
-或宿主机在 `runners/<名称>/` 解压 [actions-runner](https://github.com/actions/runner/releases) 后再在界面提交或手动 `./config.sh`。
+Or on the host extract [actions-runner](https://github.com/actions/runner/releases) under `runners/<name>/`, then submit in the UI or run `./config.sh` manually.
 
-### 容器模式（Runner 独立容器）
+### Container mode (runner per container)
 
-每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker 启停，经 HTTP 访问容器内 Agent 获取状态。
+Each runner runs in its own container; Manager starts/stops via host Docker and gets status over HTTP from the in-container Agent.
 
-**config.yaml** 中启用（见 `config.yaml.example`）：
+Enable in **config.yaml** (see `config.yaml.example`):
 
 ```yaml
 runners:
@@ -75,49 +75,49 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 镜像：同 Manager 镜像名、tag 带 `-runner`，或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。Runner 名称会规范为容器名，映射后重名会冲突。
+Runner image: same name as Manager with `-runner` tag, or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. Runner names are normalized to container names; duplicates after mapping will conflict.
 
-### 排障
+### Troubleshooting
 
-- **compose down 后 Runner 无法启动**：首次执行 `docker network create runner-net`。已出问题时界面点该 Runner「启动」重建，或 `docker rm -f github-runner-<名称>` 后再点「启动」。
-- **root 运行**：挂载目录对运行用户可写；若用 root，需设 `RUNNER_ALLOW_RUNASROOT=1`。
-- **旧 Runner 镜像**：`docker rm -f github-runner-<名称>`，再在界面点「启动」重建。
-- **status=unknown**：详情弹窗看 `probe`，可尝试「启动/停止」自愈。
+- **Runner won't start after compose down**: Run `docker network create runner-net` once. If it still fails, use "Start" in the UI to recreate, or `docker rm -f github-runner-<name>` then "Start".
+- **Running as root**: Mounted dirs must be writable by the process user; for root set `RUNNER_ALLOW_RUNASROOT=1`.
+- **Old runner image**: `docker rm -f github-runner-<name>`, then "Start" in the UI to recreate.
+- **status=unknown**: Check the probe in the detail popup; try "Start/Stop" to self-heal.
 
-### 本地构建镜像
+### Build images locally
 
 ```bash
 docker build -t runner-manager .
 docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
 ```
 
-Make：`make docker-build`、`make docker-run`、`make docker-stop`。
+Make: `make docker-build`, `make docker-run`, `make docker-stop`.
 
 ---
 
-## 二、配置
+## 2. Configuration
 
 ```bash
 cp config.yaml.example config.yaml
 ```
 
-| 字段 | 说明 | 默认 |
-|------|------|------|
-| `server.port` | HTTP 服务端口 | `8080` |
-| `server.addr` | 监听地址；空则绑定所有接口 | 空 |
-| `runners.base_path` | Runner 安装目录根路径；**容器部署时设为 `/app/runners`** | `./runners` |
-| `runners.items` | 预置 Runner 列表 | 也可通过 Web 界面添加 |
-| `runners.container_mode` | 是否启用容器模式 | `false` |
-| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet-runner:main` |
-| `runners.container_network` | 容器模式下 Runner 所在网络 | `runner-net` |
-| `runners.agent_port` | 容器内 Agent 端口 | `8081` |
-| `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
-| `runners.dind_host` | `job_docker_backend=dind` 时 DinD 主机名 | `runner-dind` |
-| `runners.volume_host_path` | 容器模式下宿主机 runners 绝对路径（必填） | 空 |
+| Field | Description | Default |
+|-------|-------------|---------|
+| `server.port` | HTTP server port | `8080` |
+| `server.addr` | Bind address; empty = all interfaces | empty |
+| `runners.base_path` | Root path for runner install dirs; **set to `/app/runners` in container** | `./runners` |
+| `runners.items` | Predefined runner list | Can also add via Web UI |
+| `runners.container_mode` | Enable container mode | `false` |
+| `runners.container_image` | Runner image in container mode (tag with -runner) | `ghcr.io/soulteary/runner-fleet-runner:main` |
+| `runners.container_network` | Network for runners in container mode | `runner-net` |
+| `runners.agent_port` | In-container Agent port | `8081` |
+| `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
+| `runners.dind_host` | DinD hostname when `job_docker_backend=dind` | `runner-dind` |
+| `runners.volume_host_path` | Host absolute path to runners in container mode (required) | empty |
 
-**校验**：不得同名；容器模式会校验名称映射后容器名冲突。`job_docker_backend` 仅允许 `dind`/`host-socket`/`none`；容器模式且 `base_path` 为容器内路径时必填 `volume_host_path`。未配 `job_docker_backend` 视为 `dind`；改后端后需在界面重新启动 Runner。
+**Validation**: No duplicate names; container mode checks for container name conflicts. `job_docker_backend` only allows `dind`/`host-socket`/`none`; in container mode with container `base_path`, `volume_host_path` is required. Omitted `job_docker_backend` defaults to `dind`; after changing backend, restart runners from the UI.
 
-示例：
+Example:
 
 ```yaml
 server:
@@ -130,26 +130,26 @@ runners:
 
 ---
 
-## 三、添加 Runner
+## 3. Adding Runners
 
-**获取 Token**：目标仓库/组织 → Settings → Actions → Runners → New self-hosted runner，复制 Token（约 1 小时有效）。每个 Runner 需新 Token。
+**Get token**: Repo/org → Settings → Actions → Runners → New self-hosted runner, copy token (~1 hour valid). Each runner needs a new token.
 
-**在服务中添加**：管理界面「快速添加 Runner」填写名称（唯一）、目标类型（org/repo）、目标、Token（可选，填则提交时可自动注册并启动）。可从 GitHub 页面复制 `./config.sh --url ... --token ...` 到「从 GitHub 复制命令解析」框，点「解析并填充」。自动注册仅面向 GitHub.com；GitHub Enterprise 需在 runner 目录下手动执行 `config.sh`。
+**Add in service**: In the UI "Quick Add Runner" enter name (unique), target type (org/repo), target, token (optional; if set, submit can auto-register and start). You can paste `./config.sh --url ... --token ...` from GitHub into "Parse from GitHub command" and click "Parse & fill". Auto-register is for GitHub.com only; GitHub Enterprise requires manual `config.sh` in the runner dir.
 
-**未安装 runner 时**：可从 [GitHub Actions Runner](https://github.com/actions/runner/releases) 下载解压到 `runners/<名称>/`，再在界面填 Token 或该目录下手动 `./config.sh`。容器部署下界面提交 Token 时会先自动安装再注册；容器模式需先配置 Runner 镜像与 `volume_host_path`（见上文容器模式）。
+**When runner not installed**: Download from [GitHub Actions Runner](https://github.com/actions/runner/releases), extract to `runners/<name>/`, then enter token in the UI or run `./config.sh` there. With container deploy, submitting a token in the UI triggers install then register; container mode needs Runner image and `volume_host_path` configured first (see container mode above).
 
-**注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：在 runner 目录下放 `.github_check_token`（PAT，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。
+**Registration result**: Written to `.registration_result.json` in that runner dir. **GitHub visibility check** (optional): Put `.github_check_token` (PAT; org needs `admin:org`, repo needs `repo`) in the runner dir; checked ~every 5 minutes, result in `.github_status.json`.
 
-每台机器可多 Runner，各用独立子目录即可。
+Multiple runners per machine: use separate subdirs.
 
 ---
 
-## 四、安全与校验
+## 4. Security and validation
 
-**鉴权**：默认无登录鉴权，建议仅内网或本机使用。环境变量 `BASIC_AUTH_PASSWORD` 设置后启用 Basic Auth，`BASIC_AUTH_USER` 可选（默认 `admin`）。除 `GET /health` 外均需鉴权；敏感信息勿提交仓库，可放 `.env`。容器中加 `-e BASIC_AUTH_PASSWORD=...` 或 compose 的 `env_file`。
+**Auth**: No login by default; use only on internal network or localhost. Set env `BASIC_AUTH_PASSWORD` to enable Basic Auth; `BASIC_AUTH_USER` optional (default `admin`). All routes except `GET /health` require auth; do not commit secrets—use `.env`. In container: `-e BASIC_AUTH_PASSWORD=...` or compose `env_file`.
 
-**路径与唯一性**：name/path 禁止 `..`、`/`、`\`；目录强制落在 `runners.base_path` 下。禁止同名；编辑时名称不可改。容器模式下名称规范为容器名，映射后重名会报错。
+**Paths & uniqueness**: name/path must not contain `..`, `/`, `\`; dirs must be under `runners.base_path`. No duplicate names; name is read-only when editing. In container mode names are normalized to container names; duplicates after mapping will error.
 
-**敏感文件**：config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
+**Sensitive files**: config.yaml and .env are in `.gitignore`. For each runner's `.github_check_token` use `chmod 600`; add `**/.github_check_token` to `.gitignore` if under version control.
 
-[← 返回项目首页](../README.md)
+[← Back to project home](../README.md)
