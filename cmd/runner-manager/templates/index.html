@@ -423,7 +423,7 @@
         document.getElementById('addFormPath').value = '';
       }
       msgEl.className = 'parse-msg ok';
-      var filled = t('parse.filled').replace('{{target_type}}', result.target_type).replace('{{target}}', result.target).replace('{{token_part}}', result.registration_token ? t('parse.filled_token') : '');
+      var filled = t('parse.filled').replace('{{"{{"}}target_type{{"}}"}}', result.target_type).replace('{{"{{"}}target{{"}}"}}', result.target).replace('{{"{{"}}token_part{{"}}"}}', result.registration_token ? t('parse.filled_token') : '');
       msgEl.textContent = filled;
     });
 
@@ -702,7 +702,7 @@
     document.querySelectorAll('.btn-del').forEach(btn => {
       btn.addEventListener('click', async () => {
         const name = btn.getAttribute('data-name');
-        if (!name || !confirm(t('confirm_remove').replace('{{name}}', name))) return;
+        if (!name || !confirm(t('confirm_remove').replace('{{"{{"}}name{{"}}"}}', name))) return;
         try {
           const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
           const data = await r.json().catch(() => ({}));
