@@ -6,6 +6,8 @@
 
 HTTP management UI built with Golang Echo to view and manage multiple self-hosted GitHub Actions Runners on one machine. YAML-based config, no database required.
 
+![](.github/assets/preview.jpg)
+
 ## Highlights
 
 - **Zero database**: YAML-only config, no external deps; config is your backup and easy to version.
