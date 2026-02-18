@@ -42,6 +42,7 @@ make run
 ```
 
 默认监听 `:8080`，浏览器打开 http://localhost:8080 使用管理界面。
+本地需验证 Basic Auth 时，可设置环境变量后启动，例如：`BASIC_AUTH_PASSWORD=你的密码 go run ./cmd/runner-manager`（详见 [安全与校验](security.md)）。
 
 ## 命令行参数
 
@@ -50,9 +51,11 @@ make run
 
 ## HTTP API
 
+启用 Basic Auth 时，除 `/health` 外，请求需在 Header 中携带 `Authorization: Basic <base64(user:password)>`。
+
 | 路径 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 返回 `{"status":"ok"}`，可用于 Ingress/K8s 探针。 |
+| `/health` | GET | 返回 `{"status":"ok"}`，可用于 Ingress/K8s 探针；始终免鉴权。 |
 | `/version` | GET | 返回 `{"version":"..."}`。 |
 | `/api/runners` | GET | 返回 Runner 列表。容器模式下若状态探测失败，会返回 `status=unknown` 且带结构化 `probe`（含 `error/type/suggestion/check_command/fix_command`）。 |
 | `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回结构化 `probe`。 |

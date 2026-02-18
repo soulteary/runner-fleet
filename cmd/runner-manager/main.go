@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,6 +83,25 @@ func main() {
 			}
 		}
 		_ = c.JSON(code, map[string]string{"message": msg})
+	}
+
+	if pw := os.Getenv("BASIC_AUTH_PASSWORD"); pw != "" {
+		expectedUser := strings.TrimSpace(os.Getenv("BASIC_AUTH_USER"))
+		if expectedUser == "" {
+			expectedUser = "admin"
+		}
+		expectedPassword := pw
+		e.Use(middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
+			Skipper: func(c echo.Context) bool {
+				return c.Path() == "/health"
+			},
+			Validator: func(username, password string, c echo.Context) (bool, error) {
+				userOk := subtle.ConstantTimeCompare([]byte(username), []byte(expectedUser)) == 1
+				passOk := subtle.ConstantTimeCompare([]byte(password), []byte(expectedPassword)) == 1
+				return userOk && passOk, nil
+			},
+		}))
+		log.Printf("Basic Auth 已启用（用户: %s）", expectedUser)
 	}
 
 	e.Renderer = newTemplateRenderer()
