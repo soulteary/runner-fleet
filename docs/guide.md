@@ -68,7 +68,7 @@ Or on the host extract [actions-runner](https://github.com/actions/runner/releas
 Each runner runs in its own container; Manager starts/stops via host Docker and gets status over HTTP from the in-container Agent.
 
 **Option 1: Env only (recommended for full-container)**
-No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.0.1` → `v1.0.1-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
+No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If you do not create `config/config.yaml`, the program will generate it on first start from these env vars. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.0.1` → `v1.0.1-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
 
 **Option 2: Enable in config/config.yaml** (see `config.yaml.example`):
 

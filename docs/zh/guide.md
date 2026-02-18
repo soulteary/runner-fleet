@@ -68,7 +68,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker 启停，经 HTTP 访问容器内 Agent 获取状态。
 
 **方式一：仅用 .env（推荐全容器时使用）**
-无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.0.1` → `v1.0.1-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
+无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。若未准备 `config/config.yaml`，只要在 `.env` 中配置了上述变量，首次启动时会自动生成该文件。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.0.1` → `v1.0.1-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
 
 **方式二：在 config/config.yaml 中启用**（见 `config.yaml.example`）：
 

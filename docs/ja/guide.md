@@ -68,7 +68,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 各 Runner は専用コンテナで動作します。Manager はホストの Docker で起動/停止し、コンテナ内の Agent から HTTP で状態を取得します。
 
 **方法1: 環境変数のみ（フルコンテナ時推奨）**
-config/config.yaml の編集は不要。`cp .env.example .env` のあと、例: `CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<runners のホスト絶対パス>`（`realpath runners` など）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net` を設定。`RUNNER_IMAGE` を設定しない場合、Runner イメージは `MANAGER_IMAGE` から自動導出（例: v1.0.1 → v1.0.1-runner）。マウントする `config` と `runners` は引き続き `chown 1001:1001` が必要。詳細は `.env.example` のオーバーライド変数を参照。
+config/config.yaml の編集は不要。`cp .env.example .env` のあと、例: `CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<runners のホスト絶対パス>`（`realpath runners` など）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net` を設定。`config/config.yaml` を用意しなくても、上記を `.env` に設定していれば初回起動時に自動生成されます。`RUNNER_IMAGE` を設定しない場合、Runner イメージは `MANAGER_IMAGE` から自動導出（例: v1.0.1 → v1.0.1-runner）。マウントする `config` と `runners` は引き続き `chown 1001:1001` が必要。詳細は `.env.example` のオーバーライド変数を参照。
 
 **方法2: config/config.yaml で有効化**（`config.yaml.example` 参照）:
 

@@ -9,9 +9,77 @@ import (
 )
 
 func TestLoad_MissingFile(t *testing.T) {
-	_, err := Load(filepath.Join(os.TempDir(), "nonexistent-config.yaml"))
-	if err == nil {
-		t.Fatal("expected error for missing file")
+	// 文件不存在时，Load 基于默认配置+环境变量生成并写入文件后返回成功（便于全容器部署仅用 .env）
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected success when file missing (generate from defaults): %v", err)
+	}
+	if cfg.Server.Port != 8080 || cfg.Server.Addr != "0.0.0.0" {
+		t.Errorf("expected default server, got port=%d addr=%q", cfg.Server.Port, cfg.Server.Addr)
+	}
+	if cfg.Runners.BasePath != "./runners" || len(cfg.Runners.Items) != 0 {
+		t.Errorf("expected default runners base_path=./runners items=0, got base_path=%q items=%d", cfg.Runners.BasePath, len(cfg.Runners.Items))
+	}
+	// 应已写入文件，再次 Load 可读回
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("re-load after generate failed: %v", err)
+	}
+	if loaded.Server.Port != cfg.Server.Port {
+		t.Errorf("re-loaded port %d != generated %d", loaded.Server.Port, cfg.Server.Port)
+	}
+}
+
+func TestLoad_MissingFile_WithEnvGeneratesConfig(t *testing.T) {
+	// 文件不存在且设置了 .env 中常用变量时，Load 从默认配置+环境变量生成并写入 config.yaml，内容符合 env
+	restore := setEnvsAndRestore(t, map[string]string{
+		"CONTAINER_MODE":     "true",
+		"VOLUME_HOST_PATH":  "/data/runners",
+		"RUNNERS_BASE_PATH": "/app/runners",
+		"SERVER_PORT":       "9090",
+		"JOB_DOCKER_BACKEND": "host-socket",
+		"RUNNER_IMAGE":      "custom/runner:v1",
+		"MANAGER_IMAGE":     "",
+		"FLEET_IMAGE_TAG":   "",
+	}, []string{"CONTAINER_MODE", "VOLUME_HOST_PATH", "RUNNERS_BASE_PATH", "SERVER_PORT", "JOB_DOCKER_BACKEND", "RUNNER_IMAGE", "MANAGER_IMAGE", "FLEET_IMAGE_TAG"})
+	defer restore()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load(missing file) with env should succeed: %v", err)
+	}
+	if !cfg.Runners.ContainerMode {
+		t.Error("expected ContainerMode true from CONTAINER_MODE")
+	}
+	if cfg.Runners.VolumeHostPath != "/data/runners" {
+		t.Errorf("expected VolumeHostPath /data/runners, got %q", cfg.Runners.VolumeHostPath)
+	}
+	if cfg.Runners.BasePath != "/app/runners" {
+		t.Errorf("expected BasePath /app/runners, got %q", cfg.Runners.BasePath)
+	}
+	if cfg.Server.Port != 9090 {
+		t.Errorf("expected Server.Port 9090 from SERVER_PORT, got %d", cfg.Server.Port)
+	}
+	if cfg.Runners.JobDockerBackend != "host-socket" {
+		t.Errorf("expected JobDockerBackend host-socket, got %q", cfg.Runners.JobDockerBackend)
+	}
+	if cfg.Runners.ContainerImage != "custom/runner:v1" {
+		t.Errorf("expected ContainerImage from RUNNER_IMAGE, got %q", cfg.Runners.ContainerImage)
+	}
+	// 生成的文件应存在且可读回
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected config file to be created at %s: %v", path, err)
+	}
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("re-load generated file failed: %v", err)
+	}
+	if reloaded.Runners.BasePath != "/app/runners" || reloaded.Server.Port != 9090 {
+		t.Errorf("re-loaded config mismatch: base_path=%q port=%d", reloaded.Runners.BasePath, reloaded.Server.Port)
 	}
 }
 
@@ -755,11 +823,19 @@ func TestValidate_EmptyItemName(t *testing.T) {
 }
 
 func TestLoadAndSave_LoadFails(t *testing.T) {
-	err := LoadAndSave(filepath.Join(os.TempDir(), "nonexistent-config.yaml"), func(c *Config) error {
+	// 文件不存在时 Load 会从默认配置生成，LoadAndSave 应成功并应用 fn
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	err := LoadAndSave(path, func(c *Config) error {
+		c.Server.Port = 9000
 		return nil
 	})
-	if err == nil {
-		t.Fatal("expected error when config file missing")
+	if err != nil {
+		t.Fatalf("LoadAndSave with missing file should succeed (config generated): %v", err)
+	}
+	loaded, _ := Load(path)
+	if loaded.Server.Port != 9000 {
+		t.Errorf("expected fn change persisted, got port %d", loaded.Server.Port)
 	}
 }
 

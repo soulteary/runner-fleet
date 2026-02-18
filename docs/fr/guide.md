@@ -68,7 +68,7 @@ Ou sur l'hôte, extrayez [actions-runner](https://github.com/actions/runner/rele
 Chaque runner tourne dans son propre conteneur ; le Manager démarre/arrête via le Docker hôte et récupère le statut en HTTP depuis l'Agent dans le conteneur.
 
 **Option 1 : Env uniquement (recommandé en full-container)**
-Inutile de modifier config/config.yaml. Copiez `cp .env.example .env` et définissez par ex. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<chemin absolu hôte vers runners>` (ex. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Si `RUNNER_IMAGE` n'est pas défini, l'image runner est dérivée de `MANAGER_IMAGE` (ex. `v1.0.1` → `v1.0.1-runner`). Les montages `config` et `runners` doivent rester en `chown 1001:1001`. Voir `.env.example` pour les variables d'override.
+Inutile de modifier config/config.yaml. Copiez `cp .env.example .env` et définissez par ex. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<chemin absolu hôte vers runners>` (ex. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Si vous ne créez pas `config/config.yaml`, le programme le génère au premier démarrage à partir de ces variables. Si `RUNNER_IMAGE` n'est pas défini, l'image runner est dérivée de `MANAGER_IMAGE` (ex. `v1.0.1` → `v1.0.1-runner`). Les montages `config` et `runners` doivent rester en `chown 1001:1001`. Voir `.env.example` pour les variables d'override.
 
 **Option 2 : Activer dans config/config.yaml** (voir `config.yaml.example`) :
 

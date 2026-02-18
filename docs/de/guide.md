@@ -68,7 +68,7 @@ Oder auf dem Host [actions-runner](https://github.com/actions/runner/releases) u
 Jeder Runner läuft in seinem eigenen Container; der Manager startet/stoppt über Host-Docker und holt den Status per HTTP vom Agent im Container.
 
 **Option 1: Nur Env (empfohlen für Full-Container)**
-config/config.yaml muss nicht geändert werden. `cp .env.example .env` und z. B. setzen: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<absoluter Host-Pfad zu runners>` (z. B. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Wenn `RUNNER_IMAGE` nicht gesetzt ist, wird das Runner-Image aus `MANAGER_IMAGE` abgeleitet (z. B. `v1.0.1` → `v1.0.1-runner`). Gemountete `config` und `runners` benötigen weiterhin `chown 1001:1001`. Siehe `.env.example` für alle Override-Variablen.
+config/config.yaml muss nicht geändert werden. `cp .env.example .env` und z. B. setzen: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<absoluter Host-Pfad zu runners>` (z. B. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Wenn Sie `config/config.yaml` nicht anlegen, wird die Datei beim ersten Start aus diesen Umgebungsvariablen erzeugt. Wenn `RUNNER_IMAGE` nicht gesetzt ist, wird das Runner-Image aus `MANAGER_IMAGE` abgeleitet (z. B. `v1.0.1` → `v1.0.1-runner`). Gemountete `config` und `runners` benötigen weiterhin `chown 1001:1001`. Siehe `.env.example` für alle Override-Variablen.
 
 **Option 2: In config/config.yaml aktivieren** (siehe `config.yaml.example`):
 
