@@ -69,7 +69,7 @@ Activer dans **config.yaml** (voir `config.yaml.example`) :
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet-runner:main
+  container_image: ghcr.io/soulteary/runner-fleet:main-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -77,7 +77,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Image runner : même nom que le Manager avec le tag `-runner`, ou build local : `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`. Le Manager doit utiliser le Docker hôte (montage de `docker.sock`), pas DinD via `DOCKER_HOST` ; dans Compose, utilisez `group_add` pour le GID docker hôte ou `user: "0:0"`. Les noms de runner sont normalisés en noms de conteneurs ; les doublons après mapping entreront en conflit.
+Image runner : même nom que le Manager avec le tag `-runner`, ou build local : `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .`. Le Manager doit utiliser le Docker hôte (montage de `docker.sock`), pas DinD via `DOCKER_HOST` ; dans Compose, utilisez `group_add` pour le GID docker hôte ou `user: "0:0"`. Les noms de runner sont normalisés en noms de conteneurs ; les doublons après mapping entreront en conflit.
 
 ### Dépannage
 
@@ -90,7 +90,7 @@ Image runner : même nom que le Manager avec le tag `-runner`, ou build local : 
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .
 ```
 
 Make : `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -110,7 +110,7 @@ cp config.yaml.example config.yaml
 | `runners.base_path` | Chemin racine des répertoires d'installation ; **définir `/app/runners` en conteneur** | `./runners` |
 | `runners.items` | Liste prédéfinie de runners | Peut aussi être ajoutée via l'interface |
 | `runners.container_mode` | Activer le mode conteneur | `false` |
-| `runners.container_image` | Image runner en mode conteneur (tag -runner) | `ghcr.io/soulteary/runner-fleet-runner:main` |
+| `runners.container_image` | Image runner en mode conteneur (tag -runner) | `ghcr.io/soulteary/runner-fleet:main-runner` |
 | `runners.container_network` | Réseau des runners en mode conteneur | `runner-net` |
 | `runners.agent_port` | Port de l'Agent dans le conteneur | `8081` |
 | `runners.job_docker_backend` | Docker dans les jobs : `dind` / `host-socket` / `none` | `dind` |

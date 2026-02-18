@@ -69,7 +69,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet-runner:main
+  container_image: ghcr.io/soulteary/runner-fleet:main-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -77,7 +77,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner イメージ: Manager と同じ名前で `-runner` タグ、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
+Runner イメージ: Manager と同じ名前で `-runner` タグ、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
 
 ### トラブルシューティング
 
@@ -90,7 +90,7 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ、またはロ�
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .
 ```
 
 Make: `make docker-build`、`make docker-run`、`make docker-stop`。
@@ -110,7 +110,7 @@ cp config.yaml.example config.yaml
 | `runners.base_path` | Runner インストールディレクトリのルートパス。**コンテナでは `/app/runners` に設定** | `./runners` |
 | `runners.items` | 事前定義 Runner 一覧 | Web UI からも追加可能 |
 | `runners.container_mode` | コンテナモードを有効化 | `false` |
-| `runners.container_image` | コンテナモード時の Runner イメージ（-runner タグ） | `ghcr.io/soulteary/runner-fleet-runner:main` |
+| `runners.container_image` | コンテナモード時の Runner イメージ（-runner タグ） | `ghcr.io/soulteary/runner-fleet:main-runner` |
 | `runners.container_network` | コンテナモード時の Runner ネットワーク | `runner-net` |
 | `runners.agent_port` | コンテナ内 Agent ポート | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker: `dind` / `host-socket` / `none` | `dind` |

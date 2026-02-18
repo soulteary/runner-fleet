@@ -69,7 +69,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet-runner:main
+  container_image: ghcr.io/soulteary/runner-fleet:main-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -77,7 +77,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 이미지: Manager와 동일한 이름에 `-runner` 태그, 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
+Runner 이미지: Manager와 동일한 이름에 `-runner` 태그, 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
 ### 문제 해결
 
@@ -90,7 +90,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그, 또는 로컬
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -110,7 +110,7 @@ cp config.yaml.example config.yaml
 | `runners.base_path` | Runner 설치 디렉터리 루트 경로; **컨테이너에서는 `/app/runners`로 설정** | `./runners` |
 | `runners.items` | 미리 정의된 Runner 목록 | Web UI에서도 추가 가능 |
 | `runners.container_mode` | 컨테이너 모드 활성화 | `false` |
-| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet-runner:main` |
+| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet:main-runner` |
 | `runners.container_network` | 컨테이너 모드에서 Runner 네트워크 | `runner-net` |
 | `runners.agent_port` | 컨테이너 내 Agent 포트 | `8081` |
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |

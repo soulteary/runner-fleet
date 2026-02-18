@@ -69,7 +69,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet-runner:main
+  container_image: ghcr.io/soulteary/runner-fleet:main-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -77,7 +77,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 镜像：同 Manager 镜像名、tag 带 `-runner`，或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。Runner 名称会规范为容器名，映射后重名会冲突。
+Runner 镜像：同 Manager 镜像名、tag 带 `-runner`，或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。Runner 名称会规范为容器名，映射后重名会冲突。
 
 ### 排障
 
@@ -90,7 +90,7 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`，或本地 `docker bu
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet-runner:main .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .
 ```
 
 Make：`make docker-build`、`make docker-run`、`make docker-stop`。
@@ -110,7 +110,7 @@ cp config.yaml.example config.yaml
 | `runners.base_path` | Runner 安装目录根路径；**容器部署时设为 `/app/runners`** | `./runners` |
 | `runners.items` | 预置 Runner 列表 | 也可通过 Web 界面添加 |
 | `runners.container_mode` | 是否启用容器模式 | `false` |
-| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet-runner:main` |
+| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet:main-runner` |
 | `runners.container_network` | 容器模式下 Runner 所在网络 | `runner-net` |
 | `runners.agent_port` | 容器内 Agent 端口 | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
