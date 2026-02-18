@@ -67,7 +67,10 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 
 各 Runner は専用コンテナで動作します。Manager はホストの Docker で起動/停止し、コンテナ内の Agent から HTTP で状態を取得します。
 
-**config.yaml** で有効化（`config.yaml.example` 参照）:
+**方法1: 環境変数のみ（フルコンテナ時推奨）**
+config.yaml の編集は不要。`cp .env.example .env` のあと、例: `CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<runners のホスト絶対パス>`（`realpath runners` など）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net` を設定。`RUNNER_IMAGE` を設定しない場合、Runner イメージは `MANAGER_IMAGE` から自動導出（例: v1.0.1 → v1.0.1-runner）。マウントする `config.yaml` と `runners` は引き続き `chown 1001:1001` が必要。詳細は `.env.example` のオーバーライド変数を参照。
+
+**方法2: config.yaml で有効化**（`config.yaml.example` 参照）:
 
 ```yaml
 runners:
@@ -120,6 +123,8 @@ cp config.yaml.example config.yaml
 | `runners.job_docker_backend` | Job 内 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind` 時の DinD ホスト名 | `runner-dind` |
 | `runners.volume_host_path` | コンテナモード時の runners のホスト絶対パス（必須） | 空 |
+
+上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
 
 **検証**: 名前の重複不可。コンテナモードではコンテナ名の衝突をチェック。`job_docker_backend` は `dind`/`host-socket`/`none` のみ。コンテナモードでコンテナの `base_path` を使う場合は `volume_host_path` 必須。`job_docker_backend` を省略すると `dind`。バックエンド変更後は UI から Runner を再起動してください。
 

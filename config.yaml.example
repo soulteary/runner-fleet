@@ -3,6 +3,7 @@
 # 详细字段说明见 docs/config.md
 #
 # Docker / docker-compose：请将 runners.base_path 改为 /app/runners（与镜像内卷挂载一致）
+# 全容器部署时可通过 .env 设置 CONTAINER_MODE、VOLUME_HOST_PATH、JOB_DOCKER_BACKEND 等覆盖下列注释项，无需在本文件中取消注释或填写。
 
 server:
     port: 8080

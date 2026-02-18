@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -26,6 +27,74 @@ func DefaultRunnerContainerImage() string {
 		tag = "v1.0.0"
 	}
 	return DefaultRunnerImageRepo + ":" + tag + "-runner"
+}
+
+// containerImageFromManagerImage 从 MANAGER_IMAGE 推导 Runner 镜像（image:tag -> image:tag-runner）。
+// 无 tag 时返回 image:latest-runner；空或解析失败时返回空字符串。
+func containerImageFromManagerImage() string {
+	raw := strings.TrimSpace(os.Getenv("MANAGER_IMAGE"))
+	if raw == "" {
+		return ""
+	}
+	lastColon := strings.LastIndex(raw, ":")
+	if lastColon == -1 {
+		return raw + ":latest-runner"
+	}
+	image, tag := raw[:lastColon], raw[lastColon+1:]
+	if tag == "" {
+		return image + ":latest-runner"
+	}
+	return image + ":" + tag + "-runner"
+}
+
+// applyEnvOverrides 用环境变量覆盖配置字段（仅当 env 非空时覆盖）。
+// 应在 Load 中默认值处理之后、Validate 之前调用。
+func applyEnvOverrides(c *Config) {
+	if v := strings.TrimSpace(os.Getenv("MANAGER_PORT")); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port > 0 {
+			c.Server.Port = port
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("SERVER_PORT")); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port > 0 {
+			c.Server.Port = port
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("SERVER_ADDR")); v != "" {
+		c.Server.Addr = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RUNNERS_BASE_PATH")); v != "" {
+		c.Runners.BasePath = v
+	}
+	if v := strings.TrimSpace(strings.ToLower(os.Getenv("CONTAINER_MODE"))); v == "true" || v == "1" {
+		c.Runners.ContainerMode = true
+	}
+	if v := strings.TrimSpace(os.Getenv("RUNNER_IMAGE")); v != "" {
+		c.Runners.ContainerImage = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CONTAINER_IMAGE")); v != "" {
+		c.Runners.ContainerImage = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CONTAINER_NETWORK")); v != "" {
+		c.Runners.ContainerNetwork = v
+	}
+	if v := strings.TrimSpace(strings.ToLower(os.Getenv("JOB_DOCKER_BACKEND"))); v != "" {
+		c.Runners.JobDockerBackend = v
+	}
+	if v := strings.TrimSpace(os.Getenv("VOLUME_HOST_PATH")); v != "" {
+		c.Runners.VolumeHostPath = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RUNNERS_VOLUME_HOST_PATH")); v != "" {
+		c.Runners.VolumeHostPath = v
+	}
+	// 容器模式且未设 container_image 时，优先从 MANAGER_IMAGE 推导
+	if c.Runners.ContainerMode && strings.TrimSpace(c.Runners.ContainerImage) == "" {
+		if derived := containerImageFromManagerImage(); derived != "" {
+			c.Runners.ContainerImage = derived
+		} else {
+			c.Runners.ContainerImage = DefaultRunnerContainerImage()
+		}
+	}
 }
 
 // Config 应用配置
@@ -114,6 +183,7 @@ func Load(path string) (*Config, error) {
 	if c.Runners.JobDockerBackend == "dind" && c.Runners.DindHost == "" {
 		c.Runners.DindHost = "runner-dind"
 	}
+	applyEnvOverrides(&c)
 	if err := Validate(&c); err != nil {
 		return nil, err
 	}

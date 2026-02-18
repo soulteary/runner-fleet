@@ -24,3 +24,4 @@ config.yaml
 Thumbs.db
 
 .cursor/
+*.out

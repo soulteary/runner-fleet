@@ -67,7 +67,10 @@ Or on the host extract [actions-runner](https://github.com/actions/runner/releas
 
 Each runner runs in its own container; Manager starts/stops via host Docker and gets status over HTTP from the in-container Agent.
 
-Enable in **config.yaml** (see `config.yaml.example`):
+**Option 1: Env only (recommended for full-container)**
+No need to edit config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.0.1` → `v1.0.1-runner`). Mounted `config.yaml` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
+
+**Option 2: Enable in config.yaml** (see `config.yaml.example`):
 
 ```yaml
 runners:
@@ -120,6 +123,8 @@ cp config.yaml.example config.yaml
 | `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | DinD hostname when `job_docker_backend=dind` | `runner-dind` |
 | `runners.volume_host_path` | Host absolute path to runners in container mode (required) | empty |
+
+Some fields above can be overridden by environment variables (e.g. `MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`), so you can run full-container with only `.env` changes; see `.env.example`.
 
 **Validation**: No duplicate names; container mode checks for container name conflicts. `job_docker_backend` only allows `dind`/`host-socket`/`none`; in container mode with container `base_path`, `volume_host_path` is required. Omitted `job_docker_backend` defaults to `dind`; after changing backend, restart runners from the UI.
 

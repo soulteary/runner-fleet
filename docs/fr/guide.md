@@ -67,7 +67,10 @@ Ou sur l'hôte, extrayez [actions-runner](https://github.com/actions/runner/rele
 
 Chaque runner tourne dans son propre conteneur ; le Manager démarre/arrête via le Docker hôte et récupère le statut en HTTP depuis l'Agent dans le conteneur.
 
-Activer dans **config.yaml** (voir `config.yaml.example`) :
+**Option 1 : Env uniquement (recommandé en full-container)**
+Inutile de modifier config.yaml. Copiez `cp .env.example .env` et définissez par ex. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<chemin absolu hôte vers runners>` (ex. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. Si `RUNNER_IMAGE` n'est pas défini, l'image runner est dérivée de `MANAGER_IMAGE` (ex. `v1.0.1` → `v1.0.1-runner`). Les montages `config.yaml` et `runners` doivent rester en `chown 1001:1001`. Voir `.env.example` pour les variables d'override.
+
+**Option 2 : Activer dans config.yaml** (voir `config.yaml.example`) :
 
 ```yaml
 runners:
@@ -120,6 +123,8 @@ cp config.yaml.example config.yaml
 | `runners.job_docker_backend` | Docker dans les jobs : `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | Nom d'hôte DinD quand `job_docker_backend=dind` | `runner-dind` |
 | `runners.volume_host_path` | Chemin absolu hôte vers runners en mode conteneur (obligatoire) | vide |
+
+Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 
 **Validation** : Pas de noms dupliqués ; le mode conteneur vérifie les conflits de noms de conteneurs. `job_docker_backend` n'accepte que `dind`/`host-socket`/`none` ; en mode conteneur avec `base_path` conteneur, `volume_host_path` est requis. L'absence de `job_docker_backend` donne `dind` ; après changement de backend, redémarrez les runners depuis l'interface.
 

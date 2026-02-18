@@ -8,10 +8,7 @@
 #      chown 1001:1001 config.yaml
 #      mkdir -p runners && chown 1001:1001 runners
 # 4. 可选：复制 .env.example 为 .env，设置 MANAGER_IMAGE 等（见下方 services.runner-manager.image）
-# 5. 若启用容器模式（runners.container_mode: true）：
-#      - 取消 config.yaml 中 container_mode 等注释
-#      - 设置 volume_host_path 为宿主机 runners 绝对路径（例如：realpath runners 或 $(cd . && pwd)/runners）
-#      - 不填 container_image 时由 FLEET_IMAGE_TAG 或默认 v1.0.0 生成；或显式设 container_image 为 ghcr.io/<owner>/<repo>:v1.0.0-runner 等
+# 5. 若启用容器模式：可在 .env 中设 CONTAINER_MODE=true、VOLUME_HOST_PATH=<宿主机 runners 绝对路径>、JOB_DOCKER_BACKEND=host-socket 等，无需改 config.yaml；或按原方式在 config.yaml 中取消 container_mode 等注释并设置 volume_host_path。
 #      - Manager 需能访问宿主机 Docker（创建/启停 Runner 容器）：下方已配置 group_add，请将 999 改为宿主机 docker 组 GID（getent group docker | cut -d: -f3）；或改用 user: "0:0" 以 root 运行
 #
 # === 两种运行模式 ===
@@ -43,10 +40,18 @@ services:
     container_name: runner-manager
     # 使用 job_docker_backend: dind 时请先启动 DinD：docker compose --profile dind up -d
     # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375
+    # 全容器时可通过 .env 传入以下变量覆盖 config.yaml，无需改 config：CONTAINER_MODE、VOLUME_HOST_PATH、JOB_DOCKER_BACKEND、CONTAINER_NETWORK、RUNNER_IMAGE、RUNNERS_BASE_PATH 等
     environment:
       DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
+      # 以下可选：覆盖 config.yaml，全容器时无需改 config 文件（见 .env.example）
+      CONTAINER_MODE: ${CONTAINER_MODE:-}
+      VOLUME_HOST_PATH: ${VOLUME_HOST_PATH:-}
+      JOB_DOCKER_BACKEND: ${JOB_DOCKER_BACKEND:-}
+      CONTAINER_NETWORK: ${CONTAINER_NETWORK:-}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-}
+      RUNNERS_BASE_PATH: ${RUNNERS_BASE_PATH:-}
     ports:
       - "${MANAGER_PORT:-8080}:8080"
     volumes:
