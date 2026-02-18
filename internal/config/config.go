@@ -15,6 +15,19 @@ import (
 var mu sync.Mutex
 var runnerContainerNameSanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
+// DefaultRunnerImageRepo 默认 Runner 镜像仓库名，与 Manager 同仓库
+const DefaultRunnerImageRepo = "ghcr.io/soulteary/runner-fleet"
+
+// DefaultRunnerContainerImage 返回默认 Runner 容器镜像（未配置 container_image 时使用）。
+// Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.0.0；镜像名为 {repo}:{tag}-runner。
+func DefaultRunnerContainerImage() string {
+	tag := strings.TrimSpace(os.Getenv("FLEET_IMAGE_TAG"))
+	if tag == "" {
+		tag = "v1.0.0"
+	}
+	return DefaultRunnerImageRepo + ":" + tag + "-runner"
+}
+
 // Config 应用配置
 type Config struct {
 	Server  ServerConfig  `yaml:"server"`
@@ -34,7 +47,7 @@ type RunnersConfig struct {
 
 	// 容器模式：Runner 运行在独立容器中，Manager 通过 Docker API 启停并透过 Agent 获取状态
 	ContainerMode    bool   `yaml:"container_mode"`    // 为 true 时启停与状态均走容器
-	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，默认 ghcr.io/soulteary/runner-fleet:main-runner
+	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，未填时由 DefaultRunnerContainerImage() 决定（FLEET_IMAGE_TAG 或 v1.0.0）
 	ContainerNetwork string `yaml:"container_network"` // 容器所在网络，与 Manager 同网以便访问 Agent，默认 runner-net
 	AgentPort        int    `yaml:"agent_port"`        // 容器内 Agent 端口，默认 8081
 	// Job Docker 后端：Runner 容器内 Job 执行 docker 命令时的后端。dind=DinD 服务；host-socket=挂载宿主机 socket；none=不提供 Docker
@@ -85,7 +98,7 @@ func Load(path string) (*Config, error) {
 	c.Runners.DindHost = strings.TrimSpace(c.Runners.DindHost)
 	c.Runners.VolumeHostPath = strings.TrimSpace(c.Runners.VolumeHostPath)
 	if c.Runners.ContainerMode && c.Runners.ContainerImage == "" {
-		c.Runners.ContainerImage = "ghcr.io/soulteary/runner-fleet:main-runner"
+		c.Runners.ContainerImage = DefaultRunnerContainerImage()
 	}
 	if c.Runners.ContainerNetwork == "" {
 		c.Runners.ContainerNetwork = "runner-net"
