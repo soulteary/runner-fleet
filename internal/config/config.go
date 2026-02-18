@@ -34,7 +34,7 @@ type RunnersConfig struct {
 
 	// 容器模式：Runner 运行在独立容器中，Manager 通过 Docker API 启停并透过 Agent 获取状态
 	ContainerMode    bool   `yaml:"container_mode"`    // 为 true 时启停与状态均走容器
-	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，默认 ghcr.io/soulteary/runner-fleet-runner:main
+	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，默认 ghcr.io/soulteary/runner-fleet:main-runner
 	ContainerNetwork string `yaml:"container_network"` // 容器所在网络，与 Manager 同网以便访问 Agent，默认 runner-net
 	AgentPort        int    `yaml:"agent_port"`        // 容器内 Agent 端口，默认 8081
 	// Job Docker 后端：Runner 容器内 Job 执行 docker 命令时的后端。dind=DinD 服务；host-socket=挂载宿主机 socket；none=不提供 Docker
@@ -85,7 +85,7 @@ func Load(path string) (*Config, error) {
 	c.Runners.DindHost = strings.TrimSpace(c.Runners.DindHost)
 	c.Runners.VolumeHostPath = strings.TrimSpace(c.Runners.VolumeHostPath)
 	if c.Runners.ContainerMode && c.Runners.ContainerImage == "" {
-		c.Runners.ContainerImage = "ghcr.io/soulteary/runner-fleet-runner:main"
+		c.Runners.ContainerImage = "ghcr.io/soulteary/runner-fleet:main-runner"
 	}
 	if c.Runners.ContainerNetwork == "" {
 		c.Runners.ContainerNetwork = "runner-net"

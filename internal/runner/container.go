@@ -219,7 +219,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	}
 	img := cfg.Runners.ContainerImage
 	if img == "" {
-		img = "ghcr.io/soulteary/runner-fleet-runner:main"
+		img = "ghcr.io/soulteary/runner-fleet:main-runner"
 	}
 	network := cfg.Runners.ContainerNetwork
 	if network == "" {

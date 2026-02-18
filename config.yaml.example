@@ -15,7 +15,7 @@ runners:
     # 容器模式：每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker（socket）启停，并与 Runner 容器同网络
     # 启用后 Manager 必须使用宿主机 docker（勿设 DOCKER_HOST=tcp://runner-dind:2375）
     # container_mode: true
-    # container_image: ghcr.io/soulteary/runner-fleet-runner:main   # 或 CI：ghcr.io/<owner>/<repo>:main-runner
+    # container_image: ghcr.io/soulteary/runner-fleet:main-runner
     # container_network: runner-net
     # agent_port: 8081
     # Job 内 Docker 后端：dind（DinD 服务）、host-socket（挂载宿主机 socket）、none（不提供）

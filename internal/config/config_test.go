@@ -290,7 +290,7 @@ runners:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Runners.ContainerImage != "ghcr.io/soulteary/runner-fleet-runner:main" {
+	if cfg.Runners.ContainerImage != "ghcr.io/soulteary/runner-fleet:main-runner" {
 		t.Fatalf("expected default container image, got %q", cfg.Runners.ContainerImage)
 	}
 }
