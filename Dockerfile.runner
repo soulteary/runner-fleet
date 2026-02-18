@@ -23,6 +23,9 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
+# For GitHub Actions
+RUN apt-get update && apt install -y build-essential git gnupg
+
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /runner -s /bin/bash app
 RUN install -m 0755 -d /app && install -m 0755 -d /runner
 COPY --from=builder /app/runner-agent /app/runner-agent
