@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../) · 中文 · [Français](../fr/) · [Deutsch](../de/) · [한국어](../ko/) · [日本語](../ja/)
 
+![](../../.github/assets/preview.jpg)
+
 - **[使用指南](guide.md)**：部署、配置、添加 Runner、安全与排障
 - **[开发与构建](development.md)**：构建、API、Makefile
 
