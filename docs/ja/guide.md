@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../guide.md) · [中文](../zh/guide.md) · [Français](../fr/guide.md) · [Deutsch](../de/guide.md) · [한국어](../ko/guide.md) · 日本語
 
+![](../../.github/assets/fleet.jpg)
+
 デプロイ、設定、Runner の追加、セキュリティはここで説明します。コントリビューター向けのビルドと API は [開発とビルド](development.md) を参照してください。
 
 ---

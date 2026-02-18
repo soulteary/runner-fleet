@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../development.md) · [中文](../zh/development.md) · Français · [Deutsch](../de/development.md) · [한국어](../ko/development.md) · [日本語](../ja/development.md)
 
+![](../../.github/assets/fleet.jpg)
+
 En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](guide.md). Ce document est pour les contributeurs : build et débogage locaux.
 
 ## Prérequis

@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../development.md) · [中文](../zh/development.md) · [Français](../fr/development.md) · Deutsch · [한국어](../ko/development.md) · [日本語](../ja/development.md)
 
+![](../../.github/assets/fleet.jpg)
+
 Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](guide.md). Dieses Dokument ist für Mitwirkende: lokaler Build und Debug.
 
 ## Anforderungen

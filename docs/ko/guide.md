@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../guide.md) · [中文](../zh/guide.md) · [Français](../fr/guide.md) · [Deutsch](../de/guide.md) · 한국어 · [日本語](../ja/guide.md)
 
+![](../../.github/assets/fleet.jpg)
+
 배포, 설정, Runner 추가, 보안은 여기서 다룹니다. 기여자용 빌드 및 API는 [개발 및 빌드](development.md)를 참조하세요.
 
 ---

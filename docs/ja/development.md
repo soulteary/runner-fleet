@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../development.md) · [中文](../zh/development.md) · [Français](../fr/development.md) · [Deutsch](../de/development.md) · [한국어](../ko/development.md) · 日本語
 
+![](../../.github/assets/fleet.jpg)
+
 本番環境ではコンテナデプロイを使用してください。[ユーザーガイド](guide.md) を参照。このドキュメントはコントリビューター向け: ローカルビルドとデバッグです。
 
 ## 要件
