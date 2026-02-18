@@ -214,7 +214,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	if cfg.Runners.ContainerMode && strings.TrimSpace(cfg.Runners.VolumeHostPath) == "" {
 		baseClean := filepath.Clean(cfg.Runners.BasePath)
 		if strings.HasPrefix(baseClean, "/app") || strings.HasPrefix(filepath.Clean(installDir), "/app") {
-			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
+			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config/config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
 		}
 	}
 	img := cfg.Runners.ContainerImage

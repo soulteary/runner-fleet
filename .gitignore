@@ -9,7 +9,7 @@
 # **/.github_check_token
 
 # 本地配置（若含敏感信息建议加入）
-config.yaml
+config/config.yaml
 .env
 
 # IDE

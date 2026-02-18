@@ -30,7 +30,7 @@ Templates are embedded in the Manager binary (`cmd/runner-manager/templates/`); 
 ## Local run & debug
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 go run ./cmd/runner-manager
 # Or make run (build then run); custom config: ./runner-manager -config /path/to/config.yaml
 ```

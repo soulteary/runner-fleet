@@ -1,5 +1,5 @@
-# 示例配置。使用前请复制为 config.yaml 后按需修改。
-#   cp config.yaml.example config.yaml
+# 示例配置。使用前请复制为 config/config.yaml 后按需修改。
+#   mkdir -p config && cp config.yaml.example config/config.yaml
 # 详细字段说明见 docs/config.md
 #
 # Docker / docker-compose：请将 runners.base_path 改为 /app/runners（与镜像内卷挂载一致）

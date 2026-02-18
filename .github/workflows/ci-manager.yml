@@ -91,14 +91,14 @@ jobs:
 
       - name: Init example config
         if: steps.modroot.outputs.found == 'true'
-        run: cp config.yaml.example config.yaml
+        run: mkdir -p config && cp config.yaml.example config/config.yaml
         working-directory: ${{ steps.modroot.outputs.root }}
 
       - name: Verify binary
         if: steps.modroot.outputs.found == 'true'
         run: |
           ./runner-manager -version
-          ./runner-manager -config config.yaml &
+          ./runner-manager -config config/config.yaml &
           PID=$!
           trap "kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true" EXIT
           for i in 1 2 3 4 5; do sleep 1; curl -sf http://localhost:8080/health | grep -q '"status":"ok"' && break; done

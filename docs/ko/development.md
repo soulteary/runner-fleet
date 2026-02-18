@@ -30,7 +30,7 @@ go build -o runner-agent ./cmd/runner-agent
 ## 로컬 실행 및 디버그
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 go run ./cmd/runner-manager
 # 또는 make run (빌드 후 실행); 사용자 설정: ./runner-manager -config /path/to/config.yaml
 ```

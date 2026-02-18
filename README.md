@@ -29,9 +29,9 @@ HTTP management UI built with Golang Echo to view and manage multiple self-hoste
 ## Quick start
 
 ```bash
-cp config.yaml.example config.yaml
-# Edit config.yaml: set runners.base_path to /app/runners
-# On host: mkdir -p runners && chown 1001:1001 config.yaml runners
+mkdir -p config && cp config.yaml.example config/config.yaml
+# Edit config/config.yaml: set runners.base_path to /app/runners
+# On host: mkdir -p runners && chown 1001:1001 config runners
 
 docker network create runner-net 2>/dev/null || true
 docker compose up -d

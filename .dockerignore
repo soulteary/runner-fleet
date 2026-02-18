@@ -8,7 +8,7 @@
 /runner-agent
 *.exe
 runners
-config.yaml
+config/config.yaml
 .env
 *.test
 *.out

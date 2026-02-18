@@ -30,7 +30,7 @@ go build -o runner-agent ./cmd/runner-agent
 ## ローカル実行とデバッグ
 
 ```bash
-cp config.yaml.example config.yaml
+mkdir -p config && cp config.yaml.example config/config.yaml
 go run ./cmd/runner-manager
 # または make run（ビルドしてから実行）; 設定ファイル指定: ./runner-manager -config /path/to/config.yaml
 ```
