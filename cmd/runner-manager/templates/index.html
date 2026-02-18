@@ -89,6 +89,10 @@
     .btn-start:hover { opacity: 0.9; }
     .btn-stop { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(248, 81, 73, 0.2); color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; cursor: pointer; }
     .btn-stop:hover { opacity: 0.9; }
+    .btn-save { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(88, 166, 255, 0.2); color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; cursor: pointer; }
+    .btn-save:hover { opacity: 0.9; }
+    .btn-edit-primary { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(210, 153, 34, 0.2); color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; cursor: pointer; }
+    .btn-edit-primary:hover { opacity: 0.9; }
     .modal-overlay {
       display: none;
       position: fixed;
@@ -111,8 +115,17 @@
     }
     .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .modal-header h3 { margin: 0; font-size: 1rem; }
-    .modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
-    .modal-close:hover { color: var(--text); }
+    .modal-close {
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-right: 6px;
+      background: rgba(139, 148, 158, 0.15);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: var(--text); border-color: var(--text); opacity: 0.9; }
     .modal-body { padding: 20px; }
     .modal-body .row { margin-bottom: 12px; }
     .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
@@ -158,10 +171,10 @@
     }
     .parse-box label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
     .parse-box code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-    .parse-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .parse-row { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
     .parse-row textarea {
-      flex: 1;
-      min-width: 280px;
+      width: 100%;
+      min-width: 0;
       padding: 10px 12px;
       background: var(--bg);
       border: 1px solid var(--border);
@@ -171,6 +184,7 @@
       font-size: 13px;
       resize: vertical;
     }
+    .parse-btn-row { align-self: flex-start; }
     .btn-parse {
       padding: 10px 16px;
       background: var(--accent);
@@ -276,8 +290,12 @@
     <div class="parse-box">
       <label>{{index .T "parse.label"}}</label>
       <div class="parse-row">
-        <textarea id="githubCommandInput" rows="3" placeholder="{{index .T "parse.placeholder"}}"></textarea>
-        <button type="button" id="parseCommandBtn" class="btn-parse">{{index .T "parse.btn"}}</button>
+        <div>
+          <textarea id="githubCommandInput" rows="3" placeholder="{{index .T "parse.placeholder"}}"></textarea>
+        </div>
+        <div class="parse-btn-row">
+          <button type="button" id="parseCommandBtn" class="btn-parse">{{index .T "parse.btn"}}</button>
+        </div>
       </div>
       <div id="parseMsg" class="parse-msg"></div>
     </div>
@@ -297,7 +315,9 @@
       <input name="labelsStr" id="addFormLabelsStr" placeholder="{{index .T "form.labels_placeholder"}}">
       <label>{{index .T "form.token_label"}}</label>
       <input name="registration_token" id="addFormToken" type="password" placeholder="{{index .T "form.token_placeholder"}}">
-      <button type="submit">{{index .T "form.submit"}}</button>
+      <div>
+        <button type="submit">{{index .T "form.submit"}}</button>
+      </div>
     </form>
     <div id="addMsgWrap" class="msg-wrap" style="display: none;">
       <div id="addMsg" class="msg"></div>
@@ -346,8 +366,8 @@
           <button type="button" id="modalStartBtnFooter" class="btn-start" style="display:none">{{index .T "modal.btn_start"}}</button>
           <button type="button" id="modalStopBtnFooter" class="btn-stop" style="display:none">{{index .T "modal.btn_stop"}}</button>
         </span>
-        <button type="button" id="modalEditBtn" style="display:none">{{index .T "modal.btn_edit"}}</button>
-        <button type="button" id="modalSaveBtn" style="display:none">{{index .T "modal.btn_save"}}</button>
+        <button type="button" id="modalEditBtn" class="btn-edit-primary" style="display:none">{{index .T "modal.btn_edit"}}</button>
+        <button type="button" id="modalSaveBtn" class="btn-save" style="display:none">{{index .T "modal.btn_save"}}</button>
         <button type="button" class="modal-close" id="modalCancelBtn">{{index .T "modal.btn_close"}}</button>
       </div>
     </div>
@@ -649,6 +669,7 @@
     document.getElementById('modalClose').addEventListener('click', closeModal);
     document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
 
     document.getElementById('modalEditBtn').addEventListener('click', () => {
       const name = document.getElementById('vName').textContent;
