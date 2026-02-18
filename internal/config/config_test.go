@@ -273,6 +273,10 @@ runners:
 }
 
 func TestLoad_ContainerImageWhitespaceUsesDefault(t *testing.T) {
+	// 未设置 FLEET_IMAGE_TAG 时默认使用 v1.0.0-runner
+	restore := setEnvAndRestore(t, "FLEET_IMAGE_TAG", "")
+	defer restore()
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	content := []byte(`
@@ -290,8 +294,65 @@ runners:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Runners.ContainerImage != "ghcr.io/soulteary/runner-fleet:main-runner" {
-		t.Fatalf("expected default container image, got %q", cfg.Runners.ContainerImage)
+	want := "ghcr.io/soulteary/runner-fleet:v1.0.0-runner"
+	if cfg.Runners.ContainerImage != want {
+		t.Fatalf("expected default container image %q, got %q", want, cfg.Runners.ContainerImage)
+	}
+}
+
+// setEnvAndRestore 设置环境变量并返回用于恢复的 defer 函数；空 value 表示 Unsetenv
+func setEnvAndRestore(t *testing.T, key, value string) func() {
+	t.Helper()
+	old, had := os.LookupEnv(key)
+	if value == "" {
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+		return func() {
+			if had {
+				_ = os.Setenv(key, old)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		}
+	}
+	if err := os.Setenv(key, value); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if had {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	}
+}
+
+func TestLoad_ContainerImageDefaultWithFleetImageTag(t *testing.T) {
+	// 设置 FLEET_IMAGE_TAG=main 时默认使用 main-runner
+	restore := setEnvAndRestore(t, "FLEET_IMAGE_TAG", "main")
+	defer restore()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+server: {}
+runners:
+  container_mode: true
+  container_image: ""
+  job_docker_backend: dind
+  volume_host_path: /tmp/runners
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "ghcr.io/soulteary/runner-fleet:main-runner"
+	if cfg.Runners.ContainerImage != want {
+		t.Fatalf("expected container image %q when FLEET_IMAGE_TAG=main, got %q", want, cfg.Runners.ContainerImage)
 	}
 }
 

@@ -15,8 +15,10 @@ Bereitstellung, Konfiguration, Hinzufügen von Runnern und Sicherheit werden hie
 
 ### Veröffentlichtes Image verwenden (empfohlen)
 
+Produktion: konkrete Version verwenden (z. B. v1.0.0). Für Entwicklung kann der Tag `main` genutzt werden.
+
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:main
+docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
 
 ### docker-compose Schnellstart
@@ -46,7 +48,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config.yaml:/app/config.yaml \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:main
+  ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
 
 Host-Verzeichnisse müssen für UID 1001 schreibbar sein. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Für Docker in Jobs `-v /var/run/docker.sock:/var/run/docker.sock` hinzufügen oder DinD nutzen (siehe Repo `docker-compose.yml`, `--profile dind`). Das Image enthält die Docker-CLI; gängige Actions funktionieren mit DinD.
@@ -71,7 +73,7 @@ In **config.yaml** aktivieren (siehe `config.yaml.example`):
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:main-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.0.0-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -79,7 +81,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner-Image: gleicher Name wie Manager mit Tag `-runner`, oder lokal bauen: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .`. Der Manager muss Host-Docker verwenden (Mount von `docker.sock`), nicht DinD über `DOCKER_HOST`; in Compose `group_add` für Host-Docker-GID oder `user: "0:0"` verwenden. Runner-Namen werden zu Containernamen normalisiert; Duplikate nach dem Mapping kollidieren.
+Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z. B. v1.0.0-runner; Entwicklung: main-runner), oder lokal bauen: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`. Der Manager muss Host-Docker verwenden (Mount von `docker.sock`), nicht DinD über `DOCKER_HOST`; in Compose `group_add` für Host-Docker-GID oder `user: "0:0"` verwenden. Runner-Namen werden zu Containernamen normalisiert; Duplikate nach dem Mapping kollidieren.
 
 ### Fehlerbehebung
 
@@ -92,7 +94,7 @@ Runner-Image: gleicher Name wie Manager mit Tag `-runner`, oder lokal bauen: `do
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:main-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -112,7 +114,7 @@ cp config.yaml.example config.yaml
 | `runners.base_path` | Wurzelpfad der Runner-Installationsverzeichnisse; **in Container auf `/app/runners` setzen** | `./runners` |
 | `runners.items` | Vordefinierte Runner-Liste | Kann auch über die Web-UI hinzugefügt werden |
 | `runners.container_mode` | Containermodus aktivieren | `false` |
-| `runners.container_image` | Runner-Image im Containermodus (Tag -runner) | `ghcr.io/soulteary/runner-fleet:main-runner` |
+| `runners.container_image` | Runner-Image im Containermodus (Tag -runner) | `ghcr.io/soulteary/runner-fleet:v1.0.0-runner` |
 | `runners.container_network` | Netzwerk für Runner im Containermodus | `runner-net` |
 | `runners.agent_port` | Agent-Port im Container | `8081` |
 | `runners.job_docker_backend` | Docker in Jobs: `dind` / `host-socket` / `none` | `dind` |

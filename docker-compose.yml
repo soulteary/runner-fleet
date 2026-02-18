@@ -11,7 +11,7 @@
 # 5. 若启用容器模式（runners.container_mode: true）：
 #      - 取消 config.yaml 中 container_mode 等注释
 #      - 设置 volume_host_path 为宿主机 runners 绝对路径（例如：realpath runners 或 $(cd . && pwd)/runners）
-#      - 设置 container_image 为 CI 推送的 ghcr.io/<owner>/<repo>:main-runner（与 Manager 同镜像名，tag 带 -runner），或本地构建的镜像 tag
+#      - 不填 container_image 时由 FLEET_IMAGE_TAG 或默认 v1.0.0 生成；或显式设 container_image 为 ghcr.io/<owner>/<repo>:v1.0.0-runner 等
 #      - Manager 需能访问宿主机 Docker（创建/启停 Runner 容器）：下方已配置 group_add，请将 999 改为宿主机 docker 组 GID（getent group docker | cut -d: -f3）；或改用 user: "0:0" 以 root 运行
 #
 # === 两种运行模式 ===
@@ -38,8 +38,8 @@ services:
     restart: unless-stopped
 
   runner-manager:
-    # 使用本仓库 CI 镜像时可设 .env：MANAGER_IMAGE=ghcr.io/<owner>/<repo>:main
-    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:main}
+    # 默认使用稳定版 v1.0.0；开发/尝鲜可设 .env：MANAGER_IMAGE=ghcr.io/soulteary/runner-fleet:main
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.0.0}
     container_name: runner-manager
     # 使用 job_docker_backend: dind 时请先启动 DinD：docker compose --profile dind up -d
     # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375

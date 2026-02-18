@@ -2,8 +2,8 @@
 BINARY  := runner-manager
 VERSION ?= dev
 
-# 本地构建 Runner 镜像的默认 tag；使用 CI 推送的镜像时为同仓库名、tag 带 -runner，如 ghcr.io/<owner>/<repo>:main-runner
-RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet:main-runner
+# 本地构建 Runner 镜像的默认 tag；使用 CI 推送的镜像时为同仓库名、tag 带 -runner，如 ghcr.io/<owner>/<repo>:v1.0.0-runner
+RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet:v1.0.0-runner
 
 .PHONY: build build-agent build-all test run docker-build docker-build-runner docker-run docker-stop clean help
 
