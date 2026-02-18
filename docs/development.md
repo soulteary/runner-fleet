@@ -1,5 +1,7 @@
 # 开发与构建
 
+生产环境请使用容器部署，见 [使用指南](guide.md)。本文档面向贡献者本地构建与调试。
+
 ## 环境要求
 
 - Go 1.26（与 [go.mod](../go.mod) 一致）。
@@ -21,28 +23,15 @@ go build -o runner-agent ./cmd/runner-agent
 
 模板已通过 `embed` 内嵌于 Manager 二进制（`cmd/runner-manager/templates/`），可执行文件可单文件分发，无需附带 `templates/` 目录。
 
-## 本地开发
+## 本地开发与调试
 
 ```bash
-# 需先有 config.yaml（可 cp config.yaml.example config.yaml）
+cp config.yaml.example config.yaml
 go run ./cmd/runner-manager
-
-# 或：先 build 再运行
-make run
+# 或 make run（先 build 再运行）；指定配置：./runner-manager -config /path/to/config.yaml
 ```
 
-## 运行
-
-```bash
-# 使用当前目录 config.yaml
-./runner-manager
-
-# 指定配置文件
-./runner-manager -config /path/to/config.yaml
-```
-
-默认监听 `:8080`，浏览器打开 http://localhost:8080 使用管理界面。
-本地需验证 Basic Auth 时，可设置环境变量后启动，例如：`BASIC_AUTH_PASSWORD=你的密码 go run ./cmd/runner-manager`（详见 [安全与校验](security.md)）。
+默认监听 `:8080`，http://localhost:8080。Basic Auth 调试：`BASIC_AUTH_PASSWORD=密码 go run ./cmd/runner-manager`，见 [使用指南 - 安全与校验](guide.md#四安全与校验)。
 
 ## 命令行参数
 
@@ -64,17 +53,7 @@ make run
 
 ### 升级注意（破坏性变更）
 
-- 探测失败相关的历史扁平字段（`probe_error`、`probe_error_type`、`probe_suggestion`、`probe_check_command`、`probe_fix_command`）已移除。
-- 调用方需统一读取 `probe` 对象：
-  - 错误文本：`probe.error`
-  - 错误类型：`probe.type`
-  - 建议与命令：`probe.suggestion`、`probe.check_command`、`probe.fix_command`
-- 若你有自定义前端、告警或脚本，请将解析逻辑从 `probe_*` 切换到 `probe.*`。
-
-WebUI 在 `status=unknown` 时会保留「启动 / 停止」手动操作入口，便于运维在探测异常时执行自愈动作。
-`probe.type` 目前可能值：`docker-access`、`agent-http`、`agent-connect`、`unknown`。
-WebUI 优先展示后端返回的 `probe` 字段（后端为建议与命令单点来源），前端仅保留兜底通用提示。
-WebUI 会将命令拆分为「检查命令（只读）」与「修复命令（有副作用）」，默认建议先执行检查命令；修复命令需要二次确认后才显示。两类命令都支持一键复制（仅复制，不执行），并带浏览器权限受限时的回退复制逻辑。
+历史扁平字段 `probe_*` 已移除，请统一使用 `probe` 对象：`probe.error`、`probe.type`、`probe.suggestion`、`probe.check_command`、`probe.fix_command`。`probe.type` 可能值：`docker-access`、`agent-http`、`agent-connect`、`unknown`。WebUI 在 `status=unknown` 时仍可「启动/停止」自愈。
 
 示例（探测失败）：
 
@@ -100,10 +79,10 @@ WebUI 会将命令拆分为「检查命令（只读）」与「修复命令（�
 - `make build-all`：同时构建 Manager 与 Agent。
 - `make test`：运行测试。
 - `make run`：先 build 再运行 Manager。
-- `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [Docker 部署](docker.md)。
+- `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [使用指南](guide.md)。
 - `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。
 - `make clean`：删除生成的二进制（runner-manager、runner-agent）。
 
-容器模式下 Runner 容器内运行的是 `cmd/runner-agent` 编译出的 Agent，仅构建 Manager 时不会包含该二进制；Runner 镜像单独用 `Dockerfile.runner` 构建。
+容器模式用的 Agent 为 `cmd/runner-agent`，Runner 镜像用 `Dockerfile.runner` 单独构建。
 
-[← 返回文档索引](README.md)
+[← 返回文档](README.md)
