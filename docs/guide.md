@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](README.md) · [中文](zh/) · [Français](fr/) · [Deutsch](de/) · [한국어](ko/) · [日本語](ja/)
 
+![](../.github/assets/fleet.jpg)
+
 Deployment, configuration, adding runners, and security are covered here. For contributor build and API details see [Development & Build](development.md).
 
 ---

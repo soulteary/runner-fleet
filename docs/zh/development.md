@@ -2,6 +2,8 @@
 
 **文档 / Docs:** [EN](../development.md) · 中文 · [Français](../fr/development.md) · [Deutsch](../de/development.md) · [한국어](../ko/development.md) · [日本語](../ja/development.md)
 
+![](../../.github/assets/fleet.jpg)
+
 生产环境请使用容器部署，见 [使用指南](guide.md)。本文档面向贡献者本地构建与调试。
 
 ## 环境要求
