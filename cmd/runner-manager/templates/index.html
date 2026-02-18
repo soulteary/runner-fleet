@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{.Lang}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Runner Fleet - GitHub Actions Runner 管理</title>
+  <title>{{index .T "page.title"}}</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -194,20 +194,30 @@
   </style>
 </head>
 <body>
-  <h1>Runner Fleet - GitHub Actions Runner 管理</h1>
+  <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
+    <h1 style="margin: 0;">{{index .T "page.h1"}}</h1>
+    <select id="langSelect" style="padding: 6px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer;">
+      <option value="en" {{if eq .Lang "en"}}selected{{end}}>English</option>
+      <option value="zh" {{if eq .Lang "zh"}}selected{{end}}>中文</option>
+      <option value="fr" {{if eq .Lang "fr"}}selected{{end}}>Français</option>
+      <option value="de" {{if eq .Lang "de"}}selected{{end}}>Deutsch</option>
+      <option value="ko" {{if eq .Lang "ko"}}selected{{end}}>한국어</option>
+      <option value="ja" {{if eq .Lang "ja"}}selected{{end}}>日本語</option>
+    </select>
+  </div>
 
   <div class="card">
-    <h2>Runner 列表</h2>
-    <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">「注册结果」由添加时若填写 Token 执行注册并写入。「GitHub 显示」由定时任务约每 5 分钟检查（可选：在该 runner 目录下放置 <code>.github_check_token</code> 后即会检查）。</p>
+    <h2>{{index .T "runner_list.title"}}</h2>
+    <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">{{index .T "runner_list.hint"}}</p>
     <table>
       <thead>
         <tr>
-          <th>名称</th>
-          <th>目标</th>
-          <th>状态</th>
-          {{if .Config.Runners.ContainerMode}}<th>Docker 后端</th>{{end}}
-          <th>注册 / GitHub</th>
-          <th>安装目录</th>
+          <th>{{index .T "runner_list.table.name"}}</th>
+          <th>{{index .T "runner_list.table.target"}}</th>
+          <th>{{index .T "runner_list.table.status"}}</th>
+          {{if .Config.Runners.ContainerMode}}<th>{{index .T "runner_list.table.docker_backend"}}</th>{{end}}
+          <th>{{index .T "runner_list.table.reg_github"}}</th>
+          <th>{{index .T "runner_list.table.install_dir"}}</th>
           <th></th>
         </tr>
       </thead>
@@ -218,154 +228,158 @@
           <td>{{.TargetType}}: {{.Target}}</td>
           <td>
             <span class="badge {{.Status}}">{{.Status}}</span>
-            {{if .Running}}<span class="badge running">运行中</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">探测失败{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
+            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
           </td>
           {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
             {{if .RegistrationMessage}}
-              <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}已注册{{else}}注册失败{{end}}</span>
+              <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
             {{else}}
               <span class="github-unknown">—</span>
             {{end}}
             {{if .GitHubCheckAt}}
               {{if .RegisteredOnGitHub}}
-                <br><span class="github-yes">GitHub ✓</span>
+                <br><span class="github-yes">{{index $.T "github.yes"}}</span>
               {{else}}
-                <br><span class="github-no">GitHub 未显示</span>
+                <br><span class="github-no">{{index $.T "github.no"}}</span>
               {{end}}
             {{else}}
               {{if .RegistrationMessage}}
-                <br><span class="github-unknown">GitHub 待检查（可选）</span>
+                <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
               {{end}}
             {{end}}
           </td>
           <td class="path">{{.InstallDir}}</td>
           <td>
-            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="启动 Runner">启动</button>{{end}}
-            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="停止 Runner">停止</button>{{end}}
+            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
+            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
             {{if eq .Status "unknown"}}
-            <button type="button" class="btn-start" data-name="{{.Name}}" title="状态探测失败，尝试启动 Runner">启动</button>
-            <button type="button" class="btn-stop" data-name="{{.Name}}" title="状态探测失败，尝试停止 Runner">停止</button>
+            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
+            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
             {{end}}
-            <button type="button" class="btn-view" data-name="{{.Name}}" title="查看配置">查看</button>
-            <button type="button" class="btn-edit" data-name="{{.Name}}" title="编辑配置">编辑</button>
-            <button type="button" class="btn-del" data-name="{{.Name}}" title="从配置中移除">删除</button>
+            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
+            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
+            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
           </td>
         </tr>
         {{end}}
         {{if not .Runners}}
-        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">暂无 Runner，请在下方添加。</td></tr>
+        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
         {{end}}
       </tbody>
     </table>
   </div>
 
   <div class="card">
-    <h2>快速添加 Runner</h2>
+    <h2>{{index .T "form.quick_add"}}</h2>
     <div class="parse-box">
-      <label>从 GitHub 复制命令解析（粘贴 <code>./config.sh --url ... --token ...</code> 后点击解析）</label>
+      <label>{{index .T "parse.label"}}</label>
       <div class="parse-row">
-        <textarea id="githubCommandInput" rows="3" placeholder="./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN"></textarea>
-        <button type="button" id="parseCommandBtn" class="btn-parse">解析并填充</button>
+        <textarea id="githubCommandInput" rows="3" placeholder="{{index .T "parse.placeholder"}}"></textarea>
+        <button type="button" id="parseCommandBtn" class="btn-parse">{{index .T "parse.btn"}}</button>
       </div>
       <div id="parseMsg" class="parse-msg"></div>
     </div>
     <form id="addForm">
-      <label>名称 (name) *</label>
-      <input name="name" id="addFormName" required placeholder="例如 runner-1">
-      <label>子路径 (path，可选，默认用名称)</label>
-      <input name="path" id="addFormPath" placeholder="例如 runner-1">
-      <label>目标类型 (target_type) *</label>
+      <label>{{index .T "form.name_label"}}</label>
+      <input name="name" id="addFormName" required placeholder="{{index .T "form.name_placeholder"}}">
+      <label>{{index .T "form.path_label"}}</label>
+      <input name="path" id="addFormPath" placeholder="{{index .T "form.path_placeholder"}}">
+      <label>{{index .T "form.target_type_label"}}</label>
       <select name="target_type" id="addFormTargetType" required>
-        <option value="org">组织 (org)</option>
-        <option value="repo">仓库 (repo)</option>
+        <option value="org">{{index .T "form.target_type_org"}}</option>
+        <option value="repo">{{index .T "form.target_type_repo"}}</option>
       </select>
-      <label>目标 (target) *</label>
-      <input name="target" id="addFormTarget" required placeholder="组织名 或 owner/repo">
-      <label>标签 (labels，逗号分隔，可选)</label>
-      <input name="labelsStr" id="addFormLabelsStr" placeholder="self-hosted, linux, x64">
-      <label>注册 Token（可选，从 GitHub 设置 → Actions → Runners → Add new 复制，1 小时有效；<strong>每添加一个 Runner 请使用新生成的 Token</strong>）</label>
-      <input name="registration_token" id="addFormToken" type="password" placeholder="选填；填写后将自动安装（Docker 下）并注册、启动">
-      <button type="submit">添加 Runner</button>
+      <label>{{index .T "form.target_label"}}</label>
+      <input name="target" id="addFormTarget" required placeholder="{{index .T "form.target_placeholder"}}">
+      <label>{{index .T "form.labels_label"}}</label>
+      <input name="labelsStr" id="addFormLabelsStr" placeholder="{{index .T "form.labels_placeholder"}}">
+      <label>{{index .T "form.token_label"}}</label>
+      <input name="registration_token" id="addFormToken" type="password" placeholder="{{index .T "form.token_placeholder"}}">
+      <button type="submit">{{index .T "form.submit"}}</button>
     </form>
     <div id="addMsgWrap" class="msg-wrap" style="display: none;">
       <div id="addMsg" class="msg"></div>
-      <div class="msg-wrap-actions"><button type="button" class="btn-close-msg" id="addMsgClose">关闭</button></div>
+      <div class="msg-wrap-actions"><button type="button" class="btn-close-msg" id="addMsgClose">{{index .T "msg.close"}}</button></div>
     </div>
   </div>
 
   <div id="runnerModal" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
-        <h3 id="modalTitle">Runner 配置</h3>
+        <h3 id="modalTitle">{{index .T "modal.title"}}</h3>
         <button type="button" class="modal-close" id="modalClose">&times;</button>
       </div>
       <div class="modal-body">
         <div id="modalView">
-          <div class="row"><label>名称</label><div class="val" id="vName"></div></div>
-          <div class="row"><label>子路径</label><div class="val" id="vPath"></div></div>
-          <div class="row"><label>目标类型</label><div class="val" id="vTargetType"></div></div>
-          <div class="row"><label>目标</label><div class="val" id="vTarget"></div></div>
-          <div class="row"><label>标签</label><div class="val" id="vLabels"></div></div>
-          <div class="row"><label>安装目录</label><div class="val path" id="vInstallDir"></div></div>
-          <div class="row" id="vJobDockerBackendRow" style="display:none"><label>Docker 后端</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
-          <div class="row"><label>状态</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
-          <div class="row"><label>探测错误类型</label><div class="val" id="vProbeErrorType"></div></div>
-          <div class="row"><label>建议操作</label><div class="val" id="vProbeSuggestion"></div></div>
-          <div class="row"><label>检查命令（只读）</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">复制命令</button><span id="vProbeCheckCommand"></span></div></div>
-          <div class="row"><label>修复命令（有副作用）</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">显示修复命令</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">复制命令</button><span id="vProbeFixCommand"></span></div></div>
-          <div class="row"><label>探测错误</label><div class="val" id="vProbeError"></div></div>
-          <div class="row"><label>注册结果</label><div class="val" id="vRegistrationMessage"></div></div>
-          <div class="row"><label>注册检查时间</label><div class="val" id="vRegistrationCheckedAt"></div></div>
-          <div class="row"><label>GitHub 显示</label><div class="val" id="vRegisteredOnGitHub"></div></div>
-          <div class="row"><label>GitHub 检查时间</label><div class="val" id="vGitHubCheckAt"></div></div>
+          <div class="row"><label>{{index .T "modal.label_name"}}</label><div class="val" id="vName"></div></div>
+          <div class="row"><label>{{index .T "modal.label_path"}}</label><div class="val" id="vPath"></div></div>
+          <div class="row"><label>{{index .T "modal.label_target_type"}}</label><div class="val" id="vTargetType"></div></div>
+          <div class="row"><label>{{index .T "modal.label_target"}}</label><div class="val" id="vTarget"></div></div>
+          <div class="row"><label>{{index .T "modal.label_labels"}}</label><div class="val" id="vLabels"></div></div>
+          <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
+          <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
+          <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+          <div class="row"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
+          <div class="row"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
+          <div class="row"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
+          <div class="row"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
+          <div class="row"><label>{{index .T "modal.label_probe_error"}}</label><div class="val" id="vProbeError"></div></div>
+          <div class="row"><label>{{index .T "modal.label_reg_result"}}</label><div class="val" id="vRegistrationMessage"></div></div>
+          <div class="row"><label>{{index .T "modal.label_reg_checked_at"}}</label><div class="val" id="vRegistrationCheckedAt"></div></div>
+          <div class="row"><label>{{index .T "modal.label_github_display"}}</label><div class="val" id="vRegisteredOnGitHub"></div></div>
+          <div class="row"><label>{{index .T "modal.label_github_check_at"}}</label><div class="val" id="vGitHubCheckAt"></div></div>
         </div>
         <form id="modalEditForm" style="display:none">
           <input type="hidden" name="name" id="eName">
-          <div class="row"><label>名称</label><input type="text" name="nameDisplay" id="eNameDisplay" readonly style="opacity:0.8"></div>
-          <div class="row"><label>子路径 (path)</label><input type="text" name="path" id="ePath" placeholder="可选"></div>
-          <div class="row"><label>目标类型 (target_type) *</label><select name="target_type" id="eTargetType" required><option value="org">组织 (org)</option><option value="repo">仓库 (repo)</option></select></div>
-          <div class="row"><label>目标 (target) *</label><input type="text" name="target" id="eTarget" required placeholder="组织名 或 owner/repo"></div>
-          <div class="row"><label>标签 (labels，逗号分隔)</label><input type="text" name="labelsStr" id="eLabelsStr" placeholder="self-hosted, linux, x64"></div>
+          <div class="row"><label>{{index .T "modal.label_name"}}</label><input type="text" name="nameDisplay" id="eNameDisplay" readonly style="opacity:0.8"></div>
+          <div class="row"><label>{{index .T "modal.label_path"}}</label><input type="text" name="path" id="ePath" placeholder="{{index .T "modal.edit_path_placeholder"}}"></div>
+          <div class="row"><label>{{index .T "form.target_type_label"}}</label><select name="target_type" id="eTargetType" required><option value="org">{{index .T "form.target_type_org"}}</option><option value="repo">{{index .T "form.target_type_repo"}}</option></select></div>
+          <div class="row"><label>{{index .T "form.target_label"}}</label><input type="text" name="target" id="eTarget" required placeholder="{{index .T "modal.edit_target_placeholder"}}"></div>
+          <div class="row"><label>{{index .T "modal.label_labels"}}</label><input type="text" name="labelsStr" id="eLabelsStr" placeholder="{{index .T "modal.edit_labels_placeholder"}}"></div>
         </form>
         <div id="modalMsg" class="msg" style="display:none; margin-top:12px"></div>
       </div>
       <div class="modal-footer" id="modalFooter">
         <span id="modalStartStopSpan" style="display:none; margin-right: auto;">
-          <button type="button" id="modalStartBtnFooter" class="btn-start" style="display:none">启动</button>
-          <button type="button" id="modalStopBtnFooter" class="btn-stop" style="display:none">停止</button>
+          <button type="button" id="modalStartBtnFooter" class="btn-start" style="display:none">{{index .T "modal.btn_start"}}</button>
+          <button type="button" id="modalStopBtnFooter" class="btn-stop" style="display:none">{{index .T "modal.btn_stop"}}</button>
         </span>
-        <button type="button" id="modalEditBtn" style="display:none">编辑</button>
-        <button type="button" id="modalSaveBtn" style="display:none">保存</button>
-        <button type="button" class="modal-close" id="modalCancelBtn">关闭</button>
+        <button type="button" id="modalEditBtn" style="display:none">{{index .T "modal.btn_edit"}}</button>
+        <button type="button" id="modalSaveBtn" style="display:none">{{index .T "modal.btn_save"}}</button>
+        <button type="button" class="modal-close" id="modalCancelBtn">{{index .T "modal.btn_close"}}</button>
       </div>
     </div>
   </div>
 
   <script>
-    // 解析 GitHub config.sh 命令，填充到添加 Runner 表单
-    // 与后端 isValidNameOrPath 一致：不允许含 .. / \
+    window.__I18N = {{.TJSON}};
+    function t(key) { return (window.__I18N && window.__I18N[key]) || key; }
+    document.getElementById('langSelect').addEventListener('change', function() {
+      var lang = this.value;
+      document.cookie = 'lang=' + encodeURIComponent(lang) + ';path=/;max-age=31536000';
+      location.reload();
+    });
+    // Parse GitHub config.sh command and fill add-runner form
     function sanitizeRunnerName(s) {
       if (!s || typeof s !== 'string') return '';
       return s.replace(/\.\./g, '').replace(/[/\\]/g, '-').trim() || 'runner';
     }
 
     function parseGitHubConfigCommand(text) {
-      if (!text || typeof text !== 'string') return { ok: false, message: '请输入命令' };
+      if (!text || typeof text !== 'string') return { ok: false, message: t('parse.please_enter_command') };
       const trimmed = text.trim();
-      // 匹配 --url <URL> 和 --token <TOKEN>（兼容多余空格、换行、引号）
       const urlMatch = trimmed.match(/\-\-url\s+["']?([^\s"']+)["']?/);
       const tokenMatch = trimmed.match(/\-\-token\s+["']?([^\s"']+)["']?/);
-      if (!urlMatch) return { ok: false, message: '未找到 --url 参数' };
+      if (!urlMatch) return { ok: false, message: t('parse.no_url') };
       const url = urlMatch[1].trim();
       let parsedUrl;
       try {
         parsedUrl = new URL(url);
       } catch (e) {
-        return { ok: false, message: 'URL 格式无效' };
+        return { ok: false, message: t('parse.invalid_url') };
       }
-      // pathname 不含 query/hash，支持 GitHub 与 GitHub Enterprise
       const pathParts = parsedUrl.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
       let targetType = 'org';
       let target = '';
@@ -378,7 +392,7 @@
         target = pathParts[0];
         suggestedName = sanitizeRunnerName(pathParts[0]);
       } else {
-        return { ok: false, message: '无法从 URL 解析出组织或仓库' };
+        return { ok: false, message: t('parse.cannot_parse') };
       }
       const token = tokenMatch ? tokenMatch[1].trim() : '';
       return {
@@ -409,7 +423,8 @@
         document.getElementById('addFormPath').value = '';
       }
       msgEl.className = 'parse-msg ok';
-      msgEl.textContent = '已填充：目标类型 ' + result.target_type + '，目标 ' + result.target + (result.registration_token ? '，Token 已填入' : '');
+      var filled = t('parse.filled').replace('{{target_type}}', result.target_type).replace('{{target}}', result.target).replace('{{token_part}}', result.registration_token ? t('parse.filled_token') : '');
+      msgEl.textContent = filled;
     });
 
     document.getElementById('addForm').addEventListener('submit', async (e) => {
@@ -425,7 +440,7 @@
       const msgWrap = document.getElementById('addMsgWrap');
       const submitBtn = e.target.querySelector('button[type="submit"]');
       msgWrap.style.display = 'none';
-      msgEl.innerHTML = '正在添加并注册 Runner，请稍候…';
+      msgEl.innerHTML = t('msg.adding');
       msgEl.className = 'msg';
       msgWrap.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
@@ -442,7 +457,7 @@
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
           msgEl.className = 'msg err';
-          msgEl.textContent = data.message || r.statusText || '请求失败';
+          msgEl.textContent = data.message || r.statusText || t('msg.request_failed');
           if (submitBtn) submitBtn.disabled = false;
           msgWrap.style.display = 'block';
           return;
@@ -451,7 +466,7 @@
         msgEl.innerHTML = data.message + (data.install_dir ? '<br><span class="path">' + data.install_dir + '</span>' : '');
         if (data.output) msgEl.innerHTML += '<pre style="margin-top:8px;font-size:12px">' + escapeHtml(data.output) + '</pre>';
         if (data.queued) {
-          msgEl.innerHTML += '<br><span style="font-size:12px;color:var(--muted)">5 秒后自动刷新页面</span>';
+          msgEl.innerHTML += '<br><span style="font-size:12px;color:var(--muted)">' + t('msg.reload_in_5s') + '</span>';
           setTimeout(function() { location.reload(); }, 5000);
         }
         e.target.reset();
@@ -460,7 +475,7 @@
       } catch (err) {
         if (submitBtn) submitBtn.disabled = false;
         msgEl.className = 'msg err';
-        msgEl.textContent = err.name === 'AbortError' ? '请求超时，请刷新页面查看当前状态' : (err.message || '请求失败');
+        msgEl.textContent = err.name === 'AbortError' ? t('msg.timeout_refresh') : (err.message || t('msg.request_failed'));
         msgWrap.style.display = 'block';
       }
     });
@@ -475,7 +490,7 @@
     }
     function resolveProbeSuggestion(data) {
       if (data && data.probe && data.probe.suggestion) return data.probe.suggestion;
-      return '请先尝试“停止/启动”进行自愈；若仍失败，查看 manager 与 runner 容器日志。';
+      return t('probe.default_suggestion');
     }
     function resolveProbeError(data) {
       if (data && data.probe && data.probe.error) return data.probe.error;
@@ -540,7 +555,7 @@
     function openModal(mode, name) {
       modalMsg.style.display = 'none';
       if (mode === 'view') {
-        modalTitle.textContent = '查看 Runner 配置';
+        modalTitle.textContent = t('modal.view_title');
         modalView.style.display = 'block';
         modalEditForm.style.display = 'none';
         modalEditBtn.style.display = 'inline-block';
@@ -564,7 +579,7 @@
               jdbRow.style.display = 'none';
             }
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
-            document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">运行中</span>' : '';
+            document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
             const probeError = resolveProbeError(data);
             document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
             document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
@@ -573,7 +588,7 @@
             copyCheckBtn.style.display = currentProbeCheckCommand ? 'inline-block' : 'none';
             currentProbeFixCommand = probeError ? resolveProbeFixCommand(data) : '';
             probeFixRevealed = false;
-            probeFixCmdEl.textContent = probeError ? '（默认隐藏，点击“显示修复命令”）' : '—';
+            probeFixCmdEl.textContent = probeError ? t('probe.fix_hidden_hint') : '—';
             revealFixBtn.style.display = probeError ? 'inline-block' : 'none';
             copyFixBtn.style.display = 'none';
             document.getElementById('vProbeError').textContent = probeError || '—';
@@ -581,9 +596,9 @@
             document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
             var gh = data.registered_on_github;
             var ghEl = document.getElementById('vRegisteredOnGitHub');
-            if (gh === true) ghEl.innerHTML = '<span class="github-yes">已在 GitHub 显示</span>';
-            else if (gh === false) ghEl.innerHTML = '<span class="github-no">未在 GitHub 显示</span>';
-            else ghEl.textContent = 'GitHub 显示未检查（可选：在该 runner 目录下放置 .github_check_token 后，由定时任务约每 5 分钟检查）';
+            if (gh === true) ghEl.innerHTML = '<span class="github-yes">' + t('modal.gh_yes') + '</span>';
+            else if (gh === false) ghEl.innerHTML = '<span class="github-no">' + t('modal.gh_no') + '</span>';
+            else ghEl.textContent = t('modal.gh_unchecked');
             document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');
@@ -604,10 +619,10 @@
               stopBtn.style.display = 'none';
             }
           })
-          .catch(() => { modalMsg.textContent = '加载失败'; modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
+          .catch(() => { modalMsg.textContent = t('msg.load_failed'); modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
       } else {
         document.getElementById('modalStartStopSpan').style.display = 'none';
-        modalTitle.textContent = '编辑 Runner 配置';
+        modalTitle.textContent = t('modal.edit_title');
         modalView.style.display = 'none';
         modalEditForm.style.display = 'block';
         modalEditBtn.style.display = 'none';
@@ -622,7 +637,7 @@
             document.getElementById('eTarget').value = data.target || '';
             document.getElementById('eLabelsStr').value = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
           })
-          .catch(() => { modalMsg.textContent = '加载失败'; modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
+          .catch(() => { modalMsg.textContent = t('msg.load_failed'); modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
       }
       modal.classList.add('show');
     }
@@ -667,7 +682,7 @@
           return;
         }
         modalMsg.className = 'msg ok';
-        modalMsg.textContent = data.message || '已保存';
+        modalMsg.textContent = data.message || t('msg.saved');
         modalMsg.style.display = 'block';
         setTimeout(() => { closeModal(); location.reload(); }, 800);
       } catch (e) {
@@ -687,7 +702,7 @@
     document.querySelectorAll('.btn-del').forEach(btn => {
       btn.addEventListener('click', async () => {
         const name = btn.getAttribute('data-name');
-        if (!name || !confirm('确定从配置中移除 “‘ + name +’”？')) return;
+        if (!name || !confirm(t('confirm_remove').replace('{{name}}', name))) return;
         try {
           const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
           const data = await r.json().catch(() => ({}));
@@ -706,24 +721,24 @@
           if (probeError) {
             const probeType = resolveProbeType(data);
             const checkMsg =
-              (data.message || '操作已执行') +
-              '\n\n探测错误类型：' + probeType +
-              '\n建议：' + resolveProbeSuggestion(data) +
-              '\n检查命令：' + resolveProbeCheckCommand(data) +
-              '\n探测错误：' + probeError;
+              (data.message || t('msg.action_done')) +
+              '\n\n' + t('probe.alert_type') + probeType +
+              '\n' + t('probe.alert_suggestion') + resolveProbeSuggestion(data) +
+              '\n' + t('probe.alert_check_cmd') + resolveProbeCheckCommand(data) +
+              '\n' + t('probe.alert_error') + probeError;
             alert(checkMsg);
-            if (confirm('是否显示修复命令（有副作用）？建议先执行检查命令确认。')) {
-              alert('修复命令：\n' + resolveProbeFixCommand(data));
+            if (confirm(t('confirm_show_fix_cmd'))) {
+              alert(t('probe.alert_fix_cmd') + '\n' + resolveProbeFixCommand(data));
             }
           }
           location.reload();
         }
-        else { alert(data.message || r.statusText || '请求失败'); }
+        else { alert(data.message || r.statusText || t('msg.request_failed')); }
       } catch (e) { alert(e.message); }
     }
     revealFixBtn.addEventListener('click', () => {
       if (!currentProbeFixCommand) return;
-      if (!confirm('修复命令可能有副作用，确认显示？')) return;
+      if (!confirm(t('confirm_reveal_fix'))) return;
       probeFixCmdEl.textContent = currentProbeFixCommand;
       probeFixRevealed = true;
       copyFixBtn.style.display = 'inline-block';
@@ -731,15 +746,15 @@
     copyCheckBtn.addEventListener('click', async () => {
       if (!currentProbeCheckCommand) return;
       const ok = await copyCommandText(currentProbeCheckCommand);
-      alert(ok ? '检查命令已复制' : '复制失败，请手动复制');
+      alert(ok ? t('msg.check_cmd_copied') : t('msg.copy_failed'));
     });
     copyFixBtn.addEventListener('click', async () => {
       if (!probeFixRevealed || !currentProbeFixCommand) {
-        alert('请先显示修复命令并确认后再复制');
+        alert(t('msg.show_fix_first'));
         return;
       }
       const ok = await copyCommandText(currentProbeFixCommand);
-      alert(ok ? '修复命令已复制' : '复制失败，请手动复制');
+      alert(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'));
     });
     document.querySelectorAll('.btn-start').forEach(btn => {
       if (btn.id === 'modalStartBtnFooter') return;

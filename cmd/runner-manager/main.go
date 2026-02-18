@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
@@ -26,6 +27,9 @@ import (
 
 //go:embed templates/*.html
 var templateFS embed.FS
+
+//go:embed i18n/*.json
+var i18nFS embed.FS
 
 // Version 由构建时 -ldflags "-X main.Version=..." 注入
 var Version = "dev"
@@ -105,6 +109,17 @@ func main() {
 	}
 
 	e.Renderer = newTemplateRenderer()
+	handler.I18nLoader = func(lang string) (map[string]string, error) {
+		data, err := i18nFS.ReadFile("i18n/" + lang + ".json")
+		if err != nil {
+			return nil, err
+		}
+		var t map[string]string
+		if err := json.Unmarshal(data, &t); err != nil {
+			return nil, err
+		}
+		return t, nil
+	}
 	e.GET("/health", handler.Health)
 	e.GET("/version", handler.VersionInfo)
 	e.GET("/", handler.Index)

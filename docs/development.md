@@ -1,5 +1,7 @@
 # Development & Build
 
+**文档 / Docs:** [EN](README.md) · [中文](zh/) · [Français](fr/) · [Deutsch](de/) · [한국어](ko/) · [日本語](ja/)
+
 For production use container deployment; see [User Guide](guide.md). This doc is for contributors: local build and debug.
 
 ## Requirements

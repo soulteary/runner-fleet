@@ -1,5 +1,7 @@
 # 개발 및 빌드
 
+**文档 / Docs:** [EN](../development.md) · [中文](../zh/development.md) · [Français](../fr/development.md) · [Deutsch](../de/development.md) · 한국어 · [日本語](../ja/development.md)
+
 프로덕션은 컨테이너 배포를 사용하세요. [사용 가이드](guide.md) 참조. 이 문서는 기여자용: 로컬 빌드 및 디버그입니다.
 
 ## 요구 사항

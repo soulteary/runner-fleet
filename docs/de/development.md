@@ -1,5 +1,7 @@
 # Entwicklung & Build
 
+**文档 / Docs:** [EN](../development.md) · [中文](../zh/development.md) · [Français](../fr/development.md) · Deutsch · [한국어](../ko/development.md) · [日本語](../ja/development.md)
+
 Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](guide.md). Dieses Dokument ist für Mitwirkende: lokaler Build und Debug.
 
 ## Anforderungen
