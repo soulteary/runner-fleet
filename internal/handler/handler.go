@@ -498,6 +498,7 @@ func StartRunner(c echo.Context) error {
 	if info == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
 	}
+	originalStatus := info.Status
 	probeFailed := false
 	if cfg.Runners.ContainerMode {
 		applyContainerStatusOne(c.Request().Context(), cfg, info)
@@ -506,8 +507,13 @@ func StartRunner(c echo.Context) error {
 			log.Printf("[start] 容器 Runner 状态探测失败 name=%s，将继续尝试启动: %v", info.Name, info.Probe.Error)
 		}
 	}
-	if info.Status != runner.StatusInstalled {
-		return echo.NewHTTPError(http.StatusBadRequest, "仅已注册的 runner 可启动，当前状态: "+string(info.Status))
+	// 容器模式下探测失败会把状态标记为 unknown；启动前资格判断应回退到磁盘原始状态。
+	startStatus := info.Status
+	if probeFailed {
+		startStatus = originalStatus
+	}
+	if startStatus != runner.StatusInstalled {
+		return echo.NewHTTPError(http.StatusBadRequest, "仅已注册的 runner 可启动，当前状态: "+string(startStatus))
 	}
 	if info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 已在运行中"})

@@ -164,3 +164,48 @@ func TestUpdateRunner_TrimmedBodyNameAccepted(t *testing.T) {
 		t.Errorf("expected 200 when body name trims to URL name, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestStartRunner_ProbeFailureFallsBackToInstalledStatus(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	installDir := filepath.Join(dir, "r1")
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// 标记为已注册状态
+	if err := os.WriteFile(filepath.Join(installDir, ".runner"), []byte("ok"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Runners: config.RunnersConfig{
+			BasePath:      dir,
+			ContainerMode: true,
+			Items: []config.RunnerItem{
+				{Name: "r1", TargetType: "org", Target: "o1"},
+			},
+		},
+	}
+	if err := cfg.Save(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+
+	oldConfigPath := ConfigPath
+	ConfigPath = cfgPath
+	defer func() { ConfigPath = oldConfigPath }()
+
+	// 让容器状态探测失败（docker 命令不可执行）
+	t.Setenv("PATH", "")
+	// 启动阶段走容器模式快速失败分支：若到达此处说明没有被 400 提前拦截
+	t.Setenv("DOCKER_HOST", "tcp://runner-dind:2375")
+
+	e := echo.New()
+	e.POST("/api/runners/:name/start", StartRunner)
+	req := httptest.NewRequest(http.MethodPost, "/api/runners/r1/start", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when start is attempted after probe failure, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
