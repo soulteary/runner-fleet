@@ -20,6 +20,9 @@ var runnerContainerNameSanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 // DefaultRunnerImageRepo 默认 Runner 镜像仓库名，与 Manager 同仓库
 const DefaultRunnerImageRepo = "ghcr.io/soulteary/runner-fleet"
 
+// DefaultJobDockerBackend 未配置 job_docker_backend 时的默认后端
+const DefaultJobDockerBackend = "dind"
+
 // DefaultRunnerContainerImage 返回默认 Runner 容器镜像（未配置 container_image 时使用）。
 // Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.2.0；镜像名为 {repo}:{tag}-runner。
 func DefaultRunnerContainerImage() string {
@@ -141,6 +144,55 @@ type RunnerItem struct {
 	TargetType string   `yaml:"target_type"` // org | repo
 	Target     string   `yaml:"target"`      // org 名或 owner/repo
 	Labels     []string `yaml:"labels"`      // 自定义标签
+
+	// 以下仅容器模式有效，留空则回落到 runners 下的全局同名配置。
+	// 一台机器上不同项目往往需要不同工具链（如 Flutter+Android 与 Node），
+	// 全局单一镜像无法覆盖，故允许按 Runner 覆盖。
+	ContainerImage   string `yaml:"container_image,omitempty"`    // 该 Runner 使用的容器镜像
+	JobDockerBackend string `yaml:"job_docker_backend,omitempty"` // dind | host-socket | none
+}
+
+// FindItem 按名称查找 Runner 配置项
+func (c *Config) FindItem(name string) (RunnerItem, bool) {
+	for _, item := range c.Runners.Items {
+		if item.Name == name {
+			return item, true
+		}
+	}
+	return RunnerItem{}, false
+}
+
+// ContainerImageFor 返回该 Runner 实际使用的容器镜像，优先级：
+// items[].container_image > runners.container_image > DefaultRunnerContainerImage()
+func (c *Config) ContainerImageFor(runnerName string) string {
+	if item, ok := c.FindItem(runnerName); ok {
+		if img := strings.TrimSpace(item.ContainerImage); img != "" {
+			return img
+		}
+	}
+	if img := strings.TrimSpace(c.Runners.ContainerImage); img != "" {
+		return img
+	}
+	return DefaultRunnerContainerImage()
+}
+
+// JobDockerBackendFor 返回该 Runner 实际使用的 Job Docker 后端，优先级：
+// items[].job_docker_backend > runners.job_docker_backend > dind
+func (c *Config) JobDockerBackendFor(runnerName string) string {
+	if item, ok := c.FindItem(runnerName); ok {
+		if b := normalizeJobDockerBackend(item.JobDockerBackend); b != "" {
+			return b
+		}
+	}
+	if b := normalizeJobDockerBackend(c.Runners.JobDockerBackend); b != "" {
+		return b
+	}
+	return DefaultJobDockerBackend
+}
+
+// normalizeJobDockerBackend 去空白并转小写，空值返回空字符串供调用方回落
+func normalizeJobDockerBackend(v string) string {
+	return strings.ToLower(strings.TrimSpace(v))
 }
 
 // InstallPath 返回该 runner 的完整安装路径
@@ -166,7 +218,7 @@ func defaultConfig() *Config {
 			ContainerImage:   "",
 			ContainerNetwork: "runner-net",
 			AgentPort:        8081,
-			JobDockerBackend: "dind",
+			JobDockerBackend: DefaultJobDockerBackend,
 			DindHost:         "runner-dind",
 			VolumeHostPath:   "",
 			DockerGID:        0, // 0 = 自动探测 docker.sock 所属组
@@ -220,12 +272,12 @@ func Load(path string) (*Config, error) {
 	if c.Runners.AgentPort <= 0 {
 		c.Runners.AgentPort = 8081
 	}
-	jobBackend := strings.ToLower(strings.TrimSpace(c.Runners.JobDockerBackend))
+	jobBackend := normalizeJobDockerBackend(c.Runners.JobDockerBackend)
 	if jobBackend == "" {
-		jobBackend = "dind"
+		jobBackend = DefaultJobDockerBackend
 	}
 	c.Runners.JobDockerBackend = jobBackend
-	if c.Runners.JobDockerBackend == "dind" && c.Runners.DindHost == "" {
+	if c.Runners.JobDockerBackend == DefaultJobDockerBackend && c.Runners.DindHost == "" {
 		c.Runners.DindHost = "runner-dind"
 	}
 	applyEnvOverrides(&c)
@@ -245,9 +297,9 @@ func Validate(c *Config) error {
 		"host-socket": true,
 		"none":        true,
 	}
-	jobBackend := strings.ToLower(strings.TrimSpace(c.Runners.JobDockerBackend))
+	jobBackend := normalizeJobDockerBackend(c.Runners.JobDockerBackend)
 	if jobBackend == "" {
-		jobBackend = "dind"
+		jobBackend = DefaultJobDockerBackend
 		c.Runners.JobDockerBackend = jobBackend
 	}
 	if !validBackend[jobBackend] {
@@ -289,6 +341,21 @@ func Validate(c *Config) error {
 		}
 		if err := ValidateTarget(targetType, target); err != nil {
 			return fmt.Errorf("runners.items[%d]: %w", i, err)
+		}
+		itemBackend := normalizeJobDockerBackend(item.JobDockerBackend)
+		itemImage := strings.TrimSpace(item.ContainerImage)
+		if itemBackend != "" && !validBackend[itemBackend] {
+			return fmt.Errorf("runners.items[%d].job_docker_backend 仅支持 dind/host-socket/none，当前为 %q", i, item.JobDockerBackend)
+		}
+		if !c.Runners.ContainerMode {
+			// 与 runners.volume_host_path 的处理一致：容器模式专属字段不允许在非容器模式下设置，
+			// 避免配置看起来生效、实际被忽略
+			if itemImage != "" {
+				return fmt.Errorf("runners.items[%d].container_image 仅在 container_mode=true 时可设置", i)
+			}
+			if itemBackend != "" {
+				return fmt.Errorf("runners.items[%d].job_docker_backend 仅在 container_mode=true 时可设置", i)
+			}
 		}
 		if seen[name] {
 			return fmt.Errorf("runners.items 中存在同名 Runner: %s", name)
