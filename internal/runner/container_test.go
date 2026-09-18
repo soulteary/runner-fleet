@@ -121,7 +121,7 @@ func containsSeq(args []string, seq ...string) bool {
 
 func TestRunnerCreateArgs_HostSocketAddsDockerGroup(t *testing.T) {
 	// host-socket 下容器内 app(UID 1001) 需加入 socket 所属组，否则 Job 中 docker 报 permission denied
-	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", 999)
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", 999, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestRunnerCreateArgs_HostSocketAddsDockerGroup(t *testing.T) {
 
 func TestRunnerCreateArgs_HostSocketUnknownGIDSkipsGroupAdd(t *testing.T) {
 	// 探测不到 socket GID 时不追加 --group-add，退回镜像内预置的 docker 组
-	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", unknownDockerGID)
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", unknownDockerGID, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestRunnerCreateArgs_HostSocketUnknownGIDSkipsGroupAdd(t *testing.T) {
 }
 
 func TestRunnerCreateArgs_DindAndNone(t *testing.T) {
-	dind, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "dind", "my-dind", 999)
+	dind, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "dind", "my-dind", 999, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestRunnerCreateArgs_DindAndNone(t *testing.T) {
 		t.Errorf("dind must not mount socket nor add docker group, got %v", dind)
 	}
 
-	none, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "none", "runner-dind", 999)
+	none, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "none", "runner-dind", 999, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestRunnerCreateArgs_DindAndNone(t *testing.T) {
 }
 
 func TestRunnerCreateArgs_UnsupportedBackend(t *testing.T) {
-	if _, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "podman", "runner-dind", 999); err == nil {
+	if _, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "podman", "runner-dind", 999, ""); err == nil {
 		t.Fatal("expected error for unsupported backend")
 	} else if !strings.Contains(err.Error(), "job_docker_backend") {
 		t.Fatalf("unexpected error message: %v", err)
@@ -302,5 +302,31 @@ func TestAgentCalls_SendBearerToken(t *testing.T) {
 	}
 	if gotAuth != "Bearer tok-start" {
 		t.Errorf("/start 未带令牌: %q", gotAuth)
+	}
+}
+
+func TestRunnerCreateArgs_InjectsAgentToken(t *testing.T) {
+	// 令牌必须通过环境变量注入：只靠挂载的 0600 文件时，Manager 与 Agent 的 UID
+	// 不一致就会读不到，Agent 静默降级为不鉴权
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "none", "runner-dind", unknownDockerGID, "tok-abc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsSeq(args, "-e", "AGENT_TOKEN=tok-abc") {
+		t.Errorf("未注入 AGENT_TOKEN: %v", args)
+	}
+	if args[len(args)-1] != "img:tag" {
+		t.Errorf("镜像必须在参数末尾: %v", args)
+	}
+}
+
+func TestRunnerCreateArgs_NoTokenNoEnv(t *testing.T) {
+	// 拿不到令牌时不应注入空值，避免 Agent 把空串当成有效令牌
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "none", "runner-dind", unknownDockerGID, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(joinArgs(args), "AGENT_TOKEN") {
+		t.Errorf("令牌为空时不应注入环境变量: %v", args)
 	}
 }
