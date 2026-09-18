@@ -306,3 +306,45 @@ func TestRequiredRunnerTools_CoversTheKnownFailureModes(t *testing.T) {
 		}
 	}
 }
+
+func TestParseMissingTools(t *testing.T) {
+	const marker = missingToolMarker
+	// docker 在 arm64 主机运行 amd64 镜像时输出的真实告警，退出码仍为 0。
+	// dockerCmd 用 CombinedOutput，它会混进探测输出里。
+	platformWarning := "WARNING: The requested image's platform (linux/amd64) does not match " +
+		"the detected host platform (linux/arm64/v8) and no specific platform was requested\n"
+
+	cases := []struct {
+		name string
+		out  string
+		want []string
+	}{
+		{"全部具备", "", nil},
+		{"仅告警，不应误报", platformWarning, nil},
+		{"告警与缺失混合", platformWarning + marker + "git\n" + marker + "unzip\n", []string{"git", "unzip"}},
+		{"缺失项前后有空白", "  " + marker + "git  \n", []string{"git"}},
+		{"未知名字不予采信", marker + "definitely-not-a-required-tool\n", nil},
+		{"无标记的裸行忽略", "git\nunzip\n", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseMissingTools([]byte(tc.out))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("parseMissingTools = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseMissingTools_RecognisesEveryRequiredTool(t *testing.T) {
+	// 探测脚本用 requiredRunnerTools 生成，解析端必须认得其中每一个，
+	// 否则今后往列表里加命令会得到「检查了但永远报不出来」的假绿灯
+	var out strings.Builder
+	for _, tool := range requiredRunnerTools {
+		out.WriteString(missingToolMarker + tool + "\n")
+	}
+	got := parseMissingTools([]byte(out.String()))
+	if len(got) != len(requiredRunnerTools) {
+		t.Fatalf("解析出 %v，期望全部 %v", got, requiredRunnerTools)
+	}
+}
