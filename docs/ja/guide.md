@@ -61,6 +61,8 @@ UI の「Quick Add Runner」で名前、ターゲット、トークンを入力�
 docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 ```
 
+スクリプトは `uname -m` でアーキテクチャを判定し、バージョン未指定なら GitHub API で最新版を解決し、**どのバージョンでも必ず** SHA-256 を検証します。公式ハッシュを取得できない場合（オフライン／ミラー）は明示的に指定してください: `RUNNER_SHA256=<sha256> ... install-runner.sh <name> <version>`。既に runner がある ディレクトリはスキップされます（再インストールは `RUNNER_FORCE_REINSTALL=1`）。
+
 またはホストで [actions-runner](https://github.com/actions/runner/releases) を `runners/<name>/` に展開し、UI で送信するか、そのディレクトリで `./config.sh` を手動実行してください。
 
 ### コンテナモード（Runner ごとにコンテナ）
