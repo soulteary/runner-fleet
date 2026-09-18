@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.2.0
 ```
 
-호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하고(이미지에 GID 999의 `docker` 그룹이 포함되어 있으며 빌드 인자 `DOCKER_GID`로 변경 가능. 호스트 docker GID가 999가 아니면 `--group-add $(getent group docker | cut -d: -f3)`도 필요), 또는 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 이미지에 Docker CLI가 포함되어 있으며, DinD에서 일반적인 Action이 동작합니다.
+호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하고(이미지에 GID 999의 `docker` 그룹이 포함되어 있으며 빌드 인자 `DOCKER_GID`로 변경 가능. 호스트 docker GID가 999가 아니면 `--group-add $(getent group docker | cut -d: -f3)`도 필요), 또는 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 이미지에는 Docker CLI와 함께 일반적인 Action이 전제하는 도구(`git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq`, `openssh-client`)가 포함되어 있습니다. 목록은 `scripts/apt-packages.txt`에 있으며 두 이미지가 공유합니다.
 
 ### 자동 설치 및 등록
 
@@ -125,6 +125,8 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind`일 때 DinD 호스트명 | `runner-dind` |
 | `runners.volume_host_path` | 컨테이너 모드에서 runners의 호스트 절대 경로(필수) | 비움 |
+| `runners.items[].container_image` | Runner별 이미지 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
+| `runners.items[].job_docker_backend` | Runner별 Docker 백엔드 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 
 일부 필드는 환경 변수로 덮어쓸 수 있음(`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` 등). 전체 컨테이너 시 `.env`만 수정하면 됨. `.env.example` 참조.
 
