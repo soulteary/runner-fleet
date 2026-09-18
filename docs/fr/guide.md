@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.2.0
 ```
 
-Les répertoires hôte doivent être accessibles en écriture par UID 1001. Basic Auth : `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Pour Docker dans les jobs, ajoutez `-v /var/run/docker.sock:/var/run/docker.sock`, ainsi que `--group-add $(getent group docker | cut -d: -f3)` si le GID docker hôte n'est pas 999 (l'image embarque un groupe `docker` en GID 999, modifiable via l'arg de build `DOCKER_GID`), ou utilisez DinD (voir `docker-compose.yml` du dépôt, `--profile dind`). L'image inclut le CLI Docker ; les Actions courantes fonctionnent avec DinD.
+Les répertoires hôte doivent être accessibles en écriture par UID 1001. Basic Auth : `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Pour Docker dans les jobs, ajoutez `-v /var/run/docker.sock:/var/run/docker.sock`, ainsi que `--group-add $(getent group docker | cut -d: -f3)` si le GID docker hôte n'est pas 999 (l'image embarque un groupe `docker` en GID 999, modifiable via l'arg de build `DOCKER_GID`), ou utilisez DinD (voir `docker-compose.yml` du dépôt, `--profile dind`). Les images incluent le CLI Docker ainsi que les outils que les Actions courantes supposent présents (`git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq`, `openssh-client`) ; la liste se trouve dans `scripts/apt-packages.txt`, partagée par les deux images.
 
 ### Installation et enregistrement automatiques
 
@@ -126,6 +126,8 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Docker dans les jobs : `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | Nom d'hôte DinD quand `job_docker_backend=dind` | `runner-dind` |
 | `runners.volume_host_path` | Chemin absolu hôte vers runners en mode conteneur (obligatoire) | vide |
+| `runners.items[].container_image` | Surcharge d'image par runner (mode conteneur) ; vide = valeur globale | vide |
+| `runners.items[].job_docker_backend` | Surcharge du backend Docker par runner (mode conteneur) ; vide = valeur globale | vide |
 
 Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 
