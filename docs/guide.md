@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.2.0
 ```
 
-Host dirs must be writable by UID 1001. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. For Docker in jobs add `-v /var/run/docker.sock:/var/run/docker.sock` plus `--group-add $(getent group docker | cut -d: -f3)` if the host docker GID is not 999 (the image ships a `docker` group at GID 999, overridable with build arg `DOCKER_GID`), or use DinD (see repo `docker-compose.yml` `--profile dind`). Image includes Docker CLI; common Actions work with DinD.
+Host dirs must be writable by UID 1001. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. For Docker in jobs add `-v /var/run/docker.sock:/var/run/docker.sock` plus `--group-add $(getent group docker | cut -d: -f3)` if the host docker GID is not 999 (the image ships a `docker` group at GID 999, overridable with build arg `DOCKER_GID`), or use DinD (see repo `docker-compose.yml` `--profile dind`). Images ship the Docker CLI plus the tools common Actions assume (`git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq`, `openssh-client`); the list lives in `scripts/apt-packages.txt` and is shared by both images.
 
 ### Auto install & register
 
@@ -124,6 +124,8 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | DinD hostname when `job_docker_backend=dind` | `runner-dind` |
 | `runners.volume_host_path` | Host absolute path to runners in container mode (required) | empty |
+| `runners.items[].container_image` | Per-runner image override (container mode); falls back to the global value | empty |
+| `runners.items[].job_docker_backend` | Per-runner Docker backend override (container mode); falls back to the global value | empty |
 
 Some fields above can be overridden by environment variables (e.g. `MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`), so you can run full-container with only `.env` changes; see `.env.example`.
 
