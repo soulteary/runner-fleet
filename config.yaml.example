@@ -12,6 +12,15 @@ runners:
     # 本地运行：./runners；Docker 部署：/app/runners
     base_path: ./runners
     items: []   # 预置 Runner 列表，也可通过 Web 界面添加
+    # 容器模式下可按 Runner 覆盖镜像与 Job Docker 后端（留空回落下面的全局配置），
+    # 便于一台机器上不同项目使用不同工具链：
+    # items:
+    #   - name: droiddesk
+    #     target_type: repo
+    #     target: soulteary/droiddesk
+    #     labels: [droiddesk]
+    #     container_image: your-registry/droiddesk-runner:1   # 预装 Flutter + Android SDK
+    #     job_docker_backend: none                            # 该项目不需要 Job 内 Docker
 
     # 容器模式：每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker（socket）启停，并与 Runner 容器同网络
     # 启用后 Manager 必须使用宿主机 docker（勿设 DOCKER_HOST=tcp://runner-dind:2375）

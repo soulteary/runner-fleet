@@ -274,18 +274,13 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config/config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
 		}
 	}
-	img := cfg.Runners.ContainerImage
-	if img == "" {
-		img = config.DefaultRunnerContainerImage()
-	}
+	// 镜像与 Job Docker 后端支持按 Runner 覆盖，未设置时回落全局配置
+	img := cfg.ContainerImageFor(runnerName)
 	network := cfg.Runners.ContainerNetwork
 	if network == "" {
 		network = "runner-net"
 	}
-	jobBackend := strings.ToLower(strings.TrimSpace(cfg.Runners.JobDockerBackend))
-	if jobBackend == "" {
-		jobBackend = "dind"
-	}
+	jobBackend := cfg.JobDockerBackendFor(runnerName)
 	dindHost := cfg.Runners.DindHost
 	if dindHost == "" {
 		dindHost = "runner-dind"
