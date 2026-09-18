@@ -88,6 +88,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 ### 문제 해결
 
+- **문제가 있으면 먼저 시작 자가 점검 확인**: `docker compose logs runner-manager | grep 自检`. 시작 시 runners 디렉터리, Docker 접근성, 네트워크, Runner 이미지, Job 내 Docker 백엔드를 점검하며, 실패 항목에는 바로 실행 가능한 수정 명령이 표시됩니다.
 - **compose down 후 Runner가 시작되지 않음**: 한 번 `docker network create runner-net` 실행. 계속 실패하면 UI에서 "Start"로 재생성하거나 `docker rm -f github-runner-<name>` 후 "Start".
 - **root로 실행**: 마운트된 디렉터리는 프로세스 사용자가 쓸 수 있어야 함. root 사용 시 `RUNNER_ALLOW_RUNASROOT=1` 설정.
 - **Job에서 docker.sock `permission denied`**: `job_docker_backend: host-socket`에서는 컨테이너 사용자(UID 1001)가 socket 소유 그룹에 속해야 합니다. Manager가 컨테이너 생성 시 감지한 호스트 docker GID로 `--group-add`를 추가하므로, 업그레이드 후에는 Runner 컨테이너를 재생성하세요(`docker rm -f github-runner-<name>` 후 "Start"). 감지에 실패하면 `runners.docker_gid`(또는 `.env`의 `DOCKER_GID`)를 `getent group docker | cut -d: -f3` 값으로 설정합니다.
