@@ -88,12 +88,15 @@ runners:
 
 Runner image: same name as Manager with `-runner` tag (production: use a version tag e.g. v1.3.0-runner; dev: main-runner), or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. For `job_docker_backend: host-socket`, the Manager passes `--group-add <host docker GID>` to the runner container (auto-detected from `docker.sock`, override with `runners.docker_gid` / `DOCKER_GID`); the image also ships a `docker` group (build arg `DOCKER_GID`, default 999). Runner names are normalized to container names; duplicates after mapping will conflict.
 
+**Extending the runner image**: GitHub-hosted runners bundle toolchains (Android SDK, Node, Python…) that self-hosted runners do not. Workflows written for `ubuntu-24.04` often rely on this implicitly and fail after the move — `SDK location not found`, `node: command not found`. Layer your toolchain on top of this repo's runner image; ready-to-use examples and the three rules that matter (chown to UID 1001, bake env vars into the image, warm caches after `USER app`) are in [`examples/runner-images/`](../examples/runner-images/). Point a single runner at it with `items[].container_image` and select it from the workflow with a label.
+
 ### Troubleshooting
 
 - **Anything not working**: Check the startup self-test first — `docker compose logs runner-manager | grep 自检`. It reports the runners directory, Docker reachability, network, runner image and in-job Docker backend at boot, each failing item with a copy-pasteable fix.
 - **Runner won't start after compose down**: Run `docker network create runner-net` once. If it still fails, use "Start" in the UI to recreate, or `docker rm -f github-runner-<name>` then "Start".
 - **Running as root**: Mounted dirs must be writable by the process user; for root set `RUNNER_ALLOW_RUNASROOT=1`.
 - **`permission denied` on docker.sock in jobs**: With `job_docker_backend: host-socket` the container user (UID 1001) must be in the socket's group. The Manager adds `--group-add` with the detected host docker GID when creating the container, so recreate the runner after upgrading (`docker rm -f github-runner-<name>`, then "Start"). If detection fails, set `runners.docker_gid` (or `DOCKER_GID` in `.env`) to `getent group docker | cut -d: -f3`.
+- **`command not found` or a missing SDK inside jobs**: Self-hosted runners do not bundle what GitHub-hosted ones do. Check the startup self-test (`docker compose logs runner-manager | grep 自检`) — it reports which of `git`/`unzip`/`tar`/`curl` each configured runner image lacks. For language and platform SDKs, extend the image; see [`examples/runner-images/`](../examples/runner-images/).
 - **Old runner image**: `docker rm -f github-runner-<name>`, then "Start" in the UI to recreate.
 - **status=unknown**: Check the probe in the detail popup; try "Start/Stop" to self-heal.
 

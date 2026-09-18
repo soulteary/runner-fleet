@@ -88,12 +88,15 @@ runners:
 
 Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z. B. v1.3.0-runner; Entwicklung: main-runner), oder lokal bauen: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`. Der Manager muss Host-Docker verwenden (Mount von `docker.sock`), nicht DinD über `DOCKER_HOST`; in Compose `group_add` für Host-Docker-GID oder `user: "0:0"` verwenden. Bei `job_docker_backend: host-socket` übergibt der Manager `--group-add <Host-Docker-GID>` an den Runner-Container (automatisch aus `docker.sock` erkannt, überschreibbar via `runners.docker_gid` / `DOCKER_GID`); das Image enthält zudem eine `docker`-Gruppe (Build-Arg `DOCKER_GID`, Standard 999). Runner-Namen werden zu Containernamen normalisiert; Duplikate nach dem Mapping kollidieren.
 
+**Runner-Image erweitern**: GitHub-gehostete Runner bringen Toolchains mit (Android SDK, Node, Python …), selbst gehostete nicht. Für `ubuntu-24.04` geschriebene Workflows setzen das oft implizit voraus und scheitern nach dem Umzug. Legen Sie Ihre Toolchain über das Runner-Image dieses Repos — fertige Beispiele und die drei wichtigen Regeln (chown auf UID 1001, Umgebungsvariablen ins Image, Warmlauf nach `USER app`) stehen in [`examples/runner-images/`](../../examples/runner-images/). Mit `items[].container_image` nutzt es nur ein bestimmter Runner; im Workflow per Label auswählen.
+
 ### Fehlerbehebung
 
 - **Wenn etwas nicht läuft, zuerst den Startup-Selbsttest ansehen**: `docker compose logs runner-manager | grep 自检`. Beim Start werden runners-Verzeichnis, Docker-Erreichbarkeit, Netzwerk, Runner-Image und Job-Docker-Backend geprüft; fehlgeschlagene Punkte nennen direkt den Fix.
 - **Runner startet nach compose down nicht**: Einmal `docker network create runner-net` ausführen. Bei anhaltendem Fehler in der UI „Start“ zum Neuerstellen nutzen oder `docker rm -f github-runner-<name>` dann „Start“.
 - **Lauf als root**: Gemountete Verzeichnisse müssen für den Prozessbenutzer schreibbar sein; für root `RUNNER_ALLOW_RUNASROOT=1` setzen.
 - **`permission denied` auf docker.sock in Jobs**: Bei `job_docker_backend: host-socket` muss der Container-Benutzer (UID 1001) in der Gruppe des Sockets sein. Der Manager hängt beim Erstellen `--group-add` mit der erkannten Host-Docker-GID an; nach dem Upgrade den Runner-Container neu erstellen (`docker rm -f github-runner-<name>`, dann „Start“). Schlägt die Erkennung fehl, `runners.docker_gid` (oder `DOCKER_GID` in `.env`) auf `getent group docker | cut -d: -f3` setzen.
+- **`command not found` oder fehlendes SDK im Job**: Selbst gehostete Runner bringen nicht mit, was GitHub-gehostete mitbringen. Zuerst den Startup-Selbsttest ansehen (`docker compose logs runner-manager | grep 自检`): Er nennt, welche von `git`/`unzip`/`tar`/`curl` je Runner-Image fehlen. Sprach- und Plattform-SDKs per eigenem Image ergänzen, siehe [`examples/runner-images/`](../../examples/runner-images/).
 - **Altes Runner-Image**: `docker rm -f github-runner-<name>`, dann in der UI „Start“ zum Neuerstellen.
 - **status=unknown**: Probe im Detail-Popup prüfen; „Start/Stop“ zur Selbstheilung versuchen.
 
