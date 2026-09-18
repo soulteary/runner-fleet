@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,27 @@ func TestCheckBasePath_WritableDir(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("自检不应留下文件: %v", entries)
+	}
+}
+
+func TestCheckBasePath_DoesNotTouchExistingFile(t *testing.T) {
+	// 自检用固定文件名时会把同名的用户文件打开又删掉；探测必须用唯一名
+	dir := t.TempDir()
+	victim := filepath.Join(dir, ".preflight-write-test")
+	if err := os.WriteFile(victim, []byte("用户数据"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{}
+	cfg.Runners.BasePath = dir
+	if got := checkBasePath(cfg); got.Level != CheckOK {
+		t.Fatalf("目录可写应通过: %+v", got)
+	}
+	data, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatalf("同名文件被自检删除了: %v", err)
+	}
+	if string(data) != "用户数据" {
+		t.Errorf("同名文件内容被改写: %q", data)
 	}
 }
 
@@ -78,17 +100,49 @@ func TestCheckBasePath_Unwritable(t *testing.T) {
 	}
 }
 
-func TestCheckDefaultModeDocker_DinD(t *testing.T) {
-	t.Setenv("DOCKER_HOST", "tcp://runner-dind:2375")
-	got := checkDefaultModeDocker()
-	if got.Level != CheckOK || !strings.Contains(got.Message, "DinD") {
-		t.Fatalf("DOCKER_HOST 指向 DinD 时应正常: %+v", got)
+func TestCheckDefaultModeDocker_DinDReachable(t *testing.T) {
+	// 起一个真实监听端口，确认可达时才报 ok
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	t.Setenv("DOCKER_HOST", "tcp://"+ln.Addr().String())
+	got := checkDefaultModeDocker(context.Background())
+	if got.Level != CheckOK || !strings.Contains(got.Message, "可达") {
+		t.Fatalf("DinD 可达时应为 ok: %+v", got)
+	}
+}
+
+func TestCheckDefaultModeDocker_DinDUnreachable(t *testing.T) {
+	// 只看 tcp:// 前缀就报 ok，会在 DinD 没起来时给出假绿灯
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close() // 立刻关掉，确保该端口不可连
+
+	t.Setenv("DOCKER_HOST", "tcp://"+addr)
+	got := checkDefaultModeDocker(context.Background())
+	if got.Level != CheckWarn {
+		t.Fatalf("DinD 不可达时不能报 ok: %+v", got)
+	}
+}
+
+func TestTCPAddr(t *testing.T) {
+	if got := tcpAddr("runner-dind"); got != "runner-dind:2375" {
+		t.Errorf("缺省端口应补 2375: %q", got)
+	}
+	if got := tcpAddr("runner-dind:2376"); got != "runner-dind:2376" {
+		t.Errorf("已带端口不应改动: %q", got)
 	}
 }
 
 func TestCheckDefaultModeDocker_MissingSocket(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
-	got := checkDefaultModeDocker()
+	got := checkDefaultModeDocker(context.Background())
 	if got.Level != CheckWarn {
 		t.Fatalf("socket 不存在应 warn: %+v", got)
 	}
@@ -99,7 +153,12 @@ func TestPreflight_DefaultModeSkipsContainerChecks(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Runners.BasePath = t.TempDir()
 	cfg.Runners.ContainerMode = false
-	t.Setenv("DOCKER_HOST", "tcp://runner-dind:2375")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	t.Setenv("DOCKER_HOST", "tcp://"+ln.Addr().String())
 
 	results := Preflight(context.Background(), cfg)
 	if len(results) != 2 {
