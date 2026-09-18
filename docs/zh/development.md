@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
@@ -85,6 +85,7 @@ go run ./cmd/runner-manager
 - `make run`：先 build 再运行 Manager。
 - `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [使用指南](guide.md)。
 - `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。
+- `make docker-build-runner-example`：构建自定义 Runner 镜像示例（`EXAMPLE=android|node`，见 [`examples/runner-images/`](../../examples/runner-images/)）。
 - `make clean`：删除生成的二进制（runner-manager、runner-agent）。
 
 容器模式用的 Agent 为 `cmd/runner-agent`，Runner 镜像用 `Dockerfile.runner` 单独构建。

@@ -17,7 +17,7 @@ En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](g
 go build -o runner-manager ./cmd/runner-manager
 
 # Avec version (pour /version et débogage)
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # Construire uniquement le Runner Agent (mode conteneur)
 go build -o runner-agent ./cmd/runner-agent
@@ -85,8 +85,19 @@ Exemple (échec de sonde) :
 - `make run` : Build puis exécution du Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop` : Build et exécution de l'image Manager ; voir [Guide d'utilisation](guide.md).
 - `make docker-build-runner` : Build de l'image Runner pour le mode conteneur (`Dockerfile.runner`, tag par défaut dans `RUNNER_IMAGE`).
+- `make docker-build-runner-example` : Build d'un exemple d'image Runner personnalisée (`EXAMPLE=android|node`, voir [`examples/runner-images/`](../../examples/runner-images/)).
 - `make clean` : Supprimer les binaires construits (runner-manager, runner-agent).
 
 Le mode conteneur utilise l'Agent de `cmd/runner-agent` et l'image Runner de `Dockerfile.runner`.
+
+## Publication
+
+Les références de version dans la doc et les exemples doivent correspondre au tag d'image par défaut dans `internal/config/config.go`. La CI le vérifie via `scripts/check-version-consistency.sh` ; exécutez-le localement avant d'ouvrir une PR de release :
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
+Si une ligne cite légitimement une ancienne version (notes de release, instructions de mise à niveau), ajoutez le marqueur `version-check-ignore` sur cette ligne pour l'ignorer.
 
 [← Retour à la doc](README.md)

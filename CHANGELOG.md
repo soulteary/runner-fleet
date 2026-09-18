@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-18
+
+### Added
+
+- Custom Runner image workflow: extend the stock image with project toolchains (Android SDK, Node, …), with ready-to-use examples under `examples/runner-images/` and a `make docker-build-runner-example` target. Point a single runner at the image via `items[].container_image` and select it from the workflow with a label. ([#15])
+- Startup preflight now checks every configured Runner image for `git` / `unzip` / `tar` / `curl` (one-shot container, no pull if the image is absent), listing misses and pointing at the extension examples instead of waiting for mid-Job `command not found`. ([#15])
+
+### Changed
+
+- CLI baseline aligned with GitHub-hosted `ubuntu-24.04`: `scripts/apt-packages.txt` now mirrors `actions/runner-images` `toolset-2404.json` apt sets (~77 packages, including `jq`, `rsync`, `sudo`, `xvfb`). Language and platform SDKs stay out on purpose — use `setup-*` actions or an extended image. ([#16])
+- Both images grant the job user passwordless `sudo` (same as hosted runners); opt out with `--build-arg ALLOW_SUDO=false`. Preflight no longer treats `sudo` as a required binary — presence alone does not prove sudoers membership. ([#16])
+- Default image tags across the docs, `docker-compose.yml`, `.env.example`, `config.yaml.example`, `Makefile`, examples and `DefaultRunnerContainerImage()` now point at `v1.4.0`.
+
+### Upgrading
+
+Recreate Runner containers so they pick up the expanded apt baseline and passwordless sudo:
+
+```bash
+docker rm -f github-runner-<name>   # then click "Start" in the UI to recreate
+```
+
+If you build custom images `FROM` this repo's runner tag, rebuild them against `v1.4.0-runner` so they inherit the new base layer.
+
 ## [1.3.0] - 2026-09-18
 
 ### Added
@@ -97,7 +120,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/soulteary/runner-fleet/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/soulteary/runner-fleet/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/soulteary/runner-fleet/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/soulteary/runner-fleet/compare/v1.1.0...v1.1.1
@@ -114,3 +138,5 @@ Initial release.
 [#11]: https://github.com/soulteary/runner-fleet/pull/11
 [#12]: https://github.com/soulteary/runner-fleet/pull/12
 [#13]: https://github.com/soulteary/runner-fleet/pull/13
+[#15]: https://github.com/soulteary/runner-fleet/pull/15
+[#16]: https://github.com/soulteary/runner-fleet/pull/16

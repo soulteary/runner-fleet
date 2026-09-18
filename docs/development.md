@@ -17,7 +17,7 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent
@@ -85,6 +85,7 @@ Example (probe failure):
 - `make run`: Build then run Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager image build and run; see [User Guide](guide.md).
 - `make docker-build-runner`: Build Runner image for container mode (`Dockerfile.runner`, default tag in `RUNNER_IMAGE`).
+- `make docker-build-runner-example`: Build a custom Runner image example (`EXAMPLE=android|node`, see [`examples/runner-images/`](../examples/runner-images/)).
 - `make clean`: Remove built binaries (runner-manager, runner-agent).
 
 Container mode uses Agent from `cmd/runner-agent` and Runner image from `Dockerfile.runner`.

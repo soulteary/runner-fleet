@@ -15,10 +15,10 @@
 
 ### 공개 이미지 사용 (권장)
 
-운영 환경에서는 특정 버전(예: v1.3.0)을 사용하세요. 개발 시에는 `main` 태그를 쓸 수 있습니다.
+운영 환경에서는 특정 버전(예: v1.4.0)을 사용하세요. 개발 시에는 `main` 태그를 쓸 수 있습니다.
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.3.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.4.0
 ```
 
 ### docker-compose 빠른 시작
@@ -48,7 +48,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.3.0
+  ghcr.io/soulteary/runner-fleet:v1.4.0
 ```
 
 호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하고(이미지에 GID 999의 `docker` 그룹이 포함되어 있으며 빌드 인자 `DOCKER_GID`로 변경 가능. 호스트 docker GID가 999가 아니면 `--group-add $(getent group docker | cut -d: -f3)`도 필요), 또는 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 두 이미지에는 Docker CLI와 함께 GitHub 호스팅 runner에 맞춘 명령줄 기반 계층이 포함되어 있습니다. `scripts/apt-packages.txt`는 `actions/runner-images`의 `toolset-2404.json` apt 패키지 집합을 가져온 것으로 `git`, `unzip`, `jq`, `rsync`, `sudo`, `xvfb` 등이 들어 있습니다. 언어·플랫폼 SDK는 의도적으로 제외했습니다 — `setup-*` action을 쓰거나 이미지를 확장하세요. 호스팅 runner와 마찬가지로 두 이미지 모두 Job 사용자에게 비밀번호 없는 `sudo`를 부여하므로 `sudo apt-get install -y …`가 그대로 동작합니다. 제거하려면 `--build-arg ALLOW_SUDO=false`로 빌드하세요.
@@ -70,7 +70,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 각 Runner는 자체 컨테이너에서 실행됩니다. Manager는 호스트 Docker로 시작/중지하고, 컨테이너 내 Agent로부터 HTTP로 상태를 가져옵니다.
 
 **방법 1: env만 사용 (전체 컨테이너 시 권장)**
-config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `config/config.yaml`을 만들지 않아도 위 변수를 `.env`에 설정해 두면 첫 실행 시 자동 생성됩니다. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.3.0 → v1.3.0-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
+config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `config/config.yaml`을 만들지 않아도 위 변수를 `.env`에 설정해 두면 첫 실행 시 자동 생성됩니다. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.4.0 → v1.4.0-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
 
 **방법 2: config/config.yaml에서 활성화** (`config.yaml.example` 참조):
 
@@ -78,7 +78,7 @@ config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAI
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.3.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.4.0-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -86,9 +86,9 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.3.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
+Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.4.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.4.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
-**Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 세 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
+**Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 네 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 비밀번호 없는 sudo 상속, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
 
 ### 문제 해결
 
@@ -104,7 +104,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.4.0-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -124,7 +124,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Runner 설치 디렉터리 루트 경로; **컨테이너에서는 `/app/runners`로 설정** | `./runners` |
 | `runners.items` | 미리 정의된 Runner 목록 | Web UI에서도 추가 가능 |
 | `runners.container_mode` | 컨테이너 모드 활성화 | `false` |
-| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet:v1.3.0-runner` |
+| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet:v1.4.0-runner` |
 | `runners.container_network` | 컨테이너 모드에서 Runner 네트워크 | `runner-net` |
 | `runners.agent_port` | 컨테이너 내 Agent 포트 | `8081` |
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |
