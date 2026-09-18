@@ -168,6 +168,8 @@ runners:
 
 **路径与唯一性**：name/path 禁止 `..`、`/`、`\`；目录强制落在 `runners.base_path` 下。禁止同名；编辑时名称不可改。容器模式下名称规范为容器名，映射后重名会报错。
 
+**Agent 鉴权**（容器模式）：Manager 会为每个 Runner 在 `<runner 目录>/.agent_token` 写入随机令牌（权限 0600），创建容器时以 `AGENT_TOKEN` 环境变量注入，调用 Agent 时以 `Authorization: Bearer` 带上。Agent 读的是环境变量，因此不依赖 Manager 与 Agent 的 UID 一致；文件是 Manager 侧的持久副本，Manager 重启后无需重建容器。Agent 对 `/status`、`/start`、`/stop` 强制校验，同一网络内的其它容器无法再控制 Runner；`/health` 保持开放供容器 HEALTHCHECK 使用。本特性之前创建的容器没有令牌文件，仍按不鉴权运行，重建后生效（`docker rm -f github-runner-<名称>` 后点「启动」）。
+
 **敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
 
 [← 返回项目首页](../../README.md)

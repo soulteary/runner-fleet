@@ -168,6 +168,8 @@ runners:
 
 **パスと一意性**: name/path に `..`、`/`、`\` は不可。ディレクトリは `runners.base_path` 以下である必要あり。名前の重複不可。編集時は名前は読み取り専用。コンテナモードでは名前はコンテナ名に正規化され、マッピング後の重複はエラーになります。
 
+**Agent 認証**（コンテナモード）: Manager は Runner ごとにランダムなトークンを `<runner ディレクトリ>/.agent_token`（0600）へ書き込み、コンテナ作成時に `AGENT_TOKEN` として注入し、Agent 呼び出し時に `Authorization: Bearer` で送ります。Agent は環境変数を読むため、Manager と Agent の UID 一致に依存しません。ファイルは Manager 側の永続コピーです。Agent は `/status`、`/start`、`/stop` をトークンなしでは拒否します。`/health` は HEALTHCHECK 用に開放したままです。本機能より前に作成したコンテナはトークンがなく従来どおり動作します。再作成すると有効になります。
+
 **機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 
 [← プロジェクトホームへ](../../README.md)
