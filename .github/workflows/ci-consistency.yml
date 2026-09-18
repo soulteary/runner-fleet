@@ -1,0 +1,23 @@
+# 仓库一致性校验：与语言/构建无关的整体性检查，独立于 Go 的 CI
+name: CI (Consistency)
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  version:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 文档与示例里的版本号必须跟代码里的默认镜像 tag 一致。
+      # v1.0.1 / v1.1.0 / v1.1.1 三次发布都漏了同步，照 README 部署会拉到
+      # 落后三个版本的镜像；这一步让下次漏改直接在 PR 上失败。
+      - name: Check version references are in sync
+        run: sh scripts/check-version-consistency.sh

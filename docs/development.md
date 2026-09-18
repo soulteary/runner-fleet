@@ -89,4 +89,13 @@ Example (probe failure):
 
 Container mode uses Agent from `cmd/runner-agent` and Runner image from `Dockerfile.runner`.
 
+
+## Releasing
+
+Version references in docs and examples must match the default image tag in `internal/config/config.go`. CI enforces this via `scripts/check-version-consistency.sh`; run it locally before opening a release PR:
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
 [← Back to docs](README.md)
