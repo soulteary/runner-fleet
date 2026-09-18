@@ -88,6 +88,7 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 ### 排障
 
+- **哪里不对先看启动自检**：`docker compose logs runner-manager | grep 自检`。Manager 启动时会检查 runners 目录、Docker 可达性、容器网络、Runner 镜像与 Job 内 Docker 后端，失败项会直接给出可照做的修复命令。
 - **compose down 后 Runner 无法启动**：首次执行 `docker network create runner-net`。已出问题时界面点该 Runner「启动」重建，或 `docker rm -f github-runner-<名称>` 后再点「启动」。
 - **root 运行**：挂载目录对运行用户可写；若用 root，需设 `RUNNER_ALLOW_RUNASROOT=1`。
 - **Job 中访问 docker.sock 报 `permission denied`**：`job_docker_backend: host-socket` 时，容器内用户（UID 1001）需在 socket 所属组内。Manager 创建容器时会按探测到的宿主机 docker GID 追加 `--group-add`，升级后需重建 Runner 容器（`docker rm -f github-runner-<名称>` 后点「启动」）。探测不到时可设置 `runners.docker_gid`（或 `.env` 中 `DOCKER_GID`）为 `getent group docker | cut -d: -f3` 的值。
@@ -126,6 +127,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | 容器模式下宿主机 runners 绝对路径（必填） | 空 |
 | `runners.items[].container_image` | 按 Runner 覆盖容器镜像（仅容器模式），留空回落全局 | 空 |
 | `runners.items[].job_docker_backend` | 按 Runner 覆盖 Job Docker 后端（仅容器模式），留空回落全局 | 空 |
+| `runners.resources` | Runner 容器资源上限（`cpus` / `memory` / `memory_swap` / `pids_limit`），透传给 `docker create`；启动时通过 `docker update` 对存量容器同样生效 | 空（不限制） |
 
 以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config/config.yaml，见 `.env.example`。
 
