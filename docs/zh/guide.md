@@ -124,6 +124,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind` 时 DinD 主机名 | `runner-dind` |
 | `runners.volume_host_path` | 容器模式下宿主机 runners 绝对路径（必填） | 空 |
+| `runners.resources` | Runner 容器资源上限（`cpus` / `memory` / `memory_swap` / `pids_limit`），透传给 `docker create` | 空（不限制） |
 
 以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config/config.yaml，见 `.env.example`。
 

@@ -208,13 +208,16 @@ func runnerDockerGID(cfg *config.Config) int {
 
 // runnerCreateArgs 组装创建 Runner 容器的 docker create 参数。
 // dockerGID 为 unknownDockerGID 时不追加 --group-add，仅依赖镜像内预置的 docker 组。
-func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int) ([]string, error) {
+// limits 中未设置的字段不产生任何参数，保持与旧版本一致的「不限制」行为。
+func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int, limits config.ResourceLimits) ([]string, error) {
 	args := []string{
 		"create",
 		"--name", containerName,
 		"-v", mountSrc + ":/runner",
 		"--network", network,
 	}
+	// 资源上限：不限制时单个失控 Job 能耗尽整机资源，连带拖垮 Manager
+	args = append(args, limits.Args()...)
 	switch jobBackend {
 	case "dind":
 		args = append(args, "-e", "DOCKER_HOST=tcp://"+dindHost+":2375")
@@ -304,7 +307,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			mountSrc = abs
 		}
 	}
-	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg))
+	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg), cfg.Runners.Resources)
 	if err != nil {
 		return err
 	}

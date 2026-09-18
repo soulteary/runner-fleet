@@ -124,6 +124,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind`일 때 DinD 호스트명 | `runner-dind` |
 | `runners.volume_host_path` | 컨테이너 모드에서 runners의 호스트 절대 경로(필수) | 비움 |
+| `runners.resources` | Runner 컨테이너 리소스 상한(`cpus` / `memory` / `memory_swap` / `pids_limit`), `docker create`로 전달 | 비움(무제한) |
 
 일부 필드는 환경 변수로 덮어쓸 수 있음(`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` 등). 전체 컨테이너 시 `.env`만 수정하면 됨. `.env.example` 참조.
 

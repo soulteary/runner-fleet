@@ -129,9 +129,69 @@ type RunnersConfig struct {
 	JobDockerBackend string `yaml:"job_docker_backend"` // dind | host-socket | none，默认 dind
 	DindHost         string `yaml:"dind_host"`          // 仅 job_docker_backend=dind 时有效，DinD 主机名，默认 runner-dind
 	VolumeHostPath   string `yaml:"volume_host_path"`   // 容器模式下宿主机上 runners 根路径，供 docker create -v 使用；Manager 自身在容器内时必填（如 /data/runners）
+	// Resources 容器模式下创建 Runner 容器时施加的资源上限。
+	// 不限制时单个失控 Job（如 Gradle daemon）可耗尽整机内存，把 Manager 自身一并拖垮。
+	Resources ResourceLimits `yaml:"resources,omitempty"`
 	// DockerGID 仅 job_docker_backend=host-socket 时有效：创建 Runner 容器时追加的 docker 组 GID（--group-add），
 	// 使容器内 app(UID 1001) 可访问挂载进来的 docker.sock；0 表示自动探测 docker.sock 所属组
 	DockerGID int `yaml:"docker_gid"`
+}
+
+// ResourceLimits Runner 容器的资源上限，字段留空表示不限制。
+// 取值直接透传给 docker create，语义与 docker 官方一致。
+type ResourceLimits struct {
+	CPUs       string `yaml:"cpus,omitempty"`        // --cpus，如 "2" 或 "1.5"
+	Memory     string `yaml:"memory,omitempty"`      // --memory，如 "4g"、"512m"
+	MemorySwap string `yaml:"memory_swap,omitempty"` // --memory-swap，如 "4g"；设为 "-1" 表示不限 swap
+	PidsLimit  int    `yaml:"pids_limit,omitempty"`  // --pids-limit，正数生效，-1 表示不限
+}
+
+// dockerCPUsRe 匹配 docker --cpus 接受的正数（如 2、1.5、0.25）
+var dockerCPUsRe = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
+
+// dockerSizeRe 匹配 docker 的内存大小写法：纯字节数，或带 b/k/m/g 单位
+var dockerSizeRe = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?[bkmgBKMG]?$`)
+
+// Args 将资源上限转为 docker create 参数，未设置的字段不产生参数
+func (r ResourceLimits) Args() []string {
+	var args []string
+	if v := strings.TrimSpace(r.CPUs); v != "" {
+		args = append(args, "--cpus", v)
+	}
+	if v := strings.TrimSpace(r.Memory); v != "" {
+		args = append(args, "--memory", v)
+	}
+	if v := strings.TrimSpace(r.MemorySwap); v != "" {
+		args = append(args, "--memory-swap", v)
+	}
+	if r.PidsLimit != 0 {
+		args = append(args, "--pids-limit", strconv.Itoa(r.PidsLimit))
+	}
+	return args
+}
+
+// Validate 校验取值格式，避免把非法值传给 docker 后才在创建容器时报错
+func (r ResourceLimits) Validate() error {
+	if v := strings.TrimSpace(r.CPUs); v != "" {
+		// 正则挡掉 1e3/NaN 等 ParseFloat 能接受但 docker 不接受的写法，再要求数值为正
+		f, err := strconv.ParseFloat(v, 64)
+		if !dockerCPUsRe.MatchString(v) || err != nil || f <= 0 {
+			return fmt.Errorf("runners.resources.cpus 需为正数（如 \"2\" 或 \"1.5\"），当前为 %q", r.CPUs)
+		}
+	}
+	if v := strings.TrimSpace(r.Memory); v != "" && !dockerSizeRe.MatchString(v) {
+		return fmt.Errorf("runners.resources.memory 需为 docker 内存写法（如 \"512m\"、\"4g\"），当前为 %q", r.Memory)
+	}
+	if v := strings.TrimSpace(r.MemorySwap); v != "" && v != "-1" && !dockerSizeRe.MatchString(v) {
+		return fmt.Errorf("runners.resources.memory_swap 需为 docker 内存写法或 \"-1\"，当前为 %q", r.MemorySwap)
+	}
+	if r.PidsLimit < -1 {
+		return fmt.Errorf("runners.resources.pids_limit 需为正数或 -1（不限），当前为 %d", r.PidsLimit)
+	}
+	if strings.TrimSpace(r.MemorySwap) != "" && strings.TrimSpace(r.Memory) == "" {
+		return fmt.Errorf("设置 runners.resources.memory_swap 时必须同时设置 memory，否则 docker 会拒绝创建容器")
+	}
+	return nil
 }
 
 // RunnerItem 单个 Runner 配置
@@ -252,6 +312,9 @@ func Validate(c *Config) error {
 	}
 	if !validBackend[jobBackend] {
 		return fmt.Errorf("runners.job_docker_backend 仅支持 dind/host-socket/none，当前为 %q", c.Runners.JobDockerBackend)
+	}
+	if err := c.Runners.Resources.Validate(); err != nil {
+		return err
 	}
 	if c.Runners.DockerGID < 0 {
 		return fmt.Errorf("runners.docker_gid 不能为负数（当前为 %d），留空或 0 表示自动探测 docker.sock 所属组", c.Runners.DockerGID)
