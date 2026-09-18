@@ -13,6 +13,8 @@ config/config.yaml
 *.test
 *.out
 .DS_Store
+# 自定义 Runner 镜像示例不参与本仓库两个镜像的构建
+examples
 
 # Runner/Manager 镜像构建必须包含的路径（显式包含，避免被后续规则排除）
 !cmd

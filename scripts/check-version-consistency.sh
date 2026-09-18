@@ -25,7 +25,9 @@ fi
 echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 
 # CHANGELOG 天然包含所有历史版本号，不参与校验
-FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' 'Dockerfile*' |
+# '*Dockerfile*' 而非 'Dockerfile*'：后者只匹配仓库根目录，会漏掉
+# examples/runner-images/ 下引用了本仓库镜像 tag 的示例
+FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' |
     grep -v '^CHANGELOG\.md$' || true)
 
 tmp=$(mktemp)

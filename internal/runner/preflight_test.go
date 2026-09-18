@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -231,4 +232,119 @@ func joinAny(args []any) string {
 		}
 	}
 	return b.String()
+}
+
+func TestRunnerImages_DedupAndPerRunnerOverride(t *testing.T) {
+	restore := func() {
+		_ = os.Unsetenv("FLEET_IMAGE_TAG")
+		_ = os.Unsetenv("MANAGER_IMAGE")
+	}
+	t.Setenv("FLEET_IMAGE_TAG", "")
+	t.Setenv("MANAGER_IMAGE", "")
+	defer restore()
+
+	cfg := &config.Config{}
+	cfg.Runners.ContainerMode = true
+	cfg.Runners.ContainerImage = "reg/global:1"
+	cfg.Runners.Items = []config.RunnerItem{
+		{Name: "a", ContainerImage: "reg/custom:1"},
+		{Name: "b"}, // 回落全局
+		{Name: "c", ContainerImage: "reg/custom:1"}, // 与 a 相同，应去重
+		{Name: "d", ContainerImage: "reg/other:2"},
+	}
+	got := RunnerImages(cfg)
+	want := []string{"reg/global:1", "reg/custom:1", "reg/other:2"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("RunnerImages = %v, want %v", got, want)
+	}
+}
+
+func TestRunnerImages_FallsBackToDefault(t *testing.T) {
+	// 全局与 items 都没配镜像时，仍要检查实际会用到的默认镜像
+	cfg := &config.Config{}
+	cfg.Runners.ContainerMode = true
+	got := RunnerImages(cfg)
+	if len(got) != 1 || got[0] != config.DefaultRunnerContainerImage() {
+		t.Errorf("RunnerImages = %v, want [%s]", got, config.DefaultRunnerContainerImage())
+	}
+}
+
+func TestRunnerImages_NilConfig(t *testing.T) {
+	if got := RunnerImages(nil); got != nil {
+		t.Errorf("nil 配置应返回 nil，实际 %v", got)
+	}
+}
+
+func TestFirstLine(t *testing.T) {
+	if got := firstLine([]byte("first\nsecond\nthird"), nil); got != "first" {
+		t.Errorf("firstLine = %q, want %q", got, "first")
+	}
+	if got := firstLine([]byte("  only  \n"), nil); got != "only" {
+		t.Errorf("firstLine 应去掉两侧空白: %q", got)
+	}
+	// 输出为空时退回 error 文本，否则自检结果会是一句没有信息量的话
+	if got := firstLine(nil, errors.New("exit status 125")); got != "exit status 125" {
+		t.Errorf("firstLine = %q", got)
+	}
+	if got := firstLine(nil, nil); got != "" {
+		t.Errorf("两者皆空应返回空串: %q", got)
+	}
+}
+
+func TestRequiredRunnerTools_CoversTheKnownFailureModes(t *testing.T) {
+	// 这两个是实际踩过的：缺 git 时 checkout 静默退化，缺 unzip 时 setup-gradle 中途失败
+	for _, want := range []string{"git", "unzip"} {
+		found := false
+		for _, tool := range requiredRunnerTools {
+			if tool == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("requiredRunnerTools 应包含 %q", want)
+		}
+	}
+}
+
+func TestParseMissingTools(t *testing.T) {
+	const marker = missingToolMarker
+	// docker 在 arm64 主机运行 amd64 镜像时输出的真实告警，退出码仍为 0。
+	// dockerCmd 用 CombinedOutput，它会混进探测输出里。
+	platformWarning := "WARNING: The requested image's platform (linux/amd64) does not match " +
+		"the detected host platform (linux/arm64/v8) and no specific platform was requested\n"
+
+	cases := []struct {
+		name string
+		out  string
+		want []string
+	}{
+		{"全部具备", "", nil},
+		{"仅告警，不应误报", platformWarning, nil},
+		{"告警与缺失混合", platformWarning + marker + "git\n" + marker + "unzip\n", []string{"git", "unzip"}},
+		{"缺失项前后有空白", "  " + marker + "git  \n", []string{"git"}},
+		{"未知名字不予采信", marker + "definitely-not-a-required-tool\n", nil},
+		{"无标记的裸行忽略", "git\nunzip\n", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseMissingTools([]byte(tc.out))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("parseMissingTools = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseMissingTools_RecognisesEveryRequiredTool(t *testing.T) {
+	// 探测脚本用 requiredRunnerTools 生成，解析端必须认得其中每一个，
+	// 否则今后往列表里加命令会得到「检查了但永远报不出来」的假绿灯
+	var out strings.Builder
+	for _, tool := range requiredRunnerTools {
+		out.WriteString(missingToolMarker + tool + "\n")
+	}
+	got := parseMissingTools([]byte(out.String()))
+	if len(got) != len(requiredRunnerTools) {
+		t.Fatalf("解析出 %v，期望全部 %v", got, requiredRunnerTools)
+	}
 }
