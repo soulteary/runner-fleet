@@ -88,12 +88,15 @@ runners:
 
 Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバージョン例 v1.3.0-runner、開発は main-runner）、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。`job_docker_backend: host-socket` の場合、Manager は Runner コンテナに `--group-add <ホストの docker GID>` を渡します（`docker.sock` から自動検出、`runners.docker_gid` / `DOCKER_GID` で上書き可）。イメージ側にも `docker` グループを用意しています（ビルド引数 `DOCKER_GID`、既定 999）。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
 
+**Runner イメージの拡張**: GitHub ホストの runner には Android SDK・Node・Python などのツールチェーンが同梱されていますが、セルフホストにはありません。`ubuntu-24.04` 向けに書かれた workflow はこれを暗黙に前提としていることが多く、移行後に `SDK location not found` などで失敗します。本リポジトリの Runner イメージの上に自分のツールチェーンを重ねてください。すぐ使える例と重要な三つの規則（/opt 配下は UID 1001 に chown、環境変数はイメージに埋め込む、ウォームアップは `USER app` の後）は [`examples/runner-images/`](../../examples/runner-images/) にあります。`items[].container_image` で特定の Runner だけに適用し、workflow からは label で選択します。
+
 ### トラブルシューティング
 
 - **うまく動かないときはまず起動時セルフチェック**: `docker compose logs runner-manager | grep 自检`。起動時に runners ディレクトリ、Docker 到達性、ネットワーク、Runner イメージ、Job 内 Docker バックエンドを検査し、失敗項目にはそのまま実行できる修正コマンドが出ます。
 - **compose down 後に Runner が起動しない**: 一度 `docker network create runner-net` を実行。まだ失敗する場合は UI の「Start」で再作成するか、`docker rm -f github-runner-<name>` のあと「Start」。
 - **root で実行**: マウントしたディレクトリはプロセスユーザーが書き込み可能である必要あり。root の場合は `RUNNER_ALLOW_RUNASROOT=1` を設定。
 - **Job 内で docker.sock が `permission denied`**: `job_docker_backend: host-socket` ではコンテナのユーザー（UID 1001）が socket の所有グループに属している必要があります。Manager はコンテナ作成時に検出したホストの docker GID で `--group-add` を付与するため、アップグレード後は Runner コンテナを再作成してください（`docker rm -f github-runner-<name>` のあと「Start」）。検出できない場合は `runners.docker_gid`（または `.env` の `DOCKER_GID`）に `getent group docker | cut -d: -f3` の値を設定します。
+- **Job 内で `command not found` や SDK 不足**: セルフホスト runner には GitHub ホストのようなツールチェーンは同梱されていません。まず起動時セルフチェック（`docker compose logs runner-manager | grep 自检`）を確認してください。設定中の各 Runner イメージに `git`/`unzip`/`tar`/`curl` のどれが欠けているかを示します。言語・プラットフォーム SDK はイメージを拡張してください（[`examples/runner-images/`](../../examples/runner-images/)）。
 - **古い Runner イメージ**: `docker rm -f github-runner-<name>` のあと、UI の「Start」で再作成。
 - **status=unknown**: 詳細ポップアップの probe を確認。「Start/Stop」で自己修復を試す。
 

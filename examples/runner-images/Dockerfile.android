@@ -1,0 +1,56 @@
+# Android SDK + Flutter 的 Runner 镜像示例。
+#
+# 构建：
+#   make docker-build-runner-example EXAMPLE=android IMAGE=your-registry/android-runner:1
+#   docker build -f examples/runner-images/Dockerfile.android -t your-registry/android-runner:1 .
+#
+# 版本按项目需要用 --build-arg 覆盖，例如：
+#   --build-arg ANDROID_PLATFORM=android-34 --build-arg FLUTTER_VERSION=3.32.0
+#
+# 说明见同目录 README.md。基础镜像已含 git/unzip/xz-utils/build-essential 等，
+# 本文件只补 Android 与 Flutter 这类体积大、版本因项目而异的工具链。
+
+ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.3.0-runner
+FROM ${RUNNER_IMAGE}
+
+ARG ANDROID_CMDLINE_TOOLS=11076708
+ARG ANDROID_PLATFORM=android-35
+ARG ANDROID_BUILD_TOOLS=35.0.0
+ARG FLUTTER_VERSION=3.38.4
+
+USER root
+
+# Android SDK：cmdline-tools 必须落在 cmdline-tools/latest 下，sdkmanager 才认
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=${ANDROID_HOME}
+RUN install -d "${ANDROID_HOME}/cmdline-tools" \
+    && curl -fsSL -o /tmp/cmdline-tools.zip \
+       "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS}_latest.zip" \
+    && unzip -q /tmp/cmdline-tools.zip -d "${ANDROID_HOME}/cmdline-tools" \
+    && mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest" \
+    && rm -f /tmp/cmdline-tools.zip
+
+ENV PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools"
+
+# Java 由 workflow 的 setup-java 提供；sdkmanager 自身需要 JRE，这里装无头版
+RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN yes | sdkmanager --licenses > /dev/null \
+    && sdkmanager --install "platform-tools" "platforms;${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}"
+
+# Flutter SDK 本身是 git 仓库，flutter 命令会调 git 读版本与 channel
+ENV FLUTTER_HOME=/opt/flutter
+RUN git clone --depth 1 --branch "${FLUTTER_VERSION}" \
+       https://github.com/flutter/flutter.git "${FLUTTER_HOME}"
+ENV PATH="${PATH}:${FLUTTER_HOME}/bin"
+
+# 容器以 UID 1001 运行，而这两个目录在 Job 里都会被写入（license 标记、缓存、下载的组件）
+RUN chown -R 1001:1001 "${ANDROID_HOME}" "${FLUTTER_HOME}"
+
+USER app
+
+# 预热必须在切回 app 之后，否则产物属主仍是 root
+RUN git config --global --add safe.directory "${FLUTTER_HOME}" \
+    && flutter precache --android \
+    && flutter --version

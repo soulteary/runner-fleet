@@ -1,0 +1,34 @@
+# Node.js 的 Runner 镜像示例。
+#
+# 构建：
+#   make docker-build-runner-example EXAMPLE=node IMAGE=your-registry/node-runner:1
+#
+# 版本用 --build-arg NODE_MAJOR=22 覆盖。说明见同目录 README.md。
+#
+# 若 workflow 里已经用 actions/setup-node 指定版本，通常无需本镜像——
+# setup-node 会自行下载并缓存到 _work/_tool。预装的价值在于省掉每次下载，
+# 以及让不带 setup-node 的 workflow 也能直接跑。
+
+ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.3.0-runner
+FROM ${RUNNER_IMAGE}
+
+ARG NODE_MAJOR=22
+
+USER root
+
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && chmod 644 /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 全局包装到 /usr/local，属主保持 root 即可（Job 只读取不写入）；
+# 但 npm 的用户级缓存目录要归 app，否则首次 npm install 会因无权限失败
+ENV NPM_CONFIG_CACHE=/home/app/.npm
+RUN install -d -o 1001 -g 1001 /home/app/.npm
+
+USER app
+RUN node --version && npm --version
