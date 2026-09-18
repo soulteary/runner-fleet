@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
 
-호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하거나 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 이미지에 Docker CLI가 포함되어 있으며, DinD에서 일반적인 Action이 동작합니다.
+호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하고(이미지에 GID 999의 `docker` 그룹이 포함되어 있으며 빌드 인자 `DOCKER_GID`로 변경 가능. 호스트 docker GID가 999가 아니면 `--group-add $(getent group docker | cut -d: -f3)`도 필요), 또는 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 이미지에 Docker CLI가 포함되어 있으며, DinD에서 일반적인 Action이 동작합니다.
 
 ### 자동 설치 및 등록
 
@@ -84,12 +84,13 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.0.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
+Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.0.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
 ### 문제 해결
 
 - **compose down 후 Runner가 시작되지 않음**: 한 번 `docker network create runner-net` 실행. 계속 실패하면 UI에서 "Start"로 재생성하거나 `docker rm -f github-runner-<name>` 후 "Start".
 - **root로 실행**: 마운트된 디렉터리는 프로세스 사용자가 쓸 수 있어야 함. root 사용 시 `RUNNER_ALLOW_RUNASROOT=1` 설정.
+- **Job에서 docker.sock `permission denied`**: `job_docker_backend: host-socket`에서는 컨테이너 사용자(UID 1001)가 socket 소유 그룹에 속해야 합니다. Manager가 컨테이너 생성 시 감지한 호스트 docker GID로 `--group-add`를 추가하므로, 업그레이드 후에는 Runner 컨테이너를 재생성하세요(`docker rm -f github-runner-<name>` 후 "Start"). 감지에 실패하면 `runners.docker_gid`(또는 `.env`의 `DOCKER_GID`)를 `getent group docker | cut -d: -f3` 값으로 설정합니다.
 - **이전 Runner 이미지**: `docker rm -f github-runner-<name>`, 그 다음 UI에서 "Start"로 재생성.
 - **status=unknown**: 상세 팝업에서 probe 확인; "Start/Stop"으로 자가 복구 시도.
 
