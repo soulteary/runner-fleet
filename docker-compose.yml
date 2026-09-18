@@ -35,8 +35,8 @@ services:
     restart: unless-stopped
 
   runner-manager:
-    # 默认使用稳定版 v1.2.0；开发/尝鲜可设 .env：MANAGER_IMAGE=ghcr.io/soulteary/runner-fleet:main
-    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.2.0}
+    # 默认使用稳定版 v1.3.0；开发/尝鲜可设 .env：MANAGER_IMAGE=ghcr.io/soulteary/runner-fleet:main
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.3.0}
     container_name: runner-manager
     # 使用 job_docker_backend: dind 时请先启动 DinD：docker compose --profile dind up -d
     # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375

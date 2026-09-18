@@ -36,13 +36,13 @@ func TestLoad_MissingFile_WithEnvGeneratesConfig(t *testing.T) {
 	// 文件不存在且设置了 .env 中常用变量时，Load 从默认配置+环境变量生成并写入 config.yaml，内容符合 env
 	restore := setEnvsAndRestore(t, map[string]string{
 		"CONTAINER_MODE":     "true",
-		"VOLUME_HOST_PATH":  "/data/runners",
-		"RUNNERS_BASE_PATH": "/app/runners",
-		"SERVER_PORT":       "9090",
+		"VOLUME_HOST_PATH":   "/data/runners",
+		"RUNNERS_BASE_PATH":  "/app/runners",
+		"SERVER_PORT":        "9090",
 		"JOB_DOCKER_BACKEND": "host-socket",
-		"RUNNER_IMAGE":      "custom/runner:v1",
-		"MANAGER_IMAGE":     "",
-		"FLEET_IMAGE_TAG":   "",
+		"RUNNER_IMAGE":       "custom/runner:v1",
+		"MANAGER_IMAGE":      "",
+		"FLEET_IMAGE_TAG":    "",
 	}, []string{"CONTAINER_MODE", "VOLUME_HOST_PATH", "RUNNERS_BASE_PATH", "SERVER_PORT", "JOB_DOCKER_BACKEND", "RUNNER_IMAGE", "MANAGER_IMAGE", "FLEET_IMAGE_TAG"})
 	defer restore()
 
@@ -342,7 +342,7 @@ runners:
 }
 
 func TestLoad_ContainerImageWhitespaceUsesDefault(t *testing.T) {
-	// 未设置 FLEET_IMAGE_TAG 时默认使用 v1.2.0-runner
+	// 未设置 FLEET_IMAGE_TAG 时默认使用 v1.3.0-runner
 	restore := setEnvAndRestore(t, "FLEET_IMAGE_TAG", "")
 	defer restore()
 
@@ -363,7 +363,7 @@ runners:
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "ghcr.io/soulteary/runner-fleet:v1.2.0-runner"
+	want := "ghcr.io/soulteary/runner-fleet:v1.3.0-runner"
 	if cfg.Runners.ContainerImage != want {
 		t.Fatalf("expected default container image %q, got %q", want, cfg.Runners.ContainerImage)
 	}

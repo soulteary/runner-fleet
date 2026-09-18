@@ -15,10 +15,10 @@ Deployment, configuration, adding runners, and security are covered here. For co
 
 ### Use published image (recommended)
 
-Production: use a specific version (e.g. v1.2.0). For development you can use the `main` tag.
+Production: use a specific version (e.g. v1.3.0). For development you can use the `main` tag.
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.2.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.3.0
 ```
 
 ### docker-compose quick start
@@ -48,7 +48,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.2.0
+  ghcr.io/soulteary/runner-fleet:v1.3.0
 ```
 
 Host dirs must be writable by UID 1001. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. For Docker in jobs add `-v /var/run/docker.sock:/var/run/docker.sock` plus `--group-add $(getent group docker | cut -d: -f3)` if the host docker GID is not 999 (the image ships a `docker` group at GID 999, overridable with build arg `DOCKER_GID`), or use DinD (see repo `docker-compose.yml` `--profile dind`). Images ship the Docker CLI plus the tools common Actions assume (`git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq`, `openssh-client`); the list lives in `scripts/apt-packages.txt` and is shared by both images.
@@ -70,7 +70,7 @@ Or on the host extract [actions-runner](https://github.com/actions/runner/releas
 Each runner runs in its own container; Manager starts/stops via host Docker and gets status over HTTP from the in-container Agent.
 
 **Option 1: Env only (recommended for full-container)**
-No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If you do not create `config/config.yaml`, the program will generate it on first start from these env vars. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.2.0` → `v1.2.0-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
+No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If you do not create `config/config.yaml`, the program will generate it on first start from these env vars. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.3.0` → `v1.3.0-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
 
 **Option 2: Enable in config/config.yaml** (see `config.yaml.example`):
 
@@ -78,7 +78,7 @@ No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CO
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.2.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.3.0-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -86,7 +86,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner image: same name as Manager with `-runner` tag (production: use a version tag e.g. v1.2.0-runner; dev: main-runner), or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.2.0-runner .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. For `job_docker_backend: host-socket`, the Manager passes `--group-add <host docker GID>` to the runner container (auto-detected from `docker.sock`, override with `runners.docker_gid` / `DOCKER_GID`); the image also ships a `docker` group (build arg `DOCKER_GID`, default 999). Runner names are normalized to container names; duplicates after mapping will conflict.
+Runner image: same name as Manager with `-runner` tag (production: use a version tag e.g. v1.3.0-runner; dev: main-runner), or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. For `job_docker_backend: host-socket`, the Manager passes `--group-add <host docker GID>` to the runner container (auto-detected from `docker.sock`, override with `runners.docker_gid` / `DOCKER_GID`); the image also ships a `docker` group (build arg `DOCKER_GID`, default 999). Runner names are normalized to container names; duplicates after mapping will conflict.
 
 ### Troubleshooting
 
@@ -101,7 +101,7 @@ Runner image: same name as Manager with `-runner` tag (production: use a version
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.2.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -121,7 +121,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Root path for runner install dirs; **set to `/app/runners` in container** | `./runners` |
 | `runners.items` | Predefined runner list | Can also add via Web UI |
 | `runners.container_mode` | Enable container mode | `false` |
-| `runners.container_image` | Runner image in container mode (tag with -runner) | `ghcr.io/soulteary/runner-fleet:v1.2.0-runner` |
+| `runners.container_image` | Runner image in container mode (tag with -runner) | `ghcr.io/soulteary/runner-fleet:v1.3.0-runner` |
 | `runners.container_network` | Network for runners in container mode | `runner-net` |
 | `runners.agent_port` | In-container Agent port | `8081` |
 | `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
