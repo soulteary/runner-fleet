@@ -89,4 +89,15 @@ go run ./cmd/runner-manager
 
 容器模式用的 Agent 为 `cmd/runner-agent`，Runner 镜像用 `Dockerfile.runner` 单独构建。
 
+
+## 发布
+
+文档与示例中的版本号必须与 `internal/config/config.go` 里的默认镜像 tag 一致，CI 会通过 `scripts/check-version-consistency.sh` 强制校验。提发布 PR 前可本地先跑：
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
+某一行确需引用历史版本号（变更说明、升级指引等）时，在该行加上 `version-check-ignore` 标记即可跳过。
+
 [← 返回文档](README.md)
