@@ -13,18 +13,18 @@ FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="Runner Fleet Runner" \
       org.opencontainers.image.description="GitHub Actions Runner 单实例容器，内含 Agent 供 Manager 控制"
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libicu74 libkrb5-3 liblttng-ust1 libssl3 zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+# 依赖清单集中在 scripts/apt-packages.txt，Manager 与 Runner 镜像共用，避免单向漂移
+COPY scripts/apt-packages.txt /tmp/apt-packages.txt
+RUN apt-get update \
+    && awk '!/^[[:space:]]*#/ && NF' /tmp/apt-packages.txt \
+       | xargs -r apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/apt-packages.txt
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod 644 /etc/apt/keyrings/docker.asc \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list \
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
-
-# For GitHub Actions
-RUN apt-get update && apt install -y build-essential git gnupg
 
 # Job 通过宿主机 docker.sock 使用 Docker 时，app(UID 1001) 必须在 socket 所属组内，否则报
 # "permission denied while trying to connect to the Docker daemon socket"。
