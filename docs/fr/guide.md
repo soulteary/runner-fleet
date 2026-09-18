@@ -88,6 +88,7 @@ Image runner : même nom que le Manager avec le tag `-runner` (production : vers
 
 ### Dépannage
 
+- **En cas de problème, regardez d'abord l'autotest de démarrage** : `docker compose logs runner-manager | grep 自检`. Au démarrage, le répertoire runners, l'accès à Docker, le réseau, l'image runner et le backend Docker des jobs sont vérifiés ; chaque échec indique la commande de correction.
 - **Le runner ne démarre pas après compose down** : Exécutez une fois `docker network create runner-net`. Si ça échoue encore, utilisez « Start » dans l'interface pour recréer, ou `docker rm -f github-runner-<name>` puis « Start ».
 - **Exécution en root** : Les répertoires montés doivent être accessibles en écriture par l'utilisateur du processus ; pour root, définissez `RUNNER_ALLOW_RUNASROOT=1`.
 - **`permission denied` sur docker.sock dans les jobs** : Avec `job_docker_backend: host-socket`, l'utilisateur du conteneur (UID 1001) doit appartenir au groupe du socket. Le Manager ajoute `--group-add` avec le GID docker hôte détecté à la création ; après mise à jour, recréez le conteneur runner (`docker rm -f github-runner-<name>` puis « Start »). Si la détection échoue, définissez `runners.docker_gid` (ou `DOCKER_GID` dans `.env`) sur `getent group docker | cut -d: -f3`.
@@ -126,6 +127,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | Chemin absolu hôte vers runners en mode conteneur (obligatoire) | vide |
 | `runners.items[].container_image` | Surcharge d'image par runner (mode conteneur) ; vide = valeur globale | vide |
 | `runners.items[].job_docker_backend` | Surcharge du backend Docker par runner (mode conteneur) ; vide = valeur globale | vide |
+| `runners.resources` | Limites de ressources des conteneurs runner (`cpus` / `memory` / `memory_swap` / `pids_limit`), transmises à `docker create` et appliquées aux conteneurs existants via `docker update` au démarrage | vide (illimité) |
 
 Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 

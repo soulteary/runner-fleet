@@ -88,6 +88,7 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 
 ### トラブルシューティング
 
+- **うまく動かないときはまず起動時セルフチェック**: `docker compose logs runner-manager | grep 自检`。起動時に runners ディレクトリ、Docker 到達性、ネットワーク、Runner イメージ、Job 内 Docker バックエンドを検査し、失敗項目にはそのまま実行できる修正コマンドが出ます。
 - **compose down 後に Runner が起動しない**: 一度 `docker network create runner-net` を実行。まだ失敗する場合は UI の「Start」で再作成するか、`docker rm -f github-runner-<name>` のあと「Start」。
 - **root で実行**: マウントしたディレクトリはプロセスユーザーが書き込み可能である必要あり。root の場合は `RUNNER_ALLOW_RUNASROOT=1` を設定。
 - **Job 内で docker.sock が `permission denied`**: `job_docker_backend: host-socket` ではコンテナのユーザー（UID 1001）が socket の所有グループに属している必要があります。Manager はコンテナ作成時に検出したホストの docker GID で `--group-add` を付与するため、アップグレード後は Runner コンテナを再作成してください（`docker rm -f github-runner-<name>` のあと「Start」）。検出できない場合は `runners.docker_gid`（または `.env` の `DOCKER_GID`）に `getent group docker | cut -d: -f3` の値を設定します。
@@ -126,6 +127,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | コンテナモード時の runners のホスト絶対パス（必須） | 空 |
 | `runners.items[].container_image` | Runner ごとのイメージ上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.items[].job_docker_backend` | Runner ごとの Docker バックエンド上書き（コンテナモード）。空ならグローバル値 | 空 |
+| `runners.resources` | Runner コンテナのリソース上限（`cpus` / `memory` / `memory_swap` / `pids_limit`）。`docker create` に渡すほか、起動時に `docker update` で既存コンテナにも適用します | 空（無制限） |
 
 上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
 

@@ -220,13 +220,16 @@ func runnerDockerGID(cfg *config.Config) int {
 
 // runnerCreateArgs 组装创建 Runner 容器的 docker create 参数。
 // dockerGID 为 unknownDockerGID 时不追加 --group-add，仅依赖镜像内预置的 docker 组。
-func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int, agentToken string) ([]string, error) {
+// limits 中未设置的字段不产生任何参数，保持与旧版本一致的「不限制」行为。
+func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int, limits config.ResourceLimits, agentToken string) ([]string, error) {
 	args := []string{
 		"create",
 		"--name", containerName,
 		"-v", mountSrc + ":/runner",
 		"--network", network,
 	}
+	// 资源上限：不限制时单个失控 Job 能耗尽整机资源，连带拖垮 Manager
+	args = append(args, limits.Args()...)
 	// 令牌用环境变量注入，而不是只靠挂载目录下的文件：
 	// Manager 以 root 或非 1001 的 UID 运行时，0600 的令牌文件对容器内 app(1001)
 	// 不可读，Agent 会读到空令牌并静默降级为不鉴权。环境变量不依赖 UID 匹配。
@@ -250,6 +253,36 @@ func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHos
 	return append(args, img), nil
 }
 
+// applyResourceLimitsToExisting 对已存在的容器施加资源上限。
+//
+// docker create 的资源参数只在创建时生效：升级到支持 runners.resources 的版本后，
+// 已有容器仍是原来的无限制状态，仅靠停止/启动也不会变。这里用 docker update 补上，
+// 使配置对存量容器同样生效，无需删掉重建。
+// 未配置上限时不执行任何操作，保持与旧版本一致。
+func applyResourceLimitsToExisting(ctx context.Context, containerName string, limits config.ResourceLimits) {
+	updateArgs := resourceUpdateArgs(containerName, limits)
+	if updateArgs == nil {
+		return
+	}
+	if out, err := dockerCmd(ctx, updateArgs...); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		log.Printf("警告: 为已存在容器 %s 施加资源上限失败，该容器仍沿用创建时的限制: %s（可 docker rm -f %s 后在界面重新启动以重建）",
+			containerName, msg, containerName)
+	}
+}
+
+// resourceUpdateArgs 组装 docker update 参数；未配置任何上限时返回 nil 表示无需执行
+func resourceUpdateArgs(containerName string, limits config.ResourceLimits) []string {
+	args := limits.Args()
+	if len(args) == 0 {
+		return nil
+	}
+	return append(append([]string{"update"}, args...), containerName)
+}
+
 // StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner
 func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
 	if cfg.Runners.ContainerMode && managerDockerHostIsDind() {
@@ -267,6 +300,8 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return err
 	}
 	if running {
+		// 存量容器可能是在配置资源上限之前创建的，这里补一次
+		applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
 		// 容器已在跑，可选：调 Agent /start 确保 listener 启动（若容器刚启动 agent 可能尚未起 run.sh）
 		_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 		return nil
@@ -279,6 +314,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	if len(strings.TrimSpace(string(out))) > 0 {
 		startOut, startErr := dockerCmd(ctx, "start", cn)
 		if startErr == nil {
+			applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
 			time.Sleep(2 * time.Second)
 			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 		}
@@ -323,7 +359,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			mountSrc = abs
 		}
 	}
-	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg), token)
+	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg), cfg.Runners.Resources, token)
 	if err != nil {
 		return err
 	}

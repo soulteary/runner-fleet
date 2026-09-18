@@ -35,3 +35,11 @@ runners:
     # docker_gid: 999            # 仅 job_docker_backend=host-socket 时有效：Runner 容器追加的 docker 组 GID，
     #                            # 使容器内 Job 能访问挂载的 docker.sock。留空/0 表示自动探测 docker.sock 所属组
     # volume_host_path: /absolute/path/on/host/to/runners   # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径
+    # 容器模式下 Runner 容器的资源上限，留空不限制。强烈建议设置：
+    # 不限制时单个失控 Job（如 Gradle daemon）可耗尽整机内存，连带拖垮 Manager
+    # resources:
+    #     cpus: "2"          # --cpus
+    #     memory: 4g         # --memory
+    #     memory_swap: 4g    # --memory-swap，需同时设置 memory；等于 memory 表示禁用 swap
+    #     pids_limit: 512    # --pids-limit，-1 表示不限
+    # 修改后对已存在的容器同样生效（启停时通过 docker update 施加）；清除限制需重建容器

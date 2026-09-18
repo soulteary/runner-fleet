@@ -73,6 +73,11 @@ func main() {
 	if cfg.Runners.ContainerMode && runner.ManagerDockerHostIsDind() {
 		log.Printf("警告: 容器模式已开启，但 DOCKER_HOST 指向 TCP（DinD）。Manager 必须使用宿主机 Docker（socket）才能创建/启停 Runner 容器。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375")
 	}
+	// 启动自检：把配置类问题提前到这里暴露，而不是等第一个 Job 跑挂才发现。
+	// 只做只读检查，任何一项失败都不阻止启动（避免打断既有部署）。
+	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	runner.LogPreflight(runner.Preflight(preflightCtx, cfg))
+	preflightCancel()
 
 	e := echo.New()
 	e.HideBanner = true
