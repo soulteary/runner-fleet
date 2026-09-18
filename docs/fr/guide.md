@@ -61,6 +61,8 @@ Dans l'interface « Quick Add Runner », saisissez nom, cible, token et validez 
 docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 ```
 
+Le script choisit l'architecture via `uname -m`, résout la dernière version via l'API GitHub si aucune n'est donnée, et vérifie **toujours** le SHA-256. Si le hash officiel est inaccessible (hors ligne, miroir), passez-le explicitement : `RUNNER_SHA256=<sha256> ... install-runner.sh <name> <version>`. Un répertoire contenant déjà un runner est ignoré sauf si `RUNNER_FORCE_REINSTALL=1` est défini.
+
 Ou sur l'hôte, extrayez [actions-runner](https://github.com/actions/runner/releases) dans `runners/<name>/`, puis validez dans l'interface ou exécutez `./config.sh` manuellement.
 
 ### Mode conteneur (un runner par conteneur)
