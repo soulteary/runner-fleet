@@ -146,7 +146,10 @@ func checkNetwork(ctx context.Context, cfg *config.Config) CheckResult {
 // requiredRunnerTools Job 普遍依赖的命令。缺任何一个都会以难以定位的方式失败：
 // 缺 git 时 actions/checkout 静默退化为下载 tar 包（工作目录没有 .git），
 // 缺 unzip 时 setup-gradle 之类的 Action 要等下载完发行包才报错。
-var requiredRunnerTools = []string{"git", "unzip", "tar", "curl"}
+// 不含 sudo：command -v sudo 只能证明命令存在，无法证明 Job 用户在 sudoers 里，
+// 会给出「自检通过但 sudo apt-get 仍失败」的假保证。免密 sudo 由镜像构建保证
+// （两个 Dockerfile 的 ALLOW_SUDO），不靠运行时探测。
+var requiredRunnerTools = []string{"git", "unzip", "tar", "curl", "jq"}
 
 // RunnerImages 返回配置中用到的全部 Runner 镜像（去重，保持稳定顺序）。
 // 自 items[].container_image 支持按 Runner 覆盖后，镜像可能不止一个。

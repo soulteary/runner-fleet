@@ -34,6 +34,19 @@ ARG DOCKER_GID=999
 RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /runner -s /bin/bash app \
     && if ! getent group "${DOCKER_GID}" >/dev/null; then groupadd -g "${DOCKER_GID}" docker; fi \
     && usermod -aG "$(getent group "${DOCKER_GID}" | cut -d: -f1)" app
+# 托管 runner 提供免密 sudo，大量 workflow 直接写 `sudo apt-get install -y ...`。
+# 只装 sudo 而不配 sudoers，等于命令在但用不了——比不装更难排查。
+# 需要更严格的边界时用 --build-arg ALLOW_SUDO=false 关闭。
+#
+# 这不会实质扩大 Job 的权限面：容器内 app 本就拥有工作目录；真正的边界是容器本身
+# （容器模式下建议配合 runners.resources），以及是否把宿主机 docker.sock 挂进去。
+ARG ALLOW_SUDO=true
+RUN if [ "${ALLOW_SUDO}" = "true" ]; then \
+        echo "app ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner-fleet-app \
+        && chmod 0440 /etc/sudoers.d/runner-fleet-app \
+        && visudo -c -f /etc/sudoers.d/runner-fleet-app; \
+    fi
+
 RUN install -m 0755 -d /app && install -m 0755 -d /runner
 COPY --from=builder /app/runner-agent /app/runner-agent
 RUN chown app:app /app/runner-agent /runner

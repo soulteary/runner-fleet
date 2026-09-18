@@ -4,16 +4,23 @@ GitHub 托管的 runner（`runs-on: ubuntu-24.04` 等）预装了大量工具链
 多版本 Node、Python、浏览器等。**自托管 runner 不会有这些**。为托管 runner 写的
 workflow 往往隐式依赖了它们，迁到自托管后会以各种形式失败：
 
-| 现象 | 缺的东西 |
-|------|----------|
-| `git: command not found`，或 checkout 后工作目录没有 `.git` | `git` |
-| `Unable to locate executable file: unzip` | `unzip` |
-| 解压 `.tar.xz` 分发的 SDK 失败 | `xz-utils` |
-| `SDK location not found. Define a valid SDK location with an ANDROID_HOME…` | Android SDK |
-| `node: command not found` | Node.js |
+本仓库的 Runner 镜像已经把**命令行基础层**对齐到托管镜像：`scripts/apt-packages.txt`
+取自 `actions/runner-images` 的 `toolset-2404.json`（`apt.vital_packages` +
+`common_packages` + `cmd_packages`），所以 `git`、`unzip`、`jq`、`rsync`、`sudo`、
+`xvfb` 这类命令都在。
 
-前三项本仓库的 Runner 镜像已预装（见 `scripts/apt-packages.txt`）。语言/平台 SDK
-体积大、版本因项目而异，不适合塞进基础镜像，应当按需扩展。
+**没有对齐、也不打算对齐的是语言与平台 SDK**——那是托管镜像 40GB 体积的来源，
+且版本因项目而异：
+
+| 现象 | 缺的东西 | 解决方式 |
+|------|----------|----------|
+| `SDK location not found. Define a valid SDK location with an ANDROID_HOME…` | Android SDK | 扩展镜像（见下） |
+| `node: command not found` | Node.js | `actions/setup-node`，或扩展镜像 |
+| `python: command not found` 指向特定版本 | 对应 Python | `actions/setup-python` |
+| 需要特定 JDK 版本 | 对应 JDK | `actions/setup-java` |
+
+`setup-*` 这类 action 会把工具装到 `_work/_tool`，通常够用；预装进镜像的价值在于
+省掉每次下载，以及让不带 `setup-*` 的 workflow 也能直接跑。
 
 ## 扩展方式
 
@@ -61,7 +68,13 @@ ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH=$PATH:$ANDROID_HOME/platform-tools
 ```
 
-**3. 预热放在 `USER app` 之后**
+**3. 免密 sudo 会被继承**
+
+基础镜像已为 `app` 配好免密 `sudo`（与托管 runner 一致）。扩展时在 `USER root`
+下装包即可，无需再配 sudoers；若基础镜像是用 `--build-arg ALLOW_SUDO=false`
+构建的，则 Job 内的 `sudo` 不可用。
+
+**4. 预热放在 `USER app` 之后**
 
 `flutter precache`、`sdkmanager --licenses` 这类会往安装目录写文件的步骤，要以
 最终运行用户的身份执行，否则产物属主还是 root。

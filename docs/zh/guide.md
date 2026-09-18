@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.3.0
 ```
 
-宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`；镜像内已预置 GID 999 的 `docker` 组（构建参数 `DOCKER_GID` 可改），宿主机 docker GID 不是 999 时还需加 `--group-add $(getent group docker | cut -d: -f3)`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。镜像除 Docker CLI 外，还预装了常见 Action 默认依赖的工具（`git`、`unzip`、`zip`、`xz-utils`、`build-essential`、`gnupg`、`jq`、`openssh-client`）；清单见 `scripts/apt-packages.txt`，Manager 与 Runner 镜像共用。
+宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`；镜像内已预置 GID 999 的 `docker` 组（构建参数 `DOCKER_GID` 可改），宿主机 docker GID 不是 999 时还需加 `--group-add $(getent group docker | cut -d: -f3)`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。两个镜像除 Docker CLI 外，还带有一层与 GitHub 托管 runner 对齐的命令行基础层：`scripts/apt-packages.txt` 取自 `actions/runner-images` 的 `toolset-2404.json`，`git`、`unzip`、`jq`、`rsync`、`sudo`、`xvfb` 等都在其中。语言与平台 SDK 有意不含——用 `setup-*` action 安装，或自行扩展镜像。与托管 runner 一致，两个镜像都为 Job 用户配置了免密 `sudo`，因此 `sudo apt-get install -y …` 可直接使用；需要更严格的边界时以 `--build-arg ALLOW_SUDO=false` 构建。
 
 ### 自动安装与注册
 
