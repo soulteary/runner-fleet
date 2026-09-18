@@ -6,5 +6,6 @@
 
 - **[User Guide](guide.md)** — Deployment, configuration, adding runners, security & troubleshooting
 - **[Development & Build](development.md)** — Build, API, Makefile
+- **[Changelog](../CHANGELOG.md)** — Release history and upgrade notes
 
 [← Back to project home](../README.md)

@@ -17,7 +17,7 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=1.0.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.2.0" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent
