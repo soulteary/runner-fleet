@@ -88,6 +88,7 @@ Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z
 
 ### Fehlerbehebung
 
+- **Wenn etwas nicht läuft, zuerst den Startup-Selbsttest ansehen**: `docker compose logs runner-manager | grep 自检`. Beim Start werden runners-Verzeichnis, Docker-Erreichbarkeit, Netzwerk, Runner-Image und Job-Docker-Backend geprüft; fehlgeschlagene Punkte nennen direkt den Fix.
 - **Runner startet nach compose down nicht**: Einmal `docker network create runner-net` ausführen. Bei anhaltendem Fehler in der UI „Start“ zum Neuerstellen nutzen oder `docker rm -f github-runner-<name>` dann „Start“.
 - **Lauf als root**: Gemountete Verzeichnisse müssen für den Prozessbenutzer schreibbar sein; für root `RUNNER_ALLOW_RUNASROOT=1` setzen.
 - **`permission denied` auf docker.sock in Jobs**: Bei `job_docker_backend: host-socket` muss der Container-Benutzer (UID 1001) in der Gruppe des Sockets sein. Der Manager hängt beim Erstellen `--group-add` mit der erkannten Host-Docker-GID an; nach dem Upgrade den Runner-Container neu erstellen (`docker rm -f github-runner-<name>`, dann „Start“). Schlägt die Erkennung fehl, `runners.docker_gid` (oder `DOCKER_GID` in `.env`) auf `getent group docker | cut -d: -f3` setzen.
