@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-18
+
+### Added
+
+- Per-runner overrides for `container_image` and `job_docker_backend` under `runners.items[]`, falling back to the global values when unset. One machine can now serve projects with different toolchains — a Flutter + Android image for one runner, the default image for the rest — instead of forcing a single oversized image or a second Manager instance. ([#8])
+- `runners.resources` caps runner containers via `docker create` (`cpus`, `memory`, `memory_swap`, `pids_limit`). Values are validated at load time rather than failing at container creation, and are also applied to pre-existing containers with `docker update` on start. Leaving it unset changes nothing. ([#9])
+- Startup self-test: the Manager now checks the runners directory, Docker reachability, the container network, the runner image and the in-job Docker backend, logging each failure with a copy-pasteable fix. Nothing blocks startup. ([#10])
+- CI enforces that version references in the docs and examples match the default image tag in `internal/config/config.go`, with a `version-check-ignore` marker for lines that legitimately cite older versions. ([#13])
+
+### Fixed
+
+- **Jobs failed with `git: command not found` and `Unable to locate executable file: unzip`.** The Manager image shipped only the .NET runner's runtime dependencies, so in default mode — where jobs run inside the Manager container — `actions/checkout` silently degraded to a tarball download with no `.git`, and `setup-gradle` could not unpack its distribution. `unzip` was missing from both images, so container mode hit the same wall. Both images now install from one shared manifest (`scripts/apt-packages.txt`) covering `git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq` and `openssh-client`; CI fails if either Dockerfile stops using it. ([#7])
+- `install-runner.sh` hard-coded the `x64` architecture, so arm64 hosts installed an x86 runner. It now selects `x64` / `arm64` / `arm` from `uname -m` and fails on anything else. ([#12])
+- `install-runner.sh` left the downloaded tarball behind whenever `RUNNERS_BASE_PATH` was relative — the repository's own local default — because the cleanup trap resolved its path a second time after `cd`. ([#12])
+
+### Security
+
+- The in-container Agent's `/status`, `/start` and `/stop` endpoints had no authentication, so any container on the shared Docker network could stop another runner. The Manager now issues a random per-runner token, injects it as `AGENT_TOKEN` at container creation and sends it as `Authorization: Bearer`; the Agent rejects unauthenticated control requests with a constant-time comparison. `/health` stays open for the container HEALTHCHECK. Containers created before this release keep working unauthenticated until recreated. ([#11])
+- `install-runner.sh` verified the tarball checksum only for one hard-coded version and silently skipped verification for every other — worse than not verifying, since nothing told the operator. Verification is now mandatory: the hash comes from `RUNNER_SHA256`, the release asset's `digest`, the release notes, or the pinned fallback, and the script fails with instructions when none is available. `curl -f` also stops an HTTP error page from being written out as a tarball. ([#12])
+
+### Upgrading
+
+Runner containers created by an earlier version must be recreated before the Agent authentication and the resource limits take full effect:
+
+```bash
+docker rm -f github-runner-<name>   # then click "Start" in the UI to recreate
+```
+
+Resource limits alone are applied to existing containers on start via `docker update`; clearing them requires recreating the container.
+
 ## [1.2.0] - 2026-09-18
 
 ### Added
@@ -67,7 +97,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/soulteary/runner-fleet/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/soulteary/runner-fleet/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/soulteary/runner-fleet/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/soulteary/runner-fleet/compare/v1.0.1...v1.1.0
@@ -76,3 +107,10 @@ Initial release.
 [#2]: https://github.com/soulteary/runner-fleet/pull/2
 [#4]: https://github.com/soulteary/runner-fleet/issues/4
 [#5]: https://github.com/soulteary/runner-fleet/pull/5
+[#7]: https://github.com/soulteary/runner-fleet/pull/7
+[#8]: https://github.com/soulteary/runner-fleet/pull/8
+[#9]: https://github.com/soulteary/runner-fleet/pull/9
+[#10]: https://github.com/soulteary/runner-fleet/pull/10
+[#11]: https://github.com/soulteary/runner-fleet/pull/11
+[#12]: https://github.com/soulteary/runner-fleet/pull/12
+[#13]: https://github.com/soulteary/runner-fleet/pull/13
