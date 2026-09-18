@@ -162,6 +162,8 @@ Multiple runners per machine: use separate subdirs.
 
 **Paths & uniqueness**: name/path must not contain `..`, `/`, `\`; dirs must be under `runners.base_path`. No duplicate names; name is read-only when editing. In container mode names are normalized to container names; duplicates after mapping will error.
 
+**Agent auth** (container mode): the Manager writes a random per-runner token to `<runner dir>/.agent_token` (mode 0600) and sends it as `Authorization: Bearer` on every Agent call. The Agent rejects `/status`, `/start` and `/stop` without it, so other containers on the same network can no longer control runners; `/health` stays open for the container HEALTHCHECK. Containers created before this change have no token file and keep working unauthenticated — recreate them (`docker rm -f github-runner-<name>`, then "Start") to enable it.
+
 **Sensitive files**: config/config.yaml and .env are in `.gitignore`. For each runner's `.github_check_token` use `chmod 600`; add `**/.github_check_token` to `.gitignore` if under version control.
 
 [← Back to project home](../README.md)

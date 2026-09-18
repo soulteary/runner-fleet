@@ -162,6 +162,8 @@ Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 
 **Pfade und Eindeutigkeit**: name/path dürfen nicht `..`, `/`, `\` enthalten; Verzeichnisse müssen unter `runners.base_path` liegen. Keine doppelten Namen; Name beim Bearbeiten schreibgeschützt. Im Containermodus werden Namen zu Containernamen normalisiert; Duplikate nach Mapping führen zu Fehler.
 
+**Agent-Authentifizierung** (Containermodus): Der Manager schreibt pro Runner ein zufälliges Token nach `<Runner-Verzeichnis>/.agent_token` (Modus 0600) und sendet es bei jedem Agent-Aufruf als `Authorization: Bearer`. Der Agent lehnt `/status`, `/start` und `/stop` ohne Token ab; `/health` bleibt für den HEALTHCHECK offen. Vorher erstellte Container haben kein Token und laufen weiter ohne Prüfung — zum Aktivieren neu erstellen.
+
 **Sensible Dateien**: config/config.yaml und .env stehen in `.gitignore`. Für `.github_check_token` jedes Runners `chmod 600` verwenden; `**/.github_check_token` zu `.gitignore` hinzufügen, wenn unter Versionskontrolle.
 
 [← Zurück zur Projektstartseite](../../README.md)

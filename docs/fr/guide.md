@@ -162,6 +162,8 @@ Plusieurs runners par machine : utilisez des sous-répertoires distincts.
 
 **Chemins et unicité** : name/path ne doivent pas contenir `..`, `/`, `\` ; les répertoires doivent être sous `runners.base_path`. Pas de noms dupliqués ; le nom est en lecture seule à l'édition. En mode conteneur les noms sont normalisés en noms de conteneurs ; les doublons après mapping provoquent une erreur.
 
+**Authentification de l'Agent** (mode conteneur) : le Manager écrit un jeton aléatoire par runner dans `<répertoire runner>/.agent_token` (mode 0600) et l'envoie en `Authorization: Bearer` à chaque appel. L'Agent refuse `/status`, `/start` et `/stop` sans jeton ; `/health` reste ouvert pour le HEALTHCHECK. Les conteneurs créés avant ce changement n'ont pas de jeton et continuent sans authentification — recréez-les pour l'activer.
+
 **Fichiers sensibles** : config/config.yaml et .env sont dans `.gitignore`. Pour `.github_check_token` de chaque runner, utilisez `chmod 600` ; ajoutez `**/.github_check_token` à `.gitignore` si sous contrôle de version.
 
 [← Retour à l'accueil du projet](../../README.md)

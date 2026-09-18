@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -38,7 +39,7 @@ func TestGetAgentStatus_ErrorBodyIncluded(t *testing.T) {
 		}
 	}
 
-	_, err = GetAgentStatus(context.Background(), host, port)
+	_, err = GetAgentStatus(context.Background(), host, port, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -69,7 +70,7 @@ func TestCallAgentStart_ErrorBodyIncluded(t *testing.T) {
 		}
 	}
 
-	err = CallAgentStart(context.Background(), host, port)
+	err = CallAgentStart(context.Background(), host, port, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -100,7 +101,7 @@ func TestGetAgentStatus_Success(t *testing.T) {
 		}
 	}
 
-	st, err := GetAgentStatus(context.Background(), host, port)
+	st, err := GetAgentStatus(context.Background(), host, port, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,5 +205,102 @@ func TestRunnerDockerGID_ConfigWinsOverDetection(t *testing.T) {
 	cfg.Runners.DockerGID = 0
 	if got, want := runnerDockerGID(cfg), socketGID(HostDockerSocket); got != want {
 		t.Errorf("runnerDockerGID = %d, want detected %d", got, want)
+	}
+}
+
+func TestEnsureAgentToken_GeneratesAndReuses(t *testing.T) {
+	dir := t.TempDir()
+	first, err := EnsureAgentToken(dir)
+	if err != nil {
+		t.Fatalf("生成令牌失败: %v", err)
+	}
+	if len(first) != agentTokenBytes*2 {
+		t.Errorf("令牌长度应为 %d 个 hex 字符，实际 %d: %q", agentTokenBytes*2, len(first), first)
+	}
+	// 权限必须是 0600：该文件与 Job 共享同一挂载目录
+	info, err := os.Stat(filepath.Join(dir, AgentTokenFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("令牌文件权限应为 0600，实际 %v", perm)
+	}
+	// 再次调用必须复用同一令牌，否则 Manager 重启后会和运行中的 Agent 对不上
+	second, err := EnsureAgentToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != first {
+		t.Errorf("重复调用应复用令牌: %q vs %q", first, second)
+	}
+	if got := ReadAgentToken(dir); got != first {
+		t.Errorf("ReadAgentToken = %q, want %q", got, first)
+	}
+}
+
+func TestEnsureAgentToken_DistinctPerRunner(t *testing.T) {
+	a, err := EnsureAgentToken(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := EnsureAgentToken(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Error("不同 Runner 应有不同令牌，否则一个 Job 泄露的令牌能控制其它 Runner")
+	}
+}
+
+func TestReadAgentToken_MissingIsEmpty(t *testing.T) {
+	// 旧容器没有令牌文件，必须返回空串以降级为不鉴权，而不是报错
+	if got := ReadAgentToken(t.TempDir()); got != "" {
+		t.Errorf("无令牌文件时应返回空串，实际 %q", got)
+	}
+}
+
+func TestSetAgentAuth(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "http://example/status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAgentAuth(req, "")
+	if _, ok := req.Header["Authorization"]; ok {
+		t.Error("令牌为空时不应设置 Authorization 头")
+	}
+	setAgentAuth(req, "abc123")
+	if got := req.Header.Get("Authorization"); got != "Bearer abc123" {
+		t.Errorf("Authorization = %q", got)
+	}
+}
+
+func TestAgentCalls_SendBearerToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"installed","running":true}`))
+	}))
+	defer srv.Close()
+	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := GetAgentStatus(context.Background(), host, port, "tok-status"); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer tok-status" {
+		t.Errorf("/status 未带令牌: %q", gotAuth)
+	}
+	if err := CallAgentStart(context.Background(), host, port, "tok-start"); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer tok-start" {
+		t.Errorf("/start 未带令牌: %q", gotAuth)
 	}
 }
