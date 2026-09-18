@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
@@ -175,6 +177,61 @@ func ManagerDockerHostIsDind() bool {
 	return managerDockerHostIsDind()
 }
 
+// HostDockerSocket job_docker_backend=host-socket 时挂载进 Runner 容器的宿主机 Docker socket
+const HostDockerSocket = "/var/run/docker.sock"
+
+// unknownDockerGID 表示无法确定 docker.sock 所属组，此时不追加 --group-add
+const unknownDockerGID = -1
+
+// socketGID 返回 path 所属组 GID；读取失败或平台不支持时返回 unknownDockerGID。
+// Manager 在容器内时 docker.sock 为宿主机挂载，stat 得到的即宿主机 docker 组 GID。
+func socketGID(path string) int {
+	info, err := os.Stat(path)
+	if err != nil {
+		return unknownDockerGID
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return unknownDockerGID
+	}
+	return int(st.Gid)
+}
+
+// runnerDockerGID 决定 Runner 容器需追加的 docker 组 GID：
+// 优先 runners.docker_gid（可由环境变量 DOCKER_GID 覆盖），否则自动探测 docker.sock 所属组。
+func runnerDockerGID(cfg *config.Config) int {
+	if cfg != nil && cfg.Runners.DockerGID > 0 {
+		return cfg.Runners.DockerGID
+	}
+	return socketGID(HostDockerSocket)
+}
+
+// runnerCreateArgs 组装创建 Runner 容器的 docker create 参数。
+// dockerGID 为 unknownDockerGID 时不追加 --group-add，仅依赖镜像内预置的 docker 组。
+func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int) ([]string, error) {
+	args := []string{
+		"create",
+		"--name", containerName,
+		"-v", mountSrc + ":/runner",
+		"--network", network,
+	}
+	switch jobBackend {
+	case "dind":
+		args = append(args, "-e", "DOCKER_HOST=tcp://"+dindHost+":2375")
+	case "host-socket":
+		args = append(args, "-v", HostDockerSocket+":"+HostDockerSocket, "-e", "DOCKER_HOST=unix://"+HostDockerSocket)
+		// 容器内以 app(UID 1001) 运行，须加入 socket 所属组，否则 Job 中 docker 报 permission denied
+		if dockerGID >= 0 {
+			args = append(args, "--group-add", strconv.Itoa(dockerGID))
+		}
+	case "none":
+		// Job 内不提供 Docker，不注入环境与挂载
+	default:
+		return nil, fmt.Errorf("不支持的 runners.job_docker_backend=%q（仅支持 dind/host-socket/none）", jobBackend)
+	}
+	return append(args, img), nil
+}
+
 // StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner
 func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
 	if cfg.Runners.ContainerMode && managerDockerHostIsDind() {
@@ -247,23 +304,10 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			mountSrc = abs
 		}
 	}
-	createArgs := []string{
-		"create",
-		"--name", cn,
-		"-v", mountSrc + ":/runner",
-		"--network", network,
+	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg))
+	if err != nil {
+		return err
 	}
-	switch jobBackend {
-	case "dind":
-		createArgs = append(createArgs, "-e", "DOCKER_HOST=tcp://"+dindHost+":2375")
-	case "host-socket":
-		createArgs = append(createArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock", "-e", "DOCKER_HOST=unix:///var/run/docker.sock")
-	case "none":
-		// Job 内不提供 Docker，不注入环境与挂载
-	default:
-		return fmt.Errorf("不支持的 runners.job_docker_backend=%q（仅支持 dind/host-socket/none）", cfg.Runners.JobDockerBackend)
-	}
-	createArgs = append(createArgs, img)
 	out, err = dockerCmd(ctx, createArgs...)
 	if err != nil {
 		return dockerCmdError("docker create", out, err)
