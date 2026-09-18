@@ -61,6 +61,8 @@ docker run -d --name runner-manager \
 docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 ```
 
+脚本会按 `uname -m` 选择架构，未指定版本时向 GitHub API 查询最新版，并且**任何版本都强制校验 SHA-256**。取不到官方哈希时（离线或走镜像源）需显式传入：`RUNNER_SHA256=<sha256> ... install-runner.sh <名称> <版本号>`。目录下已有 runner 时会跳过下载，需重装请设置 `RUNNER_FORCE_REINSTALL=1`。
+
 或宿主机在 `runners/<名称>/` 解压 [actions-runner](https://github.com/actions/runner/releases) 后再在界面提交或手动 `./config.sh`。
 
 ### 容器模式（Runner 独立容器）
