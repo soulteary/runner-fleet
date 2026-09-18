@@ -68,7 +68,13 @@ ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH=$PATH:$ANDROID_HOME/platform-tools
 ```
 
-**3. 预热放在 `USER app` 之后**
+**3. 免密 sudo 会被继承**
+
+基础镜像已为 `app` 配好免密 `sudo`（与托管 runner 一致）。扩展时在 `USER root`
+下装包即可，无需再配 sudoers；若基础镜像是用 `--build-arg ALLOW_SUDO=false`
+构建的，则 Job 内的 `sudo` 不可用。
+
+**4. 预热放在 `USER app` 之后**
 
 `flutter precache`、`sdkmanager --licenses` 这类会往安装目录写文件的步骤，要以
 最终运行用户的身份执行，否则产物属主还是 root。
