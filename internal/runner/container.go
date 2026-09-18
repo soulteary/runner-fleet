@@ -220,12 +220,18 @@ func runnerDockerGID(cfg *config.Config) int {
 
 // runnerCreateArgs 组装创建 Runner 容器的 docker create 参数。
 // dockerGID 为 unknownDockerGID 时不追加 --group-add，仅依赖镜像内预置的 docker 组。
-func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int) ([]string, error) {
+func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int, agentToken string) ([]string, error) {
 	args := []string{
 		"create",
 		"--name", containerName,
 		"-v", mountSrc + ":/runner",
 		"--network", network,
+	}
+	// 令牌用环境变量注入，而不是只靠挂载目录下的文件：
+	// Manager 以 root 或非 1001 的 UID 运行时，0600 的令牌文件对容器内 app(1001)
+	// 不可读，Agent 会读到空令牌并静默降级为不鉴权。环境变量不依赖 UID 匹配。
+	if agentToken != "" {
+		args = append(args, "-e", "AGENT_TOKEN="+agentToken)
 	}
 	switch jobBackend {
 	case "dind":
@@ -317,7 +323,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			mountSrc = abs
 		}
 	}
-	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg))
+	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg), token)
 	if err != nil {
 		return err
 	}

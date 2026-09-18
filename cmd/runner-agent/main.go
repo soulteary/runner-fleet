@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -171,14 +172,31 @@ const agentTokenFile = ".agent_token"
 // expectedToken 返回本 Agent 要求的令牌：优先环境变量，其次安装目录下的令牌文件。
 // 返回空字符串表示未配置令牌，此时不启用鉴权（兼容本特性之前创建的容器）。
 func expectedToken() string {
+	// 优先环境变量：Manager 创建容器时注入，不依赖挂载文件的 UID 可读性
 	if t := strings.TrimSpace(os.Getenv("AGENT_TOKEN")); t != "" {
 		return t
 	}
-	b, err := os.ReadFile(filepath.Join(installDir(), agentTokenFile))
+	path := filepath.Join(installDir(), agentTokenFile)
+	b, err := os.ReadFile(path)
 	if err != nil {
+		// 文件不存在 = 本特性之前创建的容器，属于预期的兼容路径；
+		// 存在却读不了（多为 UID 不匹配）则必须说出来，否则会静默地不鉴权
+		if !os.IsNotExist(err) {
+			logTokenUnreadable(path, err)
+		}
 		return ""
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// tokenWarnOnce 保证权限告警只打一次，避免被状态轮询刷屏
+var tokenWarnOnce sync.Once
+
+func logTokenUnreadable(path string, err error) {
+	tokenWarnOnce.Do(func() {
+		log.Printf("警告: 令牌文件 %s 存在但无法读取（%v），接口将不启用鉴权。"+
+			"多为 Manager 与 Agent 的 UID 不一致所致，重建该 Runner 容器即可改用环境变量注入令牌", path, err)
+	})
 }
 
 // requireToken 包装控制类接口；令牌未配置时直接放行，配置了则要求 Bearer 匹配。
