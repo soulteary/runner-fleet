@@ -193,13 +193,40 @@ func checkRunnerImages(ctx context.Context, cfg *config.Config) []CheckResult {
 	return results
 }
 
+// missingToolMarker 探测脚本对每个缺失命令输出的行前缀。
+// dockerCmd 用的是 CombinedOutput，docker 的非致命告警（例如 arm64 主机运行 amd64
+// 镜像时的平台不匹配警告）会混进来且退出码为 0；若直接按空白切分，整段告警的每个词
+// 都会被当成缺失的命令名。加标记后只认自己输出的行。
+const missingToolMarker = "RUNNER_FLEET_MISSING:"
+
+// parseMissingTools 从探测输出中提取缺失的命令名。
+// 只接受带标记的行，且名字必须在 requiredRunnerTools 内——这样即便告警文本里
+// 恰好出现了标记，也无法伪造出一个命令名。
+func parseMissingTools(out []byte) []string {
+	known := make(map[string]bool, len(requiredRunnerTools))
+	for _, t := range requiredRunnerTools {
+		known[t] = true
+	}
+	var missing []string
+	for _, line := range strings.Split(string(out), "\n") {
+		name, ok := strings.CutPrefix(strings.TrimSpace(line), missingToolMarker)
+		if !ok {
+			continue
+		}
+		if name = strings.TrimSpace(name); known[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
+}
+
 // checkRunnerImageTools 起一个一次性容器确认镜像内具备 requiredRunnerTools。
 // 自定义 Runner 镜像很容易漏装这些，而缺失要等 Job 跑到一半才暴露。
 func checkRunnerImageTools(ctx context.Context, img string) CheckResult {
 	const name = "Runner 镜像工具链"
 	// 镜像的 ENTRYPOINT 是 Agent，这里覆盖为 shell；--network none 省掉网络配置开销
 	script := "for t in " + strings.Join(requiredRunnerTools, " ") +
-		"; do command -v \"$t\" >/dev/null 2>&1 || echo \"$t\"; done"
+		"; do command -v \"$t\" >/dev/null 2>&1 || echo \"" + missingToolMarker + "$t\"; done"
 	runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	out, err := dockerCmd(runCtx, "run", "--rm", "--network", "none", "--entrypoint", "sh", img, "-c", script)
@@ -207,7 +234,7 @@ func checkRunnerImageTools(ctx context.Context, img string) CheckResult {
 		return warn(name, fmt.Sprintf("无法检查 %s 内的命令（跳过）: %s", img, firstLine(out, err)),
 			"可手动执行: docker run --rm --entrypoint sh "+img+" -c \"command -v git unzip\"")
 	}
-	missing := strings.Fields(string(out))
+	missing := parseMissingTools(out)
 	if len(missing) > 0 {
 		return warn(name, fmt.Sprintf("%s 缺少 %s，Job 会在用到时才失败（缺 git 时 actions/checkout 会静默退化为无 .git 的 tar 包）",
 			img, strings.Join(missing, "、")),
