@@ -146,7 +146,7 @@ func checkNetwork(ctx context.Context, cfg *config.Config) CheckResult {
 // requiredRunnerTools Job 普遍依赖的命令。缺任何一个都会以难以定位的方式失败：
 // 缺 git 时 actions/checkout 静默退化为下载 tar 包（工作目录没有 .git），
 // 缺 unzip 时 setup-gradle 之类的 Action 要等下载完发行包才报错。
-var requiredRunnerTools = []string{"git", "unzip", "tar", "curl"}
+var requiredRunnerTools = []string{"git", "unzip", "tar", "curl", "jq", "sudo"}
 
 // RunnerImages 返回配置中用到的全部 Runner 镜像（去重，保持稳定顺序）。
 // 自 items[].container_image 支持按 Runner 覆盖后，镜像可能不止一个。

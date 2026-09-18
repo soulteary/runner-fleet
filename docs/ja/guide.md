@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.3.0
 ```
 
-ホストのディレクトリは UID 1001 が書き込み可能である必要があります。Basic Auth: `-e BASIC_AUTH_PASSWORD=password`、`-e BASIC_AUTH_USER=admin`。Job で Docker を使う場合は `-v /var/run/docker.sock:/var/run/docker.sock` を追加し（イメージには GID 999 の `docker` グループを用意、ビルド引数 `DOCKER_GID` で変更可。ホストの docker GID が 999 以外なら `--group-add $(getent group docker | cut -d: -f3)` も追加）、あるいはDinD を使用（リポジトリの `docker-compose.yml` の `--profile dind` 参照）。イメージには Docker CLI に加え、一般的な Action が前提とするツール（`git`、`unzip`、`zip`、`xz-utils`、`build-essential`、`gnupg`、`jq`、`openssh-client`）を同梱しています。一覧は `scripts/apt-packages.txt` にあり、両イメージで共用します。
+ホストのディレクトリは UID 1001 が書き込み可能である必要があります。Basic Auth: `-e BASIC_AUTH_PASSWORD=password`、`-e BASIC_AUTH_USER=admin`。Job で Docker を使う場合は `-v /var/run/docker.sock:/var/run/docker.sock` を追加し（イメージには GID 999 の `docker` グループを用意、ビルド引数 `DOCKER_GID` で変更可。ホストの docker GID が 999 以外なら `--group-add $(getent group docker | cut -d: -f3)` も追加）、あるいはDinD を使用（リポジトリの `docker-compose.yml` の `--profile dind` 参照）。両イメージには Docker CLI に加え、GitHub ホスト runner に揃えたコマンドラインの基盤層を同梱しています。`scripts/apt-packages.txt` は `actions/runner-images` の `toolset-2404.json` の apt パッケージ集合を取り込んだもので、`git`・`unzip`・`jq`・`rsync`・`sudo`・`xvfb` などが含まれます。言語・プラットフォーム SDK は意図的に含めていません（`setup-*` action を使うか、イメージを拡張してください）。
 
 ### 自動インストールと登録
 

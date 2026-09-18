@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.3.0
 ```
 
-Host-Verzeichnisse müssen für UID 1001 schreibbar sein. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Für Docker in Jobs `-v /var/run/docker.sock:/var/run/docker.sock` hinzufügen, plus `--group-add $(getent group docker | cut -d: -f3)`, falls die Host-Docker-GID nicht 999 ist (das Image enthält eine `docker`-Gruppe mit GID 999, änderbar über Build-Arg `DOCKER_GID`) oder DinD nutzen (siehe Repo `docker-compose.yml`, `--profile dind`). Die Images enthalten die Docker-CLI sowie die von gängigen Actions vorausgesetzten Tools (`git`, `unzip`, `zip`, `xz-utils`, `build-essential`, `gnupg`, `jq`, `openssh-client`); die Liste steht in `scripts/apt-packages.txt` und wird von beiden Images gemeinsam genutzt.
+Host-Verzeichnisse müssen für UID 1001 schreibbar sein. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Für Docker in Jobs `-v /var/run/docker.sock:/var/run/docker.sock` hinzufügen, plus `--group-add $(getent group docker | cut -d: -f3)`, falls die Host-Docker-GID nicht 999 ist (das Image enthält eine `docker`-Gruppe mit GID 999, änderbar über Build-Arg `DOCKER_GID`) oder DinD nutzen (siehe Repo `docker-compose.yml`, `--profile dind`). Beide Images enthalten die Docker-CLI sowie eine an GitHub-gehostete Runner angeglichene Kommandozeilen-Basis: `scripts/apt-packages.txt` übernimmt das apt-Paketset aus `actions/runner-images` (`toolset-2404.json`), also sind `git`, `unzip`, `jq`, `rsync`, `sudo`, `xvfb` usw. vorhanden. Sprach- und Plattform-SDKs sind bewusst nicht enthalten — dafür die `setup-*`-Actions nutzen oder das Image erweitern.
 
 ### Automatische Installation und Registrierung
 
