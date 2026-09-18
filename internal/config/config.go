@@ -82,6 +82,11 @@ func applyEnvOverrides(c *Config) {
 	if v := strings.TrimSpace(strings.ToLower(os.Getenv("JOB_DOCKER_BACKEND"))); v != "" {
 		c.Runners.JobDockerBackend = v
 	}
+	if v := strings.TrimSpace(os.Getenv("DOCKER_GID")); v != "" {
+		if gid, err := strconv.Atoi(v); err == nil && gid >= 0 {
+			c.Runners.DockerGID = gid
+		}
+	}
 	if v := strings.TrimSpace(os.Getenv("VOLUME_HOST_PATH")); v != "" {
 		c.Runners.VolumeHostPath = v
 	}
@@ -124,6 +129,9 @@ type RunnersConfig struct {
 	JobDockerBackend string `yaml:"job_docker_backend"` // dind | host-socket | none，默认 dind
 	DindHost         string `yaml:"dind_host"`          // 仅 job_docker_backend=dind 时有效，DinD 主机名，默认 runner-dind
 	VolumeHostPath   string `yaml:"volume_host_path"`   // 容器模式下宿主机上 runners 根路径，供 docker create -v 使用；Manager 自身在容器内时必填（如 /data/runners）
+	// DockerGID 仅 job_docker_backend=host-socket 时有效：创建 Runner 容器时追加的 docker 组 GID（--group-add），
+	// 使容器内 app(UID 1001) 可访问挂载进来的 docker.sock；0 表示自动探测 docker.sock 所属组
+	DockerGID int `yaml:"docker_gid"`
 }
 
 // RunnerItem 单个 Runner 配置
@@ -161,6 +169,7 @@ func defaultConfig() *Config {
 			JobDockerBackend: "dind",
 			DindHost:         "runner-dind",
 			VolumeHostPath:   "",
+			DockerGID:        0, // 0 = 自动探测 docker.sock 所属组
 		},
 	}
 }
@@ -243,6 +252,9 @@ func Validate(c *Config) error {
 	}
 	if !validBackend[jobBackend] {
 		return fmt.Errorf("runners.job_docker_backend 仅支持 dind/host-socket/none，当前为 %q", c.Runners.JobDockerBackend)
+	}
+	if c.Runners.DockerGID < 0 {
+		return fmt.Errorf("runners.docker_gid 不能为负数（当前为 %d），留空或 0 表示自动探测 docker.sock 所属组", c.Runners.DockerGID)
 	}
 	if !c.Runners.ContainerMode {
 		if strings.TrimSpace(c.Runners.VolumeHostPath) != "" {

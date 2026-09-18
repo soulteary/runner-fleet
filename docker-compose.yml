@@ -52,6 +52,9 @@ services:
       CONTAINER_NETWORK: ${CONTAINER_NETWORK:-}
       RUNNER_IMAGE: ${RUNNER_IMAGE:-}
       RUNNERS_BASE_PATH: ${RUNNERS_BASE_PATH:-}
+      # 宿主机 docker 组 GID：除下方 group_add 外，也传给 Manager，用于 job_docker_backend=host-socket 时
+      # 给 Runner 容器追加 --group-add（留空则由 Manager 自动探测 docker.sock 所属组）
+      DOCKER_GID: ${DOCKER_GID:-}
     ports:
       - "${MANAGER_PORT:-8080}:8080"
     # 仅挂载 config 目录（勿挂载 config/config.yaml 单文件，否则宿主机无该文件时 Docker 会创建空文件导致启动失败）

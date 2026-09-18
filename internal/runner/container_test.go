@@ -6,9 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 )
 
 func TestGetAgentStatus_ErrorBodyIncluded(t *testing.T) {
@@ -102,5 +106,103 @@ func TestGetAgentStatus_Success(t *testing.T) {
 	}
 	if st.Status != "installed" || !st.Running {
 		t.Fatalf("unexpected status: %+v", st)
+	}
+}
+
+// joinArgs 便于断言参数序列中是否出现连续片段
+func joinArgs(args []string) string {
+	return strings.Join(args, "\x00")
+}
+
+func containsSeq(args []string, seq ...string) bool {
+	return strings.Contains(joinArgs(args), joinArgs(seq))
+}
+
+func TestRunnerCreateArgs_HostSocketAddsDockerGroup(t *testing.T) {
+	// host-socket 下容器内 app(UID 1001) 需加入 socket 所属组，否则 Job 中 docker 报 permission denied
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", 999)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsSeq(args, "--group-add", "999") {
+		t.Errorf("expected --group-add 999, got %v", args)
+	}
+	if !containsSeq(args, "-v", HostDockerSocket+":"+HostDockerSocket) {
+		t.Errorf("expected docker.sock mount, got %v", args)
+	}
+	if !containsSeq(args, "-e", "DOCKER_HOST=unix://"+HostDockerSocket) {
+		t.Errorf("expected unix DOCKER_HOST, got %v", args)
+	}
+	if args[len(args)-1] != "img:tag" {
+		t.Errorf("image must be the last arg, got %v", args)
+	}
+}
+
+func TestRunnerCreateArgs_HostSocketUnknownGIDSkipsGroupAdd(t *testing.T) {
+	// 探测不到 socket GID 时不追加 --group-add，退回镜像内预置的 docker 组
+	args, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "host-socket", "runner-dind", unknownDockerGID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, a := range args {
+		if a == "--group-add" {
+			t.Fatalf("unexpected --group-add with unknown gid: %v", args)
+		}
+	}
+}
+
+func TestRunnerCreateArgs_DindAndNone(t *testing.T) {
+	dind, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "dind", "my-dind", 999)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsSeq(dind, "-e", "DOCKER_HOST=tcp://my-dind:2375") {
+		t.Errorf("expected dind DOCKER_HOST, got %v", dind)
+	}
+	if strings.Contains(joinArgs(dind), "--group-add") || strings.Contains(joinArgs(dind), HostDockerSocket) {
+		t.Errorf("dind must not mount socket nor add docker group, got %v", dind)
+	}
+
+	none, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "none", "runner-dind", 999)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(joinArgs(none), "DOCKER_HOST") || strings.Contains(joinArgs(none), "--group-add") {
+		t.Errorf("none backend must not inject docker env/group, got %v", none)
+	}
+}
+
+func TestRunnerCreateArgs_UnsupportedBackend(t *testing.T) {
+	if _, err := runnerCreateArgs("github-runner-a", "/host/runners/a", "runner-net", "img:tag", "podman", "runner-dind", 999); err == nil {
+		t.Fatal("expected error for unsupported backend")
+	} else if !strings.Contains(err.Error(), "job_docker_backend") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestSocketGID(t *testing.T) {
+	// 存在的文件返回其所属组；不存在时返回 unknownDockerGID
+	f := filepath.Join(t.TempDir(), "docker.sock")
+	if err := os.WriteFile(f, []byte(""), 0660); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := socketGID(f), os.Getgid(); got != want {
+		t.Errorf("socketGID = %d, want %d", got, want)
+	}
+	if got := socketGID(filepath.Join(t.TempDir(), "missing.sock")); got != unknownDockerGID {
+		t.Errorf("socketGID(missing) = %d, want %d", got, unknownDockerGID)
+	}
+}
+
+func TestRunnerDockerGID_ConfigWinsOverDetection(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Runners.DockerGID = 1234
+	if got := runnerDockerGID(cfg); got != 1234 {
+		t.Errorf("runnerDockerGID = %d, want 1234 from config", got)
+	}
+	// 未配置时退回探测 docker.sock（宿主机上可能不存在，此时为 unknownDockerGID）
+	cfg.Runners.DockerGID = 0
+	if got, want := runnerDockerGID(cfg), socketGID(HostDockerSocket); got != want {
+		t.Errorf("runnerDockerGID = %d, want detected %d", got, want)
 	}
 }

@@ -883,3 +883,78 @@ runners:
 		t.Fatalf("expected container_image %q (last colon separates tag), got %q", want, cfg.Runners.ContainerImage)
 	}
 }
+
+func TestLoad_DockerGIDFromFileAndEnv(t *testing.T) {
+	// docker_gid 可在配置文件中设置，并由环境变量 DOCKER_GID 覆盖（与 .env 中 group_add 用的同一变量）
+	restore := setEnvsAndRestore(t, map[string]string{"DOCKER_GID": ""}, []string{"DOCKER_GID"})
+	defer restore()
+	if err := os.Unsetenv("DOCKER_GID"); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+server: { port: 8080 }
+runners:
+  base_path: ./runners
+  items: []
+  container_mode: true
+  volume_host_path: /host/runners
+  job_docker_backend: host-socket
+  docker_gid: 113
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Runners.DockerGID != 113 {
+		t.Errorf("expected docker_gid 113 from file, got %d", cfg.Runners.DockerGID)
+	}
+
+	if err := os.Setenv("DOCKER_GID", "996"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Runners.DockerGID != 996 {
+		t.Errorf("expected docker_gid 996 from DOCKER_GID env, got %d", cfg.Runners.DockerGID)
+	}
+}
+
+func TestLoad_DockerGIDDefaultsToZero(t *testing.T) {
+	// 未配置时为 0，表示由 Manager 自动探测 docker.sock 所属组
+	restore := setEnvsAndRestore(t, map[string]string{"DOCKER_GID": ""}, []string{"DOCKER_GID"})
+	defer restore()
+	if err := os.Unsetenv("DOCKER_GID"); err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("server: { port: 8080 }\nrunners: { base_path: ./runners, items: [] }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Runners.DockerGID != 0 {
+		t.Errorf("expected docker_gid default 0, got %d", cfg.Runners.DockerGID)
+	}
+}
+
+func TestValidate_NegativeDockerGID(t *testing.T) {
+	c := &Config{}
+	c.Runners.BasePath = "./runners"
+	c.Runners.JobDockerBackend = "dind"
+	c.Runners.DockerGID = -5
+	err := Validate(c)
+	if err == nil || !strings.Contains(err.Error(), "docker_gid") {
+		t.Fatalf("expected docker_gid validation error, got: %v", err)
+	}
+}

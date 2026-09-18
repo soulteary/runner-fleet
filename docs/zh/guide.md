@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
 
-宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。镜像已预装 Docker CLI，DinD 下常见 Action 可直接使用。
+宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`；镜像内已预置 GID 999 的 `docker` 组（构建参数 `DOCKER_GID` 可改），宿主机 docker GID 不是 999 时还需加 `--group-add $(getent group docker | cut -d: -f3)`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。镜像已预装 Docker CLI，DinD 下常见 Action 可直接使用。
 
 ### 自动安装与注册
 
@@ -84,12 +84,13 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.0.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。Runner 名称会规范为容器名，映射后重名会冲突。
+Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.0.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
 
 ### 排障
 
 - **compose down 后 Runner 无法启动**：首次执行 `docker network create runner-net`。已出问题时界面点该 Runner「启动」重建，或 `docker rm -f github-runner-<名称>` 后再点「启动」。
 - **root 运行**：挂载目录对运行用户可写；若用 root，需设 `RUNNER_ALLOW_RUNASROOT=1`。
+- **Job 中访问 docker.sock 报 `permission denied`**：`job_docker_backend: host-socket` 时，容器内用户（UID 1001）需在 socket 所属组内。Manager 创建容器时会按探测到的宿主机 docker GID 追加 `--group-add`，升级后需重建 Runner 容器（`docker rm -f github-runner-<名称>` 后点「启动」）。探测不到时可设置 `runners.docker_gid`（或 `.env` 中 `DOCKER_GID`）为 `getent group docker | cut -d: -f3` 的值。
 - **旧 Runner 镜像**：`docker rm -f github-runner-<名称>`，再在界面点「启动」重建。
 - **status=unknown**：详情弹窗看 `probe`，可尝试「启动/停止」自愈。
 

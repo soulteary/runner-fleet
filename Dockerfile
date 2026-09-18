@@ -26,7 +26,13 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /app -s /bin/bash app
+# 非容器模式下 Runner 进程在本容器内运行，容器模式下 Manager 需用宿主机 Docker 创建 Runner 容器，
+# 两种情况都要访问挂载进来的 docker.sock，因此 app(UID 1001) 需在 socket 所属组内。
+# 默认 999，构建时可 --build-arg DOCKER_GID=<宿主机 GID> 覆盖；docker-compose 中亦可用 group_add 覆盖。
+ARG DOCKER_GID=999
+RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /app -s /bin/bash app \
+    && if ! getent group "${DOCKER_GID}" >/dev/null; then groupadd -g "${DOCKER_GID}" docker; fi \
+    && usermod -aG "$(getent group "${DOCKER_GID}" | cut -d: -f1)" app
 WORKDIR /app
 COPY --from=builder /app/runner-manager .
 COPY config.yaml.example ./config/config.yaml
