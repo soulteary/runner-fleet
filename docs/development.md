@@ -98,4 +98,6 @@ Version references in docs and examples must match the default image tag in `int
 sh scripts/check-version-consistency.sh
 ```
 
+If a line legitimately cites an older version (release notes, upgrade instructions), append a `version-check-ignore` marker to that line to skip it.
+
 [← Back to docs](README.md)

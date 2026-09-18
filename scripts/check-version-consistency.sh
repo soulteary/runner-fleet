@@ -28,27 +28,34 @@ echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' 'Dockerfile*' |
     grep -v '^CHANGELOG\.md$' || true)
 
-failed=0
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
 for f in $FILES; do
     [ -f "$f" ] || continue
-    # vX.Y.Z 形式（镜像 tag、文档里的版本示例）
-    found=$(grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$f" | sort -u || true)
-    # main.Version=X.Y.Z 形式（development 文档里的构建示例）
-    found_bare=$(grep -oE 'main\.Version=[0-9]+\.[0-9]+\.[0-9]+' "$f" |
-        sed 's/main\.Version=/v/' | sort -u || true)
-    for v in $found $found_bare; do
-        if [ "$v" != "$EXPECTED" ]; then
-            line=$(grep -nE "${v}" "$f" | head -n 1 | cut -d: -f1)
-            echo "::error file=${f},line=${line}::版本号 ${v} 与基准 ${EXPECTED} 不一致"
-            echo "  ${f}:${line} 出现 ${v}，应为 ${EXPECTED}" >&2
-            failed=1
-        fi
-    done
+    # 逐行扫描；带 version-check-ignore 标记的行跳过，供正文合法引用历史版本号
+    grep -nE 'v[0-9]+\.[0-9]+\.[0-9]+|main\.Version=[0-9]+\.[0-9]+\.[0-9]+' "$f" |
+        grep -v 'version-check-ignore' |
+        while IFS= read -r hit; do
+            lineno=${hit%%:*}
+            text=${hit#*:}
+            found=$(printf '%s\n' "$text" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u)
+            found_bare=$(printf '%s\n' "$text" |
+                grep -oE 'main\.Version=[0-9]+\.[0-9]+\.[0-9]+' | sed 's/main\.Version=/v/' | sort -u)
+            for v in $found $found_bare; do
+                [ "$v" = "$EXPECTED" ] || printf '%s\t%s\t%s\n' "$f" "$lineno" "$v" >> "$tmp"
+            done
+        done
 done
 
-if [ "$failed" -ne 0 ]; then
+if [ -s "$tmp" ]; then
+    while IFS="$(printf '\t')" read -r f lineno v; do
+        echo "::error file=${f},line=${lineno}::版本号 ${v} 与基准 ${EXPECTED} 不一致"
+        echo "  ${f}:${lineno} 出现 ${v}，应为 ${EXPECTED}" >&2
+    done < "$tmp"
     echo "" >&2
     echo "发布新版本时请一并更新上述位置，或修正 ${SOURCE_FILE} 中的基准版本。" >&2
+    echo "若该处确需引用历史版本号（如变更说明），在该行加注释标记 version-check-ignore 即可跳过。" >&2
     exit 1
 fi
 

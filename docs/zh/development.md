@@ -98,4 +98,6 @@ go run ./cmd/runner-manager
 sh scripts/check-version-consistency.sh
 ```
 
+某一行确需引用历史版本号（变更说明、升级指引等）时，在该行加上 `version-check-ignore` 标记即可跳过。
+
 [← 返回文档](README.md)
