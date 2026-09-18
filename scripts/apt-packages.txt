@@ -5,31 +5,126 @@
 # git/build-essential/gnupg，Manager 镜像没同步，导致默认模式下 job 报
 # "git: command not found"。改为单一清单后，依赖无法再单向漂移。
 #
+# === 基线：对齐 GitHub 托管 runner 的 apt 基础层 ===
+#
+# 来源：actions/runner-images 仓库 images/ubuntu/toolsets/toolset-2404.json 中的
+#       apt.vital_packages + apt.common_packages + apt.cmd_packages（共 74 项）。
+# 目的：为 runs-on: ubuntu-24.04 写的 workflow 迁到自托管时，不因缺基础命令而失败。
+#
+# 不包含语言与平台 SDK（Node、Python、Android 等）。那是托管镜像 40GB 体积的来源，
+# 且版本因项目而异，应当由 workflow 里的 setup-* action 安装，或按
+# examples/runner-images/ 的方式扩展出项目专用镜像。
+#
+# noble 上的唯一修正：
+#   netcat -> netcat-openbsd
+#     netcat 在 24.04 是虚包，netcat-openbsd 与 netcat-traditional 都提供它，
+#     apt 无法自动二选一，必须写明。
+#   （upx、libssl3、liblttng-ust1 同为虚包，但各自只有一个提供者，apt 能解析，保持原名）
+#
+# 有意排除（容器内无法工作，或默认源可能装不到）：
+#   pollinate         Ubuntu 云实例熵种子服务，容器内无意义且会外联
+#   systemd-coredump  容器内无 systemd
+#   haveged           熵守护进程，现代内核不需要
+#   ssh               元包会带入 openssh-server；容器内不跑 sshd，仅保留 openssh-client
+#   p7zip-rar         multiverse 组件，基础镜像未必启用；p7zip-full 已覆盖常见场景
+#
+# 额外补入（不在上述三个 apt 列表中，但托管镜像同样具备）：
+#   git               runner-images 用单独的脚本从 PPA 装特定版本，不走 apt 清单；
+#                     缺它时 actions/checkout 会静默退化为无 .git 的 tar 包解压
+#   build-essential   带入 libc6-dev 等，托管镜像经由各 -dev 包间接获得
+#
+# 全部包名已在 ubuntu:24.04 上用 apt-get install --simulate 整体验证可解析、无冲突。
 # 每行一个包，# 开头与空行忽略。
 
 # --- GitHub Actions Runner(.NET) 运行时依赖 ---
 ca-certificates
-curl
 libicu74
 libkrb5-3
 liblttng-ust1
 libssl3
 zlib1g
 
-# --- 常见 Action 与构建脚本默认依赖的工具 ---
-# actions/checkout：缺 git 时会退化为 REST API 下载 tar 包，工作目录里没有 .git，
-# 后续任何调用 git 的脚本都会失败
+# --- 编译工具链（build-essential 额外带入 libc6-dev） ---
+build-essential
+g++
+gcc
+make
+dpkg-dev
+binutils
+autoconf
+automake
+libtool
+m4
+bison
+flex
+pkg-config
+swig
+patchelf
+fakeroot
+rpm
+
+# --- 版本控制与网络 ---
 git
-# gradle/actions/setup-gradle、setup-node 等解压发行包
+mercurial
+openssh-client
+curl
+wget
+aria2
+rsync
+ftp
+telnet
+sshpass
+net-tools
+netcat-openbsd
+iproute2
+iputils-ping
+dnsutils
+
+# --- 归档与压缩 ---
+tar
 unzip
 zip
-# Flutter SDK 等以 .tar.xz 分发的工具链
+bzip2
 xz-utils
-# 原生依赖编译（node-gyp、cgo 等）
-build-essential
-# 校验签名、apt-key 等
-gnupg
-# 大量 workflow 脚本默认可用
+lz4
+brotli
+pigz
+p7zip-full
+upx
+zsync
+
+# --- 常用命令行工具 ---
 jq
-# actions/checkout 使用 SSH 拉取子模块、部署类 Action
-openssh-client
+file
+tree
+parallel
+time
+acl
+coreutils
+findutils
+dpkg
+shellcheck
+sqlite3
+mediainfo
+sudo
+locales
+tzdata
+
+# --- 开发库（Action 与构建脚本常用的 -dev 依赖） ---
+libssl-dev
+libicu-dev
+libsqlite3-dev
+libyaml-dev
+libnss3-tools
+
+# --- 图形与字体（无头浏览器/GUI 测试） ---
+xvfb
+dbus
+tk
+fonts-noto-color-emoji
+
+# --- 其它（对齐托管镜像） ---
+gnupg2
+python-is-python3
+texinfo
+sphinxsearch
