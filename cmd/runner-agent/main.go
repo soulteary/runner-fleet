@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -163,19 +164,58 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"message":"stop signal sent"}`))
 }
 
+// agentTokenFile 与 Manager 侧 runner.AgentTokenFile 保持一致：
+// 令牌由 Manager 写入挂载目录，Agent 从自己的 RUNNER_INSTALL_DIR 读取。
+const agentTokenFile = ".agent_token"
+
+// expectedToken 返回本 Agent 要求的令牌：优先环境变量，其次安装目录下的令牌文件。
+// 返回空字符串表示未配置令牌，此时不启用鉴权（兼容本特性之前创建的容器）。
+func expectedToken() string {
+	if t := strings.TrimSpace(os.Getenv("AGENT_TOKEN")); t != "" {
+		return t
+	}
+	b, err := os.ReadFile(filepath.Join(installDir(), agentTokenFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// requireToken 包装控制类接口；令牌未配置时直接放行，配置了则要求 Bearer 匹配。
+// 每次请求重新读取令牌，便于 Manager 在容器启动后才写入令牌的场景。
+func requireToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		want := expectedToken()
+		if want != "" {
+			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(got)), []byte(want)) != 1 {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"message":"unauthorized"}`))
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
 func main() {
 	port := os.Getenv("AGENT_PORT")
 	if port == "" {
 		port = defaultPort
 	}
-	http.HandleFunc("/status", handleStatus)
-	http.HandleFunc("/start", handleStart)
-	http.HandleFunc("/stop", handleStop)
+	// 控制类接口需要令牌；/health 保持开放，供容器 HEALTHCHECK 使用
+	http.HandleFunc("/status", requireToken(handleStatus))
+	http.HandleFunc("/start", requireToken(handleStart))
+	http.HandleFunc("/stop", requireToken(handleStop))
 	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	log.Printf("Runner Agent 监听 :%s，RUNNER_INSTALL_DIR=%s", port, installDir())
+	authState := "已启用"
+	if expectedToken() == "" {
+		authState = "未启用（无令牌文件，兼容旧容器）"
+	}
+	log.Printf("Runner Agent 监听 :%s，RUNNER_INSTALL_DIR=%s，接口鉴权%s", port, installDir(), authState)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}

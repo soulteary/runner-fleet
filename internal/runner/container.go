@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -30,8 +31,9 @@ type AgentStatus struct {
 	Running bool   `json:"running"`
 }
 
-// GetAgentStatus 请求 Runner 容器内 Agent 的 /status，超时 5 秒
-func GetAgentStatus(ctx context.Context, containerName string, port int) (*AgentStatus, error) {
+// GetAgentStatus 请求 Runner 容器内 Agent 的 /status，超时 5 秒。
+// token 为空时不带鉴权头，兼容本特性之前创建的容器。
+func GetAgentStatus(ctx context.Context, containerName string, port int, token string) (*AgentStatus, error) {
 	if port <= 0 {
 		port = 8081
 	}
@@ -40,6 +42,7 @@ func GetAgentStatus(ctx context.Context, containerName string, port int) (*Agent
 	if err != nil {
 		return nil, err
 	}
+	setAgentAuth(req, token)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -61,8 +64,9 @@ func GetAgentStatus(ctx context.Context, containerName string, port int) (*Agent
 	return &out, nil
 }
 
-// CallAgentStart 请求 Runner 容器内 Agent 的 POST /start
-func CallAgentStart(ctx context.Context, containerName string, port int) error {
+// CallAgentStart 请求 Runner 容器内 Agent 的 POST /start。
+// token 为空时不带鉴权头，兼容本特性之前创建的容器。
+func CallAgentStart(ctx context.Context, containerName string, port int, token string) error {
 	if port <= 0 {
 		port = 8081
 	}
@@ -71,6 +75,7 @@ func CallAgentStart(ctx context.Context, containerName string, port int) error {
 	if err != nil {
 		return err
 	}
+	setAgentAuth(req, token)
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -86,6 +91,13 @@ func CallAgentStart(ctx context.Context, containerName string, port int) error {
 		return fmt.Errorf("agent /start 返回 %d: %s", resp.StatusCode, msg)
 	}
 	return nil
+}
+
+// setAgentAuth 为 Agent 请求附加令牌；token 为空则不加头
+func setAgentAuth(req *http.Request, token string) {
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 }
 
 func dockerCmd(ctx context.Context, args ...string) ([]byte, error) {
@@ -238,13 +250,19 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return fmt.Errorf("%s", errContainerModeNeedHostDocker)
 	}
 	cn := ContainerName(runnerName)
+	// 在创建/启动容器之前写好令牌：容器内 Agent 启动时即可从挂载目录读到
+	token, tokenErr := EnsureAgentToken(installDir)
+	if tokenErr != nil {
+		// 拿不到令牌不阻断启停，降级为不带鉴权头（与旧版本行为一致）
+		log.Printf("警告: %s %v，本次调用 Agent 不带鉴权头", runnerName, tokenErr)
+	}
 	running, err := ContainerRunning(ctx, cn)
 	if err != nil {
 		return err
 	}
 	if running {
 		// 容器已在跑，可选：调 Agent /start 确保 listener 启动（若容器刚启动 agent 可能尚未起 run.sh）
-		_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
+		_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 		return nil
 	}
 	// 检查是否存在但已停止
@@ -256,7 +274,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		startOut, startErr := dockerCmd(ctx, "start", cn)
 		if startErr == nil {
 			time.Sleep(2 * time.Second)
-			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
+			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 		}
 		// start 失败且为网络已删除等不可恢复原因时，删除旧容器并走下方「创建新容器」流程（如 compose down 后网络被删）
 		if containerStartUnrecoverable(startOut) {
@@ -318,7 +336,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	}
 	// 等待 agent 就绪后调 /start
 	time.Sleep(3 * time.Second)
-	return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
+	return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 }
 
 // StopRunnerContainer 停止容器（不删除，便于下次 start）
@@ -360,7 +378,7 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	if !ok {
 		return false, StatusInstalled, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}
-	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort)
+	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, ReadAgentToken(installDir))
 	if err != nil {
 		agentErrType := ProbeErrorTypeAgentConnect
 		if strings.Contains(err.Error(), "agent 返回") {
