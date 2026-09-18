@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -235,6 +236,36 @@ func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHos
 	return append(args, img), nil
 }
 
+// applyResourceLimitsToExisting 对已存在的容器施加资源上限。
+//
+// docker create 的资源参数只在创建时生效：升级到支持 runners.resources 的版本后，
+// 已有容器仍是原来的无限制状态，仅靠停止/启动也不会变。这里用 docker update 补上，
+// 使配置对存量容器同样生效，无需删掉重建。
+// 未配置上限时不执行任何操作，保持与旧版本一致。
+func applyResourceLimitsToExisting(ctx context.Context, containerName string, limits config.ResourceLimits) {
+	updateArgs := resourceUpdateArgs(containerName, limits)
+	if updateArgs == nil {
+		return
+	}
+	if out, err := dockerCmd(ctx, updateArgs...); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		log.Printf("警告: 为已存在容器 %s 施加资源上限失败，该容器仍沿用创建时的限制: %s（可 docker rm -f %s 后在界面重新启动以重建）",
+			containerName, msg, containerName)
+	}
+}
+
+// resourceUpdateArgs 组装 docker update 参数；未配置任何上限时返回 nil 表示无需执行
+func resourceUpdateArgs(containerName string, limits config.ResourceLimits) []string {
+	args := limits.Args()
+	if len(args) == 0 {
+		return nil
+	}
+	return append(append([]string{"update"}, args...), containerName)
+}
+
 // StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner
 func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
 	if cfg.Runners.ContainerMode && managerDockerHostIsDind() {
@@ -246,6 +277,8 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return err
 	}
 	if running {
+		// 存量容器可能是在配置资源上限之前创建的，这里补一次
+		applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
 		// 容器已在跑，可选：调 Agent /start 确保 listener 启动（若容器刚启动 agent 可能尚未起 run.sh）
 		_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
 		return nil
@@ -258,6 +291,7 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	if len(strings.TrimSpace(string(out))) > 0 {
 		startOut, startErr := dockerCmd(ctx, "start", cn)
 		if startErr == nil {
+			applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
 			time.Sleep(2 * time.Second)
 			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort)
 		}
@@ -277,18 +311,13 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config/config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
 		}
 	}
-	img := cfg.Runners.ContainerImage
-	if img == "" {
-		img = config.DefaultRunnerContainerImage()
-	}
+	// 镜像与 Job Docker 后端支持按 Runner 覆盖，未设置时回落全局配置
+	img := cfg.ContainerImageFor(runnerName)
 	network := cfg.Runners.ContainerNetwork
 	if network == "" {
 		network = "runner-net"
 	}
-	jobBackend := strings.ToLower(strings.TrimSpace(cfg.Runners.JobDockerBackend))
-	if jobBackend == "" {
-		jobBackend = "dind"
-	}
+	jobBackend := cfg.JobDockerBackendFor(runnerName)
 	dindHost := cfg.Runners.DindHost
 	if dindHost == "" {
 		dindHost = "runner-dind"

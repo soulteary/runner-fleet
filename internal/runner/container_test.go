@@ -237,3 +237,18 @@ func TestRunnerCreateArgs_NoLimitsKeepsOldBehaviour(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceUpdateArgs(t *testing.T) {
+	// 未配置上限时不应执行 docker update，保持旧行为
+	if got := resourceUpdateArgs("github-runner-a", config.ResourceLimits{}); got != nil {
+		t.Errorf("未配置上限时应返回 nil，实际: %v", got)
+	}
+	got := resourceUpdateArgs("github-runner-a", config.ResourceLimits{CPUs: "2", Memory: "4g", MemorySwap: "4g", PidsLimit: 512})
+	want := "update --cpus 2 --memory 4g --memory-swap 4g --pids-limit 512 github-runner-a"
+	if strings.Join(got, " ") != want {
+		t.Errorf("resourceUpdateArgs = %q\nwant %q", strings.Join(got, " "), want)
+	}
+	if got[len(got)-1] != "github-runner-a" {
+		t.Errorf("容器名必须在参数末尾: %v", got)
+	}
+}

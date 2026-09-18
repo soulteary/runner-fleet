@@ -959,6 +959,148 @@ func TestValidate_NegativeDockerGID(t *testing.T) {
 	}
 }
 
+func containerModeConfig(items ...RunnerItem) *Config {
+	c := &Config{}
+	c.Runners.BasePath = "/data/runners"
+	c.Runners.ContainerMode = true
+	c.Runners.VolumeHostPath = "/data/runners"
+	c.Runners.JobDockerBackend = "dind"
+	c.Runners.Items = items
+	return c
+}
+
+func TestContainerImageFor_ItemOverridesGlobal(t *testing.T) {
+	restore := setEnvsAndRestore(t, map[string]string{"FLEET_IMAGE_TAG": "", "MANAGER_IMAGE": ""}, []string{"FLEET_IMAGE_TAG", "MANAGER_IMAGE"})
+	defer restore()
+
+	c := containerModeConfig(
+		RunnerItem{Name: "droiddesk", TargetType: "repo", Target: "o/r", ContainerImage: "reg/flutter-runner:1"},
+		RunnerItem{Name: "plain", TargetType: "repo", Target: "o/r2"},
+	)
+	c.Runners.ContainerImage = "reg/global-runner:1"
+
+	if got := c.ContainerImageFor("droiddesk"); got != "reg/flutter-runner:1" {
+		t.Errorf("item 覆盖未生效: %q", got)
+	}
+	if got := c.ContainerImageFor("plain"); got != "reg/global-runner:1" {
+		t.Errorf("未回落全局: %q", got)
+	}
+	// 未知名称也回落全局，避免创建容器时拿到空镜像
+	if got := c.ContainerImageFor("not-configured"); got != "reg/global-runner:1" {
+		t.Errorf("未知 runner 未回落全局: %q", got)
+	}
+
+	c.Runners.ContainerImage = ""
+	if got, want := c.ContainerImageFor("plain"), DefaultRunnerContainerImage(); got != want {
+		t.Errorf("全局也为空时应回落默认镜像: got %q want %q", got, want)
+	}
+}
+
+func TestJobDockerBackendFor_ItemOverridesGlobal(t *testing.T) {
+	c := containerModeConfig(
+		RunnerItem{Name: "iso", TargetType: "repo", Target: "o/r", JobDockerBackend: "  NONE  "},
+		RunnerItem{Name: "plain", TargetType: "repo", Target: "o/r2"},
+	)
+	c.Runners.JobDockerBackend = "host-socket"
+
+	if got := c.JobDockerBackendFor("iso"); got != "none" {
+		t.Errorf("item 覆盖未生效或未规范化大小写/空白: %q", got)
+	}
+	if got := c.JobDockerBackendFor("plain"); got != "host-socket" {
+		t.Errorf("未回落全局: %q", got)
+	}
+
+	c.Runners.JobDockerBackend = ""
+	if got := c.JobDockerBackendFor("plain"); got != DefaultJobDockerBackend {
+		t.Errorf("全局也为空时应回落 %q: got %q", DefaultJobDockerBackend, got)
+	}
+}
+
+func TestValidate_ItemJobDockerBackend(t *testing.T) {
+	c := containerModeConfig(RunnerItem{Name: "r", TargetType: "repo", Target: "o/r", JobDockerBackend: "podman"})
+	err := Validate(c)
+	if err == nil || !strings.Contains(err.Error(), "items[0].job_docker_backend") {
+		t.Fatalf("非法后端应报错，got: %v", err)
+	}
+
+	c = containerModeConfig(RunnerItem{Name: "r", TargetType: "repo", Target: "o/r", JobDockerBackend: "host-socket"})
+	if err := Validate(c); err != nil {
+		t.Fatalf("合法后端不应报错: %v", err)
+	}
+}
+
+func TestValidate_ItemContainerFieldsRequireContainerMode(t *testing.T) {
+	// 与 runners.volume_host_path 一致：容器模式专属字段不允许在非容器模式下设置
+	base := func(item RunnerItem) *Config {
+		c := &Config{}
+		c.Runners.BasePath = "./runners"
+		c.Runners.JobDockerBackend = "dind"
+		c.Runners.Items = []RunnerItem{item}
+		return c
+	}
+	err := Validate(base(RunnerItem{Name: "r", TargetType: "repo", Target: "o/r", ContainerImage: "reg/x:1"}))
+	if err == nil || !strings.Contains(err.Error(), "items[0].container_image") {
+		t.Fatalf("非容器模式下设置 container_image 应报错，got: %v", err)
+	}
+	err = Validate(base(RunnerItem{Name: "r", TargetType: "repo", Target: "o/r", JobDockerBackend: "none"}))
+	if err == nil || !strings.Contains(err.Error(), "items[0].job_docker_backend") {
+		t.Fatalf("非容器模式下设置 job_docker_backend 应报错，got: %v", err)
+	}
+	if err := Validate(base(RunnerItem{Name: "r", TargetType: "repo", Target: "o/r"})); err != nil {
+		t.Fatalf("未设置这两个字段时不应报错: %v", err)
+	}
+}
+
+func TestLoad_ItemOverridesRoundTrip(t *testing.T) {
+	// per-runner 字段能从 yaml 读入，且 omitempty 保证未设置时不会写回噪声字段
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`
+server: { port: 8080 }
+runners:
+  base_path: /data/runners
+  container_mode: true
+  volume_host_path: /data/runners
+  job_docker_backend: dind
+  items:
+    - name: droiddesk
+      target_type: repo
+      target: soulteary/droiddesk
+      container_image: reg/flutter-runner:1
+      job_docker_backend: none
+    - name: plain
+      target_type: repo
+      target: soulteary/other
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.ContainerImageFor("droiddesk"); got != "reg/flutter-runner:1" {
+		t.Errorf("container_image 未读入: %q", got)
+	}
+	if got := cfg.JobDockerBackendFor("droiddesk"); got != "none" {
+		t.Errorf("item job_docker_backend 未读入: %q", got)
+	}
+	if got := cfg.JobDockerBackendFor("plain"); got != "dind" {
+		t.Errorf("未覆盖的 runner 应回落全局: %q", got)
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(saved), "container_image:") != 2 {
+		// 一次来自 runners.container_image（无 omitempty），一次来自 droiddesk；plain 不应出现
+		t.Errorf("omitempty 未生效，写回内容:\n%s", saved)
+	}
+}
+
 func TestResourceLimits_Validate(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -970,6 +1112,7 @@ func TestResourceLimits_Validate(t *testing.T) {
 		{"pids 不限", ResourceLimits{PidsLimit: -1}, ""},
 		{"内存纯字节数", ResourceLimits{Memory: "1073741824"}, ""},
 		{"swap 设为 -1", ResourceLimits{Memory: "4g", MemorySwap: "-1"}, ""},
+		{"swap 等于 memory", ResourceLimits{Memory: "4g", MemorySwap: "4g"}, ""},
 		{"cpus 非数字", ResourceLimits{CPUs: "two"}, "cpus"},
 		{"cpus 为 0", ResourceLimits{CPUs: "0"}, "cpus"},
 		{"cpus 为 0.0", ResourceLimits{CPUs: "0.0"}, "cpus"},
@@ -977,6 +1120,8 @@ func TestResourceLimits_Validate(t *testing.T) {
 		{"内存单位非法", ResourceLimits{Memory: "4gb"}, "memory"},
 		{"pids 小于 -1", ResourceLimits{PidsLimit: -2}, "pids_limit"},
 		{"只设 swap 不设 memory", ResourceLimits{MemorySwap: "4g"}, "memory_swap"},
+		{"swap 小于 memory", ResourceLimits{Memory: "4g", MemorySwap: "1g"}, "memory_swap"},
+		{"swap 小于 memory（跨单位）", ResourceLimits{Memory: "2g", MemorySwap: "1024m"}, "memory_swap"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -991,6 +1136,34 @@ func TestResourceLimits_Validate(t *testing.T) {
 				t.Fatalf("应报含 %q 的错误，got: %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestParseDockerSize(t *testing.T) {
+	cases := map[string]int64{
+		"1024":  1024,
+		"1b":    1,
+		"1k":    1024,
+		"1m":    1024 * 1024,
+		"1g":    1024 * 1024 * 1024,
+		"1G":    1024 * 1024 * 1024,
+		"1.5g":  1024 * 1024 * 1024 * 3 / 2,
+		"2048m": 2 * 1024 * 1024 * 1024,
+	}
+	for in, want := range cases {
+		got, err := parseDockerSize(in)
+		if err != nil {
+			t.Errorf("parseDockerSize(%q) 报错: %v", in, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("parseDockerSize(%q) = %d, want %d", in, got, want)
+		}
+	}
+	for _, bad := range []string{"", "4gb", "abc", "-1"} {
+		if _, err := parseDockerSize(bad); err == nil {
+			t.Errorf("parseDockerSize(%q) 应报错", bad)
+		}
 	}
 }
 
