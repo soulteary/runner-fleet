@@ -17,7 +17,7 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 go build -o runner-manager ./cmd/runner-manager
 
 # Mit Version (für /version und Debug)
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # Nur Runner Agent bauen (Containermodus)
 go build -o runner-agent ./cmd/runner-agent
@@ -85,8 +85,19 @@ Beispiel (Probe-Fehler):
 - `make run`: Manager bauen und ausführen.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager-Image bauen und ausführen; siehe [Benutzerhandbuch](guide.md).
 - `make docker-build-runner`: Runner-Image für Containermodus bauen (`Dockerfile.runner`, Standard-Tag in `RUNNER_IMAGE`).
+- `make docker-build-runner-example`: Beispiel für ein angepasstes Runner-Image bauen (`EXAMPLE=android|node`, siehe [`examples/runner-images/`](../../examples/runner-images/)).
 - `make clean`: Gebaute Binaries entfernen (runner-manager, runner-agent).
 
 Containermodus nutzt Agent aus `cmd/runner-agent` und Runner-Image aus `Dockerfile.runner`.
+
+## Release
+
+Versionsangaben in Doku und Beispielen müssen dem Standard-Image-Tag in `internal/config/config.go` entsprechen. CI prüft das über `scripts/check-version-consistency.sh`; lokal vor einer Release-PR ausführen:
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
+Zeilen, die bewusst eine ältere Version nennen (Release Notes, Upgrade-Hinweise), mit dem Marker `version-check-ignore` versehen.
 
 [← Zurück zur Dokumentation](README.md)

@@ -14,6 +14,7 @@ HTTP management UI built with Golang Echo to view and manage multiple self-hoste
 - **Web one-stop**: Add, register, start/stop, edit, and view status in the UI—no SSH or manual `config.sh`.
 - **Auto install & register**: In "Quick Add" enter a token to auto-download the runner, register, and start; paste `./config.sh --url ... --token ...` from GitHub to parse and fill the form.
 - **Container-first**: Docker / docker-compose out of the box; DinD and host-socket for in-job Docker; optional **container mode** (one runner per container) with Manager controlling lifecycle and status.
+- **Hosted-CLI baseline + custom images**: stock images align the CLI layer with GitHub-hosted `ubuntu-24.04`; extend with Android/Node (etc.) via [`examples/runner-images/`](examples/runner-images/) and per-runner `container_image`.
 - **Self-heal & troubleshoot**: ~15s after start, registered but stopped runners are started; periodic check every 5 minutes; in container mode, `status=unknown` shows a structured probe (error type, check/fix commands) for copy-paste troubleshooting or start/stop self-heal.
 - **Observable**: Registration result is written and shown in the UI; optional PAT (`.github_check_token`) to periodically verify runners appear in GitHub's list, synced to the UI.
 
@@ -37,7 +38,7 @@ docker network create runner-net 2>/dev/null || true
 docker compose up -d
 ```
 
-Open http://localhost:8080. The default image tag is the stable release (e.g. v1.3.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
+Open http://localhost:8080. The default image tag is the stable release (e.g. v1.4.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
 
 ## Use cases
 

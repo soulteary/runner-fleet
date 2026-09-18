@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 버전 포함 (/version 및 디버깅용)
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent만 빌드 (컨테이너 모드)
 go build -o runner-agent ./cmd/runner-agent
@@ -85,8 +85,19 @@ Basic Auth 사용 시 `/health`를 제외한 모든 요청에 Header `Authorizat
 - `make run`: Manager 빌드 후 실행.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager 이미지 빌드 및 실행. [사용 가이드](guide.md) 참조.
 - `make docker-build-runner`: 컨테이너 모드용 Runner 이미지 빌드(`Dockerfile.runner`, 기본 태그는 `RUNNER_IMAGE`).
+- `make docker-build-runner-example`: 커스텀 Runner 이미지 예제 빌드(`EXAMPLE=android|node`, [`examples/runner-images/`](../../examples/runner-images/) 참조).
 - `make clean`: 빌드된 바이너리 제거(runner-manager, runner-agent).
 
 컨테이너 모드는 `cmd/runner-agent`의 Agent와 `Dockerfile.runner`의 Runner 이미지를 사용합니다.
+
+## 릴리스
+
+문서와 예제의 버전 참조는 `internal/config/config.go`의 기본 이미지 태그와 일치해야 합니다. CI는 `scripts/check-version-consistency.sh`로 검사합니다. 릴리스 PR을 열기 전에 로컬에서 실행하세요:
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
+이전 버전을 정당하게 인용하는 줄(릴리스 노트, 업그레이드 안내)에는 `version-check-ignore` 마커를 붙입니다.
 
 [← 문서로 돌아가기](README.md)

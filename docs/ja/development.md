@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # バージョン付き（/version とデバッグ用）
-go build -ldflags "-X main.Version=1.3.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent のみビルド（コンテナモード用）
 go build -o runner-agent ./cmd/runner-agent
@@ -85,8 +85,19 @@ Basic Auth 有効時、`/health` 以外のリクエストには Header に `Auth
 - `make run`: Manager をビルドしてから実行。
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager イメージのビルドと実行。[ユーザーガイド](guide.md) 参照。
 - `make docker-build-runner`: コンテナモード用 Runner イメージをビルド（`Dockerfile.runner`、デフォルトタグは `RUNNER_IMAGE`）。
+- `make docker-build-runner-example`: カスタム Runner イメージの例をビルド（`EXAMPLE=android|node`、[`examples/runner-images/`](../../examples/runner-images/) 参照）。
 - `make clean`: ビルドしたバイナリを削除（runner-manager、runner-agent）。
 
 コンテナモードでは `cmd/runner-agent` の Agent と `Dockerfile.runner` の Runner イメージを使用します。
+
+## リリース
+
+ドキュメントと例のバージョン参照は `internal/config/config.go` のデフォルトイメージタグと一致させる必要があります。CI は `scripts/check-version-consistency.sh` で検証します。リリース PR を開く前にローカルで実行してください:
+
+```bash
+sh scripts/check-version-consistency.sh
+```
+
+古いバージョンを正当に引用する行（リリースノート、アップグレード手順）には `version-check-ignore` マーカーを付けます。
 
 [← ドキュメントへ戻る](README.md)
