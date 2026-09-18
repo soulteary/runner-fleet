@@ -126,6 +126,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | Chemin absolu hôte vers runners en mode conteneur (obligatoire) | vide |
 | `runners.items[].container_image` | Surcharge d'image par runner (mode conteneur) ; vide = valeur globale | vide |
 | `runners.items[].job_docker_backend` | Surcharge du backend Docker par runner (mode conteneur) ; vide = valeur globale | vide |
+| `runners.resources` | Limites de ressources des conteneurs runner (`cpus` / `memory` / `memory_swap` / `pids_limit`), transmises à `docker create` et appliquées aux conteneurs existants via `docker update` au démarrage | vide (illimité) |
 
 Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 

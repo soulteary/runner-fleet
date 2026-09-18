@@ -126,6 +126,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | コンテナモード時の runners のホスト絶対パス（必須） | 空 |
 | `runners.items[].container_image` | Runner ごとのイメージ上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.items[].job_docker_backend` | Runner ごとの Docker バックエンド上書き（コンテナモード）。空ならグローバル値 | 空 |
+| `runners.resources` | Runner コンテナのリソース上限（`cpus` / `memory` / `memory_swap` / `pids_limit`）。`docker create` に渡すほか、起動時に `docker update` で既存コンテナにも適用します | 空（無制限） |
 
 上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
 

@@ -126,6 +126,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.volume_host_path` | 컨테이너 모드에서 runners의 호스트 절대 경로(필수) | 비움 |
 | `runners.items[].container_image` | Runner별 이미지 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 | `runners.items[].job_docker_backend` | Runner별 Docker 백엔드 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
+| `runners.resources` | Runner 컨테이너 리소스 상한(`cpus` / `memory` / `memory_swap` / `pids_limit`), `docker create`로 전달하며 시작 시 `docker update`로 기존 컨테이너에도 적용 | 비움(무제한) |
 
 일부 필드는 환경 변수로 덮어쓸 수 있음(`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` 등). 전체 컨테이너 시 `.env`만 수정하면 됨. `.env.example` 참조.
 

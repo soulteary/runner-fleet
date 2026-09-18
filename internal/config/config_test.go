@@ -1100,3 +1100,99 @@ runners:
 		t.Errorf("omitempty 未生效，写回内容:\n%s", saved)
 	}
 }
+
+func TestResourceLimits_Validate(t *testing.T) {
+	cases := []struct {
+		name    string
+		limits  ResourceLimits
+		wantErr string // 空表示应通过
+	}{
+		{"全空不限制", ResourceLimits{}, ""},
+		{"正常取值", ResourceLimits{CPUs: "1.5", Memory: "4g", MemorySwap: "8g", PidsLimit: 512}, ""},
+		{"pids 不限", ResourceLimits{PidsLimit: -1}, ""},
+		{"内存纯字节数", ResourceLimits{Memory: "1073741824"}, ""},
+		{"swap 设为 -1", ResourceLimits{Memory: "4g", MemorySwap: "-1"}, ""},
+		{"swap 等于 memory", ResourceLimits{Memory: "4g", MemorySwap: "4g"}, ""},
+		{"cpus 非数字", ResourceLimits{CPUs: "two"}, "cpus"},
+		{"cpus 为 0", ResourceLimits{CPUs: "0"}, "cpus"},
+		{"cpus 为 0.0", ResourceLimits{CPUs: "0.0"}, "cpus"},
+		{"cpus 科学计数法 docker 不接受", ResourceLimits{CPUs: "1e3"}, "cpus"},
+		{"内存单位非法", ResourceLimits{Memory: "4gb"}, "memory"},
+		{"pids 小于 -1", ResourceLimits{PidsLimit: -2}, "pids_limit"},
+		{"只设 swap 不设 memory", ResourceLimits{MemorySwap: "4g"}, "memory_swap"},
+		{"swap 小于 memory", ResourceLimits{Memory: "4g", MemorySwap: "1g"}, "memory_swap"},
+		{"swap 小于 memory（跨单位）", ResourceLimits{Memory: "2g", MemorySwap: "1024m"}, "memory_swap"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.limits.Validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("应通过校验，got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("应报含 %q 的错误，got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestParseDockerSize(t *testing.T) {
+	cases := map[string]int64{
+		"1024":  1024,
+		"1b":    1,
+		"1k":    1024,
+		"1m":    1024 * 1024,
+		"1g":    1024 * 1024 * 1024,
+		"1G":    1024 * 1024 * 1024,
+		"1.5g":  1024 * 1024 * 1024 * 3 / 2,
+		"2048m": 2 * 1024 * 1024 * 1024,
+	}
+	for in, want := range cases {
+		got, err := parseDockerSize(in)
+		if err != nil {
+			t.Errorf("parseDockerSize(%q) 报错: %v", in, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("parseDockerSize(%q) = %d, want %d", in, got, want)
+		}
+	}
+	for _, bad := range []string{"", "4gb", "abc", "-1"} {
+		if _, err := parseDockerSize(bad); err == nil {
+			t.Errorf("parseDockerSize(%q) 应报错", bad)
+		}
+	}
+}
+
+func TestResourceLimits_Args(t *testing.T) {
+	if got := (ResourceLimits{}).Args(); len(got) != 0 {
+		t.Errorf("未配置时不应产生参数: %v", got)
+	}
+	got := strings.Join(ResourceLimits{CPUs: " 2 ", Memory: "4g", PidsLimit: 512}.Args(), " ")
+	want := "--cpus 2 --memory 4g --pids-limit 512"
+	if got != want {
+		t.Errorf("Args() = %q, want %q", got, want)
+	}
+}
+
+func TestLoad_ResourceLimitsRejectedEarly(t *testing.T) {
+	// 非法取值应在 Load 阶段就报错，而不是等到 docker create 失败
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`
+server: { port: 8080 }
+runners:
+  base_path: ./runners
+  items: []
+  resources:
+    cpus: "many"
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "cpus") {
+		t.Fatalf("应在加载时拒绝非法 cpus，got: %v", err)
+	}
+}
