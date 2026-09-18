@@ -19,6 +19,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Check both images share the apt manifest
+        run: |
+          for f in Dockerfile Dockerfile.runner; do
+            grep -q 'scripts/apt-packages.txt' "$f" || {
+              echo "::error file=$f::镜像依赖须从 scripts/apt-packages.txt 安装，勿在 Dockerfile 内另写包列表（历史上两边漂移过，见 #4 之后的 job 失败）"
+              exit 1
+            }
+          done
+          echo "Manager 与 Runner 镜像均使用共享依赖清单"
+
       - name: Detect Go module root
         id: modroot
         uses: ./.github/actions/detect-go-module-root
