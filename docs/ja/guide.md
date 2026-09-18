@@ -124,6 +124,8 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Job 内 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind` 時の DinD ホスト名 | `runner-dind` |
 | `runners.volume_host_path` | コンテナモード時の runners のホスト絶対パス（必須） | 空 |
+| `runners.items[].container_image` | Runner ごとのイメージ上書き（コンテナモード）。空ならグローバル値 | 空 |
+| `runners.items[].job_docker_backend` | Runner ごとの Docker バックエンド上書き（コンテナモード）。空ならグローバル値 | 空 |
 
 上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
 
