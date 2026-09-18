@@ -123,7 +123,7 @@ jobs:
           body: |
             ## Changes
 
-            详见提交历史与变更说明。
+            详见 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/CHANGELOG.md) 与提交历史。
 
             ## 使用方式
 
