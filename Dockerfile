@@ -15,10 +15,12 @@ FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="Runner Fleet Manager" \
       org.opencontainers.image.description="GitHub Actions Runner 管理服务"
 
-# Runner 依赖（libicu 等）；Docker CLI 供容器模式与 Job 内 docker 使用
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libicu74 libkrb5-3 liblttng-ust1 libssl3 zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+# 依赖清单集中在 scripts/apt-packages.txt，Manager 与 Runner 镜像共用，避免单向漂移
+COPY scripts/apt-packages.txt /tmp/apt-packages.txt
+RUN apt-get update \
+    && awk '!/^[[:space:]]*#/ && NF' /tmp/apt-packages.txt \
+       | xargs -r apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/apt-packages.txt
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod 644 /etc/apt/keyrings/docker.asc \

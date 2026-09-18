@@ -1,0 +1,35 @@
+# Manager 与 Runner 镜像共用的 apt 包清单。
+#
+# 两个镜像都会执行 GitHub Actions job（Manager 在默认模式下、Runner 在容器模式下），
+# 因此依赖必须一致。此前两个 Dockerfile 各写各的包列表，v1.1.0 只给 Runner 镜像补了
+# git/build-essential/gnupg，Manager 镜像没同步，导致默认模式下 job 报
+# "git: command not found"。改为单一清单后，依赖无法再单向漂移。
+#
+# 每行一个包，# 开头与空行忽略。
+
+# --- GitHub Actions Runner(.NET) 运行时依赖 ---
+ca-certificates
+curl
+libicu74
+libkrb5-3
+liblttng-ust1
+libssl3
+zlib1g
+
+# --- 常见 Action 与构建脚本默认依赖的工具 ---
+# actions/checkout：缺 git 时会退化为 REST API 下载 tar 包，工作目录里没有 .git，
+# 后续任何调用 git 的脚本都会失败
+git
+# gradle/actions/setup-gradle、setup-node 等解压发行包
+unzip
+zip
+# Flutter SDK 等以 .tar.xz 分发的工具链
+xz-utils
+# 原生依赖编译（node-gyp、cgo 等）
+build-essential
+# 校验签名、apt-key 等
+gnupg
+# 大量 workflow 脚本默认可用
+jq
+# actions/checkout 使用 SSH 拉取子模块、部署类 Action
+openssh-client
