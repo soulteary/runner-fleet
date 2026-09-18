@@ -8,10 +8,16 @@ RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet:v1.3.0-runner
 # 镜像内 app 用户加入的 docker 组 GID，需与宿主机一致才能访问 docker.sock（getent group docker | cut -d: -f3）
 DOCKER_GID ?= 999
 
-.PHONY: build build-agent build-all test run docker-build docker-build-runner docker-run docker-stop clean help
+# 自定义 Runner 镜像示例（examples/runner-images/Dockerfile.$(EXAMPLE)）
+EXAMPLE ?= android
+IMAGE   ?= runner-fleet-$(EXAMPLE)-runner:dev
+
+.PHONY: build build-agent build-all test run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
 
 help:
-	@echo "targets: build build-agent build-all test run docker-build docker-build-runner docker-run docker-stop clean"
+	@echo "targets: build build-agent build-all test run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
+	@echo "  docker-build-runner-example: 构建自定义 Runner 镜像示例，如"
+	@echo "    make docker-build-runner-example EXAMPLE=android IMAGE=your-registry/android-runner:1"
 
 build:
 	go build -ldflags "-X main.Version=$(VERSION)" -o $(BINARY) ./cmd/runner-manager
@@ -32,6 +38,10 @@ docker-build:
 
 docker-build-runner:
 	docker build -f Dockerfile.runner --build-arg DOCKER_GID=$(DOCKER_GID) -t $(RUNNER_IMAGE) .
+
+# 在本仓库 Runner 镜像之上叠加工具链，详见 examples/runner-images/README.md
+docker-build-runner-example:
+	docker build -f examples/runner-images/Dockerfile.$(EXAMPLE) -t $(IMAGE) .
 
 # 需 Basic Auth 时请使用 docker compose（会读取 .env），或在本 target 的 docker run 中增加 -e BASIC_AUTH_PASSWORD=... -e BASIC_AUTH_USER=admin
 docker-run: docker-stop

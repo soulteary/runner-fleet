@@ -88,12 +88,15 @@ runners:
 
 Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.3.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.3.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
+**Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 세 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
+
 ### 문제 해결
 
 - **문제가 있으면 먼저 시작 자가 점검 확인**: `docker compose logs runner-manager | grep 自检`. 시작 시 runners 디렉터리, Docker 접근성, 네트워크, Runner 이미지, Job 내 Docker 백엔드를 점검하며, 실패 항목에는 바로 실행 가능한 수정 명령이 표시됩니다.
 - **compose down 후 Runner가 시작되지 않음**: 한 번 `docker network create runner-net` 실행. 계속 실패하면 UI에서 "Start"로 재생성하거나 `docker rm -f github-runner-<name>` 후 "Start".
 - **root로 실행**: 마운트된 디렉터리는 프로세스 사용자가 쓸 수 있어야 함. root 사용 시 `RUNNER_ALLOW_RUNASROOT=1` 설정.
 - **Job에서 docker.sock `permission denied`**: `job_docker_backend: host-socket`에서는 컨테이너 사용자(UID 1001)가 socket 소유 그룹에 속해야 합니다. Manager가 컨테이너 생성 시 감지한 호스트 docker GID로 `--group-add`를 추가하므로, 업그레이드 후에는 Runner 컨테이너를 재생성하세요(`docker rm -f github-runner-<name>` 후 "Start"). 감지에 실패하면 `runners.docker_gid`(또는 `.env`의 `DOCKER_GID`)를 `getent group docker | cut -d: -f3` 값으로 설정합니다.
+- **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep 自检`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
 - **이전 Runner 이미지**: `docker rm -f github-runner-<name>`, 그 다음 UI에서 "Start"로 재생성.
 - **status=unknown**: 상세 팝업에서 probe 확인; "Start/Stop"으로 자가 복구 시도.
 

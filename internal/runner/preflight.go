@@ -51,7 +51,7 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 	}
 	results = append(results, checkDockerReachable(ctx))
 	results = append(results, checkNetwork(ctx, cfg))
-	results = append(results, checkRunnerImage(ctx, cfg))
+	results = append(results, checkRunnerImages(ctx, cfg)...)
 	results = append(results, checkJobDockerBackend(ctx, cfg))
 	return results
 }
@@ -143,18 +143,89 @@ func checkNetwork(ctx context.Context, cfg *config.Config) CheckResult {
 	return ok(name, "网络 "+network+" 存在")
 }
 
-// checkRunnerImage 镜像不在本地不算致命（docker create 会自动拉），但提前说清楚能省掉一次困惑
-func checkRunnerImage(ctx context.Context, cfg *config.Config) CheckResult {
-	const name = "Runner 镜像"
-	img := cfg.Runners.ContainerImage
-	if strings.TrimSpace(img) == "" {
-		img = config.DefaultRunnerContainerImage()
+// requiredRunnerTools Job 普遍依赖的命令。缺任何一个都会以难以定位的方式失败：
+// 缺 git 时 actions/checkout 静默退化为下载 tar 包（工作目录没有 .git），
+// 缺 unzip 时 setup-gradle 之类的 Action 要等下载完发行包才报错。
+var requiredRunnerTools = []string{"git", "unzip", "tar", "curl"}
+
+// RunnerImages 返回配置中用到的全部 Runner 镜像（去重，保持稳定顺序）。
+// 自 items[].container_image 支持按 Runner 覆盖后，镜像可能不止一个。
+func RunnerImages(cfg *config.Config) []string {
+	if cfg == nil {
+		return nil
 	}
-	if _, err := dockerCmd(ctx, "image", "inspect", img); err != nil {
-		return warn(name, fmt.Sprintf("%s 不在本地，首次启动 Runner 时才会拉取（私有仓库需先 docker login）", img),
-			"docker pull "+img)
+	seen := map[string]bool{}
+	var images []string
+	add := func(img string) {
+		img = strings.TrimSpace(img)
+		if img == "" || seen[img] {
+			return
+		}
+		seen[img] = true
+		images = append(images, img)
 	}
-	return ok(name, img+" 已就绪")
+	// 未配置 items 的 Runner（含界面后续新增的）会用全局镜像，所以它必然在列
+	add(cfg.Runners.ContainerImage)
+	if len(images) == 0 {
+		add(config.DefaultRunnerContainerImage())
+	}
+	for _, item := range cfg.Runners.Items {
+		add(cfg.ContainerImageFor(item.Name))
+	}
+	return images
+}
+
+// checkRunnerImages 逐个检查配置用到的镜像：是否在本地、以及镜像内是否具备
+// Job 所需的基础命令。镜像不在本地不算致命（docker create 会自动拉）。
+func checkRunnerImages(ctx context.Context, cfg *config.Config) []CheckResult {
+	var results []CheckResult
+	for _, img := range RunnerImages(cfg) {
+		if _, err := dockerCmd(ctx, "image", "inspect", img); err != nil {
+			results = append(results, warn("Runner 镜像",
+				fmt.Sprintf("%s 不在本地，首次启动 Runner 时才会拉取（私有仓库需先 docker login）", img),
+				"docker pull "+img))
+			continue
+		}
+		results = append(results, ok("Runner 镜像", img+" 已就绪"))
+		// 镜像已在本地才做工具链检查，避免在自检阶段触发一次镜像拉取
+		results = append(results, checkRunnerImageTools(ctx, img))
+	}
+	return results
+}
+
+// checkRunnerImageTools 起一个一次性容器确认镜像内具备 requiredRunnerTools。
+// 自定义 Runner 镜像很容易漏装这些，而缺失要等 Job 跑到一半才暴露。
+func checkRunnerImageTools(ctx context.Context, img string) CheckResult {
+	const name = "Runner 镜像工具链"
+	// 镜像的 ENTRYPOINT 是 Agent，这里覆盖为 shell；--network none 省掉网络配置开销
+	script := "for t in " + strings.Join(requiredRunnerTools, " ") +
+		"; do command -v \"$t\" >/dev/null 2>&1 || echo \"$t\"; done"
+	runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := dockerCmd(runCtx, "run", "--rm", "--network", "none", "--entrypoint", "sh", img, "-c", script)
+	if err != nil {
+		return warn(name, fmt.Sprintf("无法检查 %s 内的命令（跳过）: %s", img, firstLine(out, err)),
+			"可手动执行: docker run --rm --entrypoint sh "+img+" -c \"command -v git unzip\"")
+	}
+	missing := strings.Fields(string(out))
+	if len(missing) > 0 {
+		return warn(name, fmt.Sprintf("%s 缺少 %s，Job 会在用到时才失败（缺 git 时 actions/checkout 会静默退化为无 .git 的 tar 包）",
+			img, strings.Join(missing, "、")),
+			"在自定义镜像中补装这些包，可参考 examples/runner-images/")
+	}
+	return ok(name, img+" 具备 "+strings.Join(requiredRunnerTools, "、"))
+}
+
+// firstLine 取命令输出或错误的首行，避免把整段 docker 输出塞进自检结果
+func firstLine(out []byte, err error) string {
+	msg := strings.TrimSpace(string(out))
+	if msg == "" && err != nil {
+		msg = err.Error()
+	}
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	return msg
 }
 
 // checkJobDockerBackend 按 job_docker_backend 检查 Job 内 Docker 的前置条件
