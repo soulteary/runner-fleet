@@ -6,5 +6,6 @@
 
 - **[Guide d'utilisation](guide.md)** — Déploiement, configuration, ajout de runners, sécurité et dépannage
 - **[Développement et build](development.md)** — Build, API, Makefile
+- **[Journal des modifications](../../CHANGELOG.md)** — Historique des versions et notes de mise à niveau
 
 [← Retour à l'accueil du projet](../../README.md)
