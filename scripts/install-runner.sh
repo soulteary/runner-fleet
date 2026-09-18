@@ -40,14 +40,41 @@ resolve_latest() {
         head -n 1
 }
 
-# resolve_sha256 从 release 说明中取出指定 tarball 的官方 SHA256；失败时输出空
+# release_json 取指定版本的 release JSON（只请求一次，供下面两种解析方式共用）
+release_json() {
+    curl -fsSL --max-time 20 "${API}/tags/v$1" 2>/dev/null
+}
+
+# sha256_from_assets 从 release 的 asset 元数据里取 digest（形如 "digest": "sha256:<hash>"）。
+# GitHub 在 asset 上提供该字段，是比解析说明正文更可靠的来源。
+sha256_from_assets() {
+    awk -v want="$1" '
+        # 每遇到一个 "name" 字段就重新判断当前是否为目标 asset
+        /"name"[[:space:]]*:/ { inasset = (index($0, "\"" want "\"") > 0) }
+        inasset && /"digest"[[:space:]]*:[[:space:]]*"sha256:/ {
+            # 不用 {64} 区间量词，避免依赖 awk 实现对区间表达式的支持
+            if (match($0, /sha256:[0-9a-f]+/)) {
+                h = substr($0, RSTART + 7, RLENGTH - 7)
+                if (length(h) == 64) { print h; exit }
+            }
+        }
+    '
+}
+
+# sha256_from_body 从 release 说明正文里取 "<hash>  <tarball>"（官方安装片段的写法）
+sha256_from_body() {
+    _tarball_re=$(printf '%s' "$1" | sed 's/\./\\./g')
+    grep -oE "[0-9a-f]{64}[[:space:]]+${_tarball_re}" | head -n 1 | cut -c1-64
+}
+
+# resolve_sha256 取指定 tarball 的官方 SHA256：先看 asset digest，再看说明正文；
+# 两者都拿不到时输出空，由调用方决定如何处理
 resolve_sha256() {
-    _version="$1"
-    _tarball_re=$(printf '%s' "$2" | sed 's/\./\\./g')
-    curl -fsSL --max-time 20 "${API}/tags/v${_version}" 2>/dev/null |
-        grep -oE "[0-9a-f]{64}[[:space:]]+${_tarball_re}" |
-        head -n 1 |
-        cut -c1-64
+    _json=$(release_json "$1")
+    [ -n "$_json" ] || return 0
+    _sum=$(printf '%s' "$_json" | sha256_from_assets "$2")
+    [ -n "$_sum" ] || _sum=$(printf '%s' "$_json" | sha256_from_body "$2")
+    printf '%s' "$_sum"
 }
 
 ARCH="$(detect_arch)"
@@ -92,6 +119,10 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
+# BASE 为相对路径（仓库本地默认就是 ./runners）时，cd 之后 trap 里的
+# "${INSTALL_DIR}/${TARBALL}" 会相对新 cwd 再解析一次，删不到真正的 tar 包。
+# 这里转成绝对路径，trap 与后续提示信息都用它。
+INSTALL_DIR="$(pwd)"
 
 # 下载失败或中途退出时不留下半个包，避免下次误判
 trap 'rm -f "${INSTALL_DIR}/${TARBALL}"' EXIT
