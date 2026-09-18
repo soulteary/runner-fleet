@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,7 +47,7 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 	}
 	results := []CheckResult{checkBasePath(cfg)}
 	if !cfg.Runners.ContainerMode {
-		return append(results, checkDefaultModeDocker())
+		return append(results, checkDefaultModeDocker(ctx))
 	}
 	results = append(results, checkDockerReachable(ctx))
 	results = append(results, checkNetwork(ctx, cfg))
@@ -70,26 +69,38 @@ func checkBasePath(cfg *config.Config) CheckResult {
 	if !info.IsDir() {
 		return fail(name, fmt.Sprintf("%s 不是目录", base), "")
 	}
-	probe := filepath.Join(base, ".preflight-write-test")
-	f, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY, 0600)
+	// 用唯一临时文件名而非固定名：固定名会与目录中同名的用户文件相撞，
+	// 自检本应只读，却把它打开又删掉
+	f, err := os.CreateTemp(base, ".preflight-write-test-*")
 	if err != nil {
 		return fail(name, fmt.Sprintf("%s 对当前用户(UID %d)不可写: %v", base, os.Getuid(), err),
 			fmt.Sprintf("在宿主机执行 chown -R %d:%d <宿主机上对应目录>", os.Getuid(), os.Getgid()))
 	}
+	probe := f.Name()
 	_ = f.Close()
-	_ = os.Remove(probe)
+	// 删除失败说明目录并非真正可用（如 sticky bit 或只读挂载），不能报成可写
+	if err := os.Remove(probe); err != nil {
+		return fail(name, fmt.Sprintf("%s 可创建文件但无法删除（探测文件 %s 已残留）: %v", base, probe, err),
+			fmt.Sprintf("检查目录权限与挂载选项，确认 UID %d 对该目录有完整读写权限", os.Getuid()))
+	}
 	return ok(name, fmt.Sprintf("%s 可写（UID %d）", base, os.Getuid()))
 }
 
 // checkDefaultModeDocker 默认模式下 Job 在 Manager 容器内执行，这里说明 Job 内 docker 会连到哪
-func checkDefaultModeDocker() CheckResult {
+func checkDefaultModeDocker(ctx context.Context) CheckResult {
 	const name = "Job 内 Docker"
 	h := strings.TrimSpace(os.Getenv("DOCKER_HOST"))
 	if h == "" {
 		h = "unix://" + HostDockerSocket
 	}
 	if strings.HasPrefix(h, "tcp://") {
-		return ok(name, fmt.Sprintf("默认模式，Job 内 docker 将连接 %s（DinD）", h))
+		// 仅凭前缀就报 ok 会在 DinD 未启动时给出绿色结果，而 Job 里的 docker 全都会失败
+		addr := tcpAddr(strings.TrimPrefix(h, "tcp://"))
+		if err := dialTCP(ctx, addr); err != nil {
+			return warn(name, fmt.Sprintf("默认模式，DOCKER_HOST 指向 %s，但当前不可达: %v", h, err),
+				"docker compose --profile dind up -d；确认 DinD 已启动且与 Manager 同网")
+		}
+		return ok(name, fmt.Sprintf("默认模式，Job 内 docker 将连接 %s（DinD，可达）", h))
 	}
 	sock := strings.TrimPrefix(h, "unix://")
 	if _, err := os.Stat(sock); err != nil {
@@ -169,17 +180,32 @@ func checkJobDockerBackend(ctx context.Context, cfg *config.Config) CheckResult 
 			host = "runner-dind"
 		}
 		addr := net.JoinHostPort(host, "2375")
-		dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		var d net.Dialer
-		conn, err := d.DialContext(dialCtx, "tcp", addr)
-		if err != nil {
+		if err := dialTCP(ctx, addr); err != nil {
 			return warn(name, fmt.Sprintf("dind，但 %s 当前不可达: %v", addr, err),
 				"docker compose --profile dind up -d；若 Job 不需要 Docker 可将 job_docker_backend 设为 none")
 		}
-		_ = conn.Close()
 		return ok(name, "dind，"+addr+" 可达")
 	}
+}
+
+// tcpAddr 补全缺省端口，DOCKER_HOST 可能写成 tcp://host 而不带端口
+func tcpAddr(addr string) string {
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return net.JoinHostPort(addr, "2375")
+	}
+	return addr
+}
+
+// dialTCP 检测 TCP 端点可达性，供默认模式与容器模式的 DinD 检查复用
+func dialTCP(ctx context.Context, addr string) error {
+	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var d net.Dialer
+	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 // inGroup 判断当前进程是否属于该 GID（主组或附加组）
