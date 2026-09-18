@@ -23,4 +23,6 @@ runners:
     # Job 内 Docker 后端：dind（DinD 服务）、host-socket（挂载宿主机 socket）、none（不提供）
     # job_docker_backend: dind   # 默认 dind；可选 host-socket、none
     # dind_host: runner-dind     # 仅 job_docker_backend=dind 时有效
+    # docker_gid: 999            # 仅 job_docker_backend=host-socket 时有效：Runner 容器追加的 docker 组 GID，
+    #                            # 使容器内 Job 能访问挂载的 docker.sock。留空/0 表示自动探测 docker.sock 所属组
     # volume_host_path: /absolute/path/on/host/to/runners   # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径

@@ -51,7 +51,7 @@ docker run -d --name runner-manager \
   ghcr.io/soulteary/runner-fleet:v1.0.0
 ```
 
-Host-Verzeichnisse müssen für UID 1001 schreibbar sein. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Für Docker in Jobs `-v /var/run/docker.sock:/var/run/docker.sock` hinzufügen oder DinD nutzen (siehe Repo `docker-compose.yml`, `--profile dind`). Das Image enthält die Docker-CLI; gängige Actions funktionieren mit DinD.
+Host-Verzeichnisse müssen für UID 1001 schreibbar sein. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Für Docker in Jobs `-v /var/run/docker.sock:/var/run/docker.sock` hinzufügen, plus `--group-add $(getent group docker | cut -d: -f3)`, falls die Host-Docker-GID nicht 999 ist (das Image enthält eine `docker`-Gruppe mit GID 999, änderbar über Build-Arg `DOCKER_GID`) oder DinD nutzen (siehe Repo `docker-compose.yml`, `--profile dind`). Das Image enthält die Docker-CLI; gängige Actions funktionieren mit DinD.
 
 ### Automatische Installation und Registrierung
 
@@ -84,12 +84,13 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z. B. v1.0.0-runner; Entwicklung: main-runner), oder lokal bauen: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`. Der Manager muss Host-Docker verwenden (Mount von `docker.sock`), nicht DinD über `DOCKER_HOST`; in Compose `group_add` für Host-Docker-GID oder `user: "0:0"` verwenden. Runner-Namen werden zu Containernamen normalisiert; Duplikate nach dem Mapping kollidieren.
+Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z. B. v1.0.0-runner; Entwicklung: main-runner), oder lokal bauen: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`. Der Manager muss Host-Docker verwenden (Mount von `docker.sock`), nicht DinD über `DOCKER_HOST`; in Compose `group_add` für Host-Docker-GID oder `user: "0:0"` verwenden. Bei `job_docker_backend: host-socket` übergibt der Manager `--group-add <Host-Docker-GID>` an den Runner-Container (automatisch aus `docker.sock` erkannt, überschreibbar via `runners.docker_gid` / `DOCKER_GID`); das Image enthält zudem eine `docker`-Gruppe (Build-Arg `DOCKER_GID`, Standard 999). Runner-Namen werden zu Containernamen normalisiert; Duplikate nach dem Mapping kollidieren.
 
 ### Fehlerbehebung
 
 - **Runner startet nach compose down nicht**: Einmal `docker network create runner-net` ausführen. Bei anhaltendem Fehler in der UI „Start“ zum Neuerstellen nutzen oder `docker rm -f github-runner-<name>` dann „Start“.
 - **Lauf als root**: Gemountete Verzeichnisse müssen für den Prozessbenutzer schreibbar sein; für root `RUNNER_ALLOW_RUNASROOT=1` setzen.
+- **`permission denied` auf docker.sock in Jobs**: Bei `job_docker_backend: host-socket` muss der Container-Benutzer (UID 1001) in der Gruppe des Sockets sein. Der Manager hängt beim Erstellen `--group-add` mit der erkannten Host-Docker-GID an; nach dem Upgrade den Runner-Container neu erstellen (`docker rm -f github-runner-<name>`, dann „Start“). Schlägt die Erkennung fehl, `runners.docker_gid` (oder `DOCKER_GID` in `.env`) auf `getent group docker | cut -d: -f3` setzen.
 - **Altes Runner-Image**: `docker rm -f github-runner-<name>`, dann in der UI „Start“ zum Neuerstellen.
 - **status=unknown**: Probe im Detail-Popup prüfen; „Start/Stop“ zur Selbstheilung versuchen.
 

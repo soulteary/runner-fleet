@@ -26,7 +26,14 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # For GitHub Actions
 RUN apt-get update && apt install -y build-essential git gnupg
 
-RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /runner -s /bin/bash app
+# Job 通过宿主机 docker.sock 使用 Docker 时，app(UID 1001) 必须在 socket 所属组内，否则报
+# "permission denied while trying to connect to the Docker daemon socket"。
+# 默认 999（Debian/Ubuntu 上 docker 组的常见 GID），构建时可 --build-arg DOCKER_GID=<宿主机 GID> 覆盖；
+# 由 Manager 创建的 Runner 容器还会按宿主机 socket 的实际 GID 追加 --group-add，无需为此重建镜像。
+ARG DOCKER_GID=999
+RUN groupadd -g 1001 app && useradd -r -u 1001 -g app -d /runner -s /bin/bash app \
+    && if ! getent group "${DOCKER_GID}" >/dev/null; then groupadd -g "${DOCKER_GID}" docker; fi \
+    && usermod -aG "$(getent group "${DOCKER_GID}" | cut -d: -f1)" app
 RUN install -m 0755 -d /app && install -m 0755 -d /runner
 COPY --from=builder /app/runner-agent /app/runner-agent
 RUN chown app:app /app/runner-agent /runner
