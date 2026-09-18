@@ -124,6 +124,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.job_docker_backend` | Docker dans les jobs : `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | Nom d'hôte DinD quand `job_docker_backend=dind` | `runner-dind` |
 | `runners.volume_host_path` | Chemin absolu hôte vers runners en mode conteneur (obligatoire) | vide |
+| `runners.resources` | Limites de ressources des conteneurs runner (`cpus` / `memory` / `memory_swap` / `pids_limit`), transmises à `docker create` | vide (illimité) |
 
 Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 
