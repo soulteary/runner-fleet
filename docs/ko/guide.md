@@ -61,6 +61,8 @@ UI의 "Quick Add Runner"에서 이름, 대상, 토큰을 입력하고 제출하�
 docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 ```
 
+스크립트는 `uname -m`으로 아키텍처를 판별하고, 버전 미지정 시 GitHub API로 최신 버전을 확인하며, **모든 버전에서 SHA-256을 반드시 검증**합니다. 공식 해시를 가져올 수 없으면(오프라인/미러) 직접 전달하세요: `RUNNER_SHA256=<sha256> ... install-runner.sh <name> <version>`. 이미 runner가 있는 디렉터리는 건너뜁니다(재설치는 `RUNNER_FORCE_REINSTALL=1`).
+
 또는 호스트에서 [actions-runner](https://github.com/actions/runner/releases)를 `runners/<name>/` 아래에 풀고, UI에서 제출하거나 해당 디렉터리에서 `./config.sh`를 수동 실행하세요.
 
 ### 컨테이너 모드 (Runner당 컨테이너)
