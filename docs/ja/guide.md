@@ -15,10 +15,10 @@
 
 ### 公開イメージを使う（推奨）
 
-本番では特定バージョン（例: v1.0.0）を使用してください。開発時は `main` タグが使えます。
+本番では特定バージョン（例: v1.2.0）を使用してください。開発時は `main` タグが使えます。
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.0.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.2.0
 ```
 
 ### docker-compose クイックスタート
@@ -48,7 +48,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.0.0
+  ghcr.io/soulteary/runner-fleet:v1.2.0
 ```
 
 ホストのディレクトリは UID 1001 が書き込み可能である必要があります。Basic Auth: `-e BASIC_AUTH_PASSWORD=password`、`-e BASIC_AUTH_USER=admin`。Job で Docker を使う場合は `-v /var/run/docker.sock:/var/run/docker.sock` を追加し（イメージには GID 999 の `docker` グループを用意、ビルド引数 `DOCKER_GID` で変更可。ホストの docker GID が 999 以外なら `--group-add $(getent group docker | cut -d: -f3)` も追加）、あるいはDinD を使用（リポジトリの `docker-compose.yml` の `--profile dind` 参照）。イメージには Docker CLI が含まれており、DinD で一般的な Action が動作します。
@@ -76,7 +76,7 @@ config/config.yaml の編集は不要。`cp .env.example .env` のあと、例: 
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.0.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.2.0-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -84,7 +84,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバージョン例 v1.0.0-runner、開発は main-runner）、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。`job_docker_backend: host-socket` の場合、Manager は Runner コンテナに `--group-add <ホストの docker GID>` を渡します（`docker.sock` から自動検出、`runners.docker_gid` / `DOCKER_GID` で上書き可）。イメージ側にも `docker` グループを用意しています（ビルド引数 `DOCKER_GID`、既定 999）。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
+Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバージョン例 v1.2.0-runner、開発は main-runner）、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.2.0-runner .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。`job_docker_backend: host-socket` の場合、Manager は Runner コンテナに `--group-add <ホストの docker GID>` を渡します（`docker.sock` から自動検出、`runners.docker_gid` / `DOCKER_GID` で上書き可）。イメージ側にも `docker` グループを用意しています（ビルド引数 `DOCKER_GID`、既定 999）。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
 
 ### トラブルシューティング
 
@@ -98,7 +98,7 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.0.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.2.0-runner .
 ```
 
 Make: `make docker-build`、`make docker-run`、`make docker-stop`。
@@ -118,7 +118,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Runner インストールディレクトリのルートパス。**コンテナでは `/app/runners` に設定** | `./runners` |
 | `runners.items` | 事前定義 Runner 一覧 | Web UI からも追加可能 |
 | `runners.container_mode` | コンテナモードを有効化 | `false` |
-| `runners.container_image` | コンテナモード時の Runner イメージ（-runner タグ） | `ghcr.io/soulteary/runner-fleet:v1.0.0-runner` |
+| `runners.container_image` | コンテナモード時の Runner イメージ（-runner タグ） | `ghcr.io/soulteary/runner-fleet:v1.2.0-runner` |
 | `runners.container_network` | コンテナモード時の Runner ネットワーク | `runner-net` |
 | `runners.agent_port` | コンテナ内 Agent ポート | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker: `dind` / `host-socket` / `none` | `dind` |
