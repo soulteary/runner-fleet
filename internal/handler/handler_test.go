@@ -2,12 +2,14 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 	"github.com/labstack/echo/v4"
@@ -207,5 +209,54 @@ func TestStartRunner_ProbeFailureFallsBackToInstalledStatus(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 when start is attempted after probe failure, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+type ctxKey string
+
+// TestLifecycleContext_KeepsRunningAfterRequestCancel 守住「启停不随请求取消」这条线。
+//
+// 回归背景：界面上点「启动」后若页面刷新（添加 Runner 成功后有 5 秒自动刷新，
+// 消息框的关闭按钮也会 reload），浏览器会取消在途请求。启停上下文若派生自
+// c.Request().Context()，取消会顺着 exec.CommandContext 变成对 docker 子进程的 SIGKILL，
+// 于是 docker create 被砍在半路，只留下「输出: (无输出): signal: killed」，
+// 而容器可能已在 daemon 侧建好，下一次启动撞上名字冲突。
+func TestLifecycleContext_KeepsRunningAfterRequestCancel(t *testing.T) {
+	parent, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKey("trace"), "abc"))
+	ctx, done := lifecycleContext(parent, 30*time.Second)
+	defer done()
+
+	cancel() // 模拟浏览器刷新导致请求中断
+
+	select {
+	case <-ctx.Done():
+		t.Fatalf("启停上下文跟随请求一起被取消了: %v", ctx.Err())
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("启停上下文必须带超时，否则 docker 卡住时会永久占用")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > 30*time.Second {
+		t.Fatalf("超时时间不合预期: %v", remaining)
+	}
+	if v, _ := ctx.Value(ctxKey("trace")).(string); v != "abc" {
+		t.Fatalf("请求上下文中的值应当保留，得到 %q", v)
+	}
+}
+
+// TestLifecycleContext_TimesOut 超时仍然有效：docker 卡死时不会无限等待。
+func TestLifecycleContext_TimesOut(t *testing.T) {
+	ctx, done := lifecycleContext(context.Background(), 10*time.Millisecond)
+	defer done()
+
+	select {
+	case <-ctx.Done():
+		if ctx.Err() != context.DeadlineExceeded {
+			t.Fatalf("err = %v, want DeadlineExceeded", ctx.Err())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("超时未生效")
 	}
 }

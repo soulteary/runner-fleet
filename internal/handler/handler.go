@@ -36,6 +36,19 @@ var ConfigPath string
 // Version 由 main 注入，供 /version 使用
 var Version string
 
+// lifecycleContext 为「启停 Runner」这类写操作派生上下文：只保留超时，丢掉请求的取消信号。
+//
+// 不能直接挂在 c.Request().Context() 上。浏览器刷新或跳转会取消在途请求，而容器操作
+// 最终落到 exec.CommandContext 起的 docker 子进程上，上下文一取消就是 SIGKILL：
+// docker create 被砍在半路，日志里只剩「docker create 失败。输出: (无输出): signal: killed」，
+// 而 daemon 侧可能已经把容器建了出来，下次启动再撞上名字冲突。
+// 启停一旦发起就该跑完，与发起它的那个 HTTP 连接是否还在无关——
+// RemoveRunnerByName 与后台注册 worker 本来就是这么做的，这里与之统一。
+// 请求上下文里的值（如 trace）仍然保留，只是不再传播取消。
+func lifecycleContext(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), d)
+}
+
 // registrationJob 后台安装并注册 runner 的任务
 type registrationJob struct {
 	BasePath   string
@@ -518,7 +531,7 @@ func StartRunner(c echo.Context) error {
 	if info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 已在运行中"})
 	}
-	ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+	ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
 	defer cancel()
 	if err := runner.StartIfInstalled(ctx, cfg, name, info.InstallDir); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "启动失败: "+err.Error())
@@ -561,7 +574,7 @@ func StopRunner(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 未在运行"})
 	}
 	if cfg.Runners.ContainerMode {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 35*time.Second)
+		ctx, cancel := lifecycleContext(c.Request().Context(), 35*time.Second)
 		defer cancel()
 		if err := runner.StopRunnerContainer(ctx, name); err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "停止 Runner 容器失败: "+err.Error())
@@ -657,7 +670,7 @@ func UpdateRunner(c echo.Context) error {
 	msg := "已更新"
 	var started bool
 	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+		ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
 		defer cancel()
 		startErr := runner.StartIfInstalled(ctx, cfg, name, updated.InstallDir)
 		started = (startErr == nil)
