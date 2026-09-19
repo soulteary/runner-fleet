@@ -1,0 +1,121 @@
+# 多容器部署：每个 Runner 一个容器，共享镜像与工具链缓存，隔离构建缓存
+#
+# === 共享的东西 ===
+# 镜像 / 层 / BuildKit 缓存
+#   JOB_DOCKER_BACKEND=host-socket：所有 Runner 的 Job 都用宿主机同一个 Docker daemon。
+#   镜像缓存是 daemon 级别的，指向同一个 daemon 就已经共享，不需要额外配置。
+# 工具链 / Action 归档缓存
+#   预置在自建 Runner 镜像（Dockerfile.runner-cached）的层里。同一个 daemon 上，镜像层在所有
+#   Runner 容器之间只存一份（overlayfs），Job 往里写走 copy-on-write。
+#   —— Manager 创建 Runner 容器时只挂 <VOLUME_HOST_PATH>/<name>:/runner，没有「额外挂载」
+#      的配置项，所以共享缓存走镜像层是最省事的做法。
+#
+# === 隔离的东西 ===
+# 每个 Runner 一个容器，容器内 HOME=/runner = 宿主机 ${VOLUME_HOST_PATH}/<Runner 名>，
+# 于是 _work、~/.gradle、~/.m2、~/.npm、~/.cache/go-build 全部各自独立；
+# 同一个 Runner 的多次 Job 之间仍然保留（热缓存），Runner 之间互不影响。
+#
+# === 首次部署 ===
+#   1. docker network create runner-net
+#   2. cp .env.example .env
+#      mkdir -p config runners && cp config.yaml.example config/config.yaml
+#      改 .env：VOLUME_HOST_PATH=$(realpath runners)、DOCKER_GID=$(getent group docker | cut -d: -f3)
+#   3. sudo chown -R 1001:1001 config runners     # 放完文件之后再 chown，Manager 以 UID 1001 运行
+#   4. docker compose --profile build build runner-image
+#   5. docker compose up -d
+#   6. 打开 http://127.0.0.1:8090 逐个添加 Runner（1 个 Runner = 1 个并发 Job）
+#
+# === 日常 ===
+#   启动自检：docker compose logs runner-manager | grep 自检
+#   换了缓存内容：重新 build → docker rm -f github-runner-<名称> → 在界面点「启动」重建容器
+#   宿主机磁盘：Job 的镜像与构建产物都堆在宿主机 daemon 上，定期
+#             docker image prune -f && docker builder prune -f
+services:
+  runner-manager:
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.4.0}
+    container_name: runner-manager
+    environment:
+      # 容器模式必须用宿主机 socket 创建 Runner 容器，不能指向 DinD
+      DOCKER_HOST: unix:///var/run/docker.sock
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
+      # 以下变量覆盖 config/config.yaml，全容器部署时只改 .env 即可
+      CONTAINER_MODE: ${CONTAINER_MODE:-true}
+      RUNNERS_BASE_PATH: ${RUNNERS_BASE_PATH:-/app/runners}
+      VOLUME_HOST_PATH: ${VOLUME_HOST_PATH:?请在 .env 里把 VOLUME_HOST_PATH 设为宿主机 runners 目录绝对路径（realpath runners）}
+      CONTAINER_NETWORK: ${CONTAINER_NETWORK:-runner-net}
+      JOB_DOCKER_BACKEND: ${JOB_DOCKER_BACKEND:-host-socket}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-}
+      DOCKER_GID: ${DOCKER_GID:-}
+      # 容器内监听端口。显式固定后，MANAGER_PORT 只负责宿主机映射，
+      # 不会再连带把 server.port 改掉（两者都会覆盖 server.port，SERVER_PORT 在后生效）。
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      SERVER_ADDR: ${SERVER_ADDR:-0.0.0.0}
+    ports:
+      - "${MANAGER_PORT:-8080}:${SERVER_PORT:-8080}"
+    # 只挂 config 目录，不要挂 config/config.yaml 单文件
+    volumes:
+      - ./config:/app/config
+      - ./runners:/app/runners
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Manager 以 UID 1001 运行，需加入宿主机 docker 组才能创建 Runner 容器
+    group_add:
+      - "${DOCKER_GID:-999}"
+    networks:
+      - runner-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${SERVER_PORT:-8080}/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # 只用来构建带共享缓存的 Runner 镜像，不随 up 启动：
+  #   docker compose --profile build build runner-image
+  # 镜像留在宿主机 daemon 本地即可，Manager 直接用，不会去 registry 拉。
+  runner-image:
+    profiles:
+      - build
+    image: ${RUNNER_IMAGE:-local/runner-fleet-cached:v1.4.0-runner}
+    build:
+      context: .
+      dockerfile: Dockerfile.runner-cached
+      args:
+        RUNNER_BASE_IMAGE: ${RUNNER_BASE_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.4.0-runner}
+        NODE_VERSION: ${NODE_VERSION:-22.14.0}
+
+  # host-socket 时用不到 DinD。保留是为了随时切回：
+  # .env 改 JOB_DOCKER_BACKEND=dind，再 docker compose --profile dind up -d。
+  #
+  # 切换后必须逐个重建已有的 Runner 容器：
+  #   docker rm -f github-runner-<名称>   # 然后在界面点「启动」重建
+  # 后端只在 docker create 时决定（DOCKER_HOST 与 docker.sock 挂载都写在创建参数里），
+  # 已存在的容器只会被 docker start 起来、沿用创建时的后端。不重建的话，先前以
+  # host-socket 创建的 Runner 仍然挂着宿主机 socket，等于没换——想要的隔离并没有生效。
+  #
+  # DinD 下镜像缓存同样共享（所有 Runner 容器共用这一个 daemon 与 dind-storage 卷），
+  # 代价是 privileged，以及单个 daemon 承担全部并发。
+  runner-dind:
+    profiles:
+      - dind
+    image: docker:dind
+    container_name: runner-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["--tls=false"]
+    volumes:
+      - dind-storage:/var/lib/docker
+    networks:
+      - runner-net
+    restart: unless-stopped
+
+# external：compose down 时不删网络，否则 Manager 动态创建的 Runner 容器起不来
+# 首次使用先执行：docker network create runner-net
+networks:
+  runner-net:
+    external: true
+
+volumes:
+  dind-storage:

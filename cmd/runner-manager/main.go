@@ -131,6 +131,8 @@ func main() {
 	e.GET("/api/runners", handler.ListRunners)
 	e.GET("/api/runners/:name", handler.GetRunner)
 	e.POST("/api/runners", handler.AddRunner)
+	// 静态路径，放在 /api/runners/:name 之外，避免与名为 check 的 Runner 抢路由
+	e.GET("/api/runner-precheck", handler.PrecheckRunner)
 	e.PUT("/api/runners/:name", handler.UpdateRunner)
 	e.DELETE("/api/runners/:name", handler.RemoveRunnerByName)
 	e.POST("/api/runners/:name/start", handler.StartRunner)

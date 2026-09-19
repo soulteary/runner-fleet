@@ -36,6 +36,19 @@ var ConfigPath string
 // Version 由 main 注入，供 /version 使用
 var Version string
 
+// lifecycleContext 为「启停 Runner」这类写操作派生上下文：只保留超时，丢掉请求的取消信号。
+//
+// 不能直接挂在 c.Request().Context() 上。浏览器刷新或跳转会取消在途请求，而容器操作
+// 最终落到 exec.CommandContext 起的 docker 子进程上，上下文一取消就是 SIGKILL：
+// docker create 被砍在半路，日志里只剩「docker create 失败。输出: (无输出): signal: killed」，
+// 而 daemon 侧可能已经把容器建了出来，下次启动再撞上名字冲突。
+// 启停一旦发起就该跑完，与发起它的那个 HTTP 连接是否还在无关——
+// RemoveRunnerByName 与后台注册 worker 本来就是这么做的，这里与之统一。
+// 请求上下文里的值（如 trace）仍然保留，只是不再传播取消。
+func lifecycleContext(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), d)
+}
+
 // registrationJob 后台安装并注册 runner 的任务
 type registrationJob struct {
 	BasePath   string
@@ -163,16 +176,6 @@ func shortRandomSuffix() string {
 		b[i] = letters[int(b[i])%len(letters)]
 	}
 	return string(b)
-}
-
-// runnerNameExists 判断配置中是否已存在同名 runner
-func runnerNameExists(cfg *config.Config, name string) bool {
-	for _, item := range cfg.Runners.Items {
-		if item.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // runInstallRunnerScript 执行容器内 install-runner.sh，下载并解压 runner 到 basePath/runnerName；超时返回 error
@@ -329,6 +332,9 @@ type AddRunnerRequest struct {
 	Target            string   `json:"target" form:"target"`
 	Labels            []string `json:"labels" form:"labels"`
 	RegistrationToken string   `json:"registration_token" form:"registration_token"`
+	// AutoRename 为 true 时沿用旧行为：名称冲突自动改名。默认改为返回 409 并给出建议名，
+	// 免得界面上填了 foo 却静默建出 foo-ab12cd，用户以为自己在操作 foo。
+	AutoRename bool `json:"auto_rename" form:"auto_rename"`
 }
 
 // AddRunner 添加并可选注册新 runner
@@ -357,16 +363,43 @@ func AddRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、path 不可包含 / \\ .. 等非法字符")
 	}
 	targetNorm := req.Target
-	// 若已存在同名 runner，自动添加短随机后缀直至名称唯一
+	// 冲突预检：同名 Runner、撞容器名、安装目录被占、磁盘上有已注册的残留目录、宿主机上有同名容器。
+	// 与 /api/runner-precheck 用的是同一套判断，保证界面提示和这里的结论一致。
 	name := req.Name
-	for i := 0; i < 20; i++ {
-		if !runnerNameExists(cfg, name) {
-			break
-		}
-		name = req.Name + "-" + shortRandomSuffix()
+	lookupCtx, lookupCancel := lifecycleContext(c.Request().Context(), 5*time.Second)
+	defer lookupCancel()
+	var lookup containerLookup
+	if cfg.Runners.ContainerMode {
+		lookup = dockerContainerLookup(lookupCtx)
 	}
-	if runnerNameExists(cfg, name) {
-		return echo.NewHTTPError(http.StatusConflict, "已存在同名 runner，且无法生成唯一名称，请更换 name 后重试")
+	willRegister := req.RegistrationToken != ""
+	conflicts := collectRunnerConflicts(cfg, name, req.Path, lookup, willRegister)
+	if hasErrorConflict(conflicts) {
+		if !req.AutoRename {
+			suggested := ""
+			if req.Path == "" {
+				suggested = suggestRunnerName(cfg, name, req.Path, lookup, willRegister)
+			}
+			resp := map[string]any{
+				"message":        conflicts[0].Message,
+				"name":           name,
+				"conflicts":      conflicts,
+				"suggested_name": suggested,
+				"install_dir":    config.RunnerItem{Name: name, Path: req.Path}.InstallPath(cfg.Runners.BasePath),
+			}
+			if cfg.Runners.ContainerMode {
+				resp["container_name"] = config.NormalizedContainerName(name)
+			}
+			return c.JSON(http.StatusConflict, resp)
+		}
+		// auto_rename：沿用旧行为，自动找一个可用名
+		if req.Path != "" {
+			return echo.NewHTTPError(http.StatusConflict, "同时指定 path 时无法自动改名："+conflicts[0].Message)
+		}
+		name = suggestRunnerName(cfg, name, req.Path, lookup, willRegister)
+		if name == "" {
+			return echo.NewHTTPError(http.StatusConflict, "已存在同名 runner，且无法生成唯一名称，请更换 name 后重试")
+		}
 	}
 	item := config.RunnerItem{
 		Name:       name,
@@ -518,7 +551,7 @@ func StartRunner(c echo.Context) error {
 	if info.Running {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 已在运行中"})
 	}
-	ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+	ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
 	defer cancel()
 	if err := runner.StartIfInstalled(ctx, cfg, name, info.InstallDir); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "启动失败: "+err.Error())
@@ -561,7 +594,7 @@ func StopRunner(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"message": "Runner 未在运行"})
 	}
 	if cfg.Runners.ContainerMode {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 35*time.Second)
+		ctx, cancel := lifecycleContext(c.Request().Context(), 35*time.Second)
 		defer cancel()
 		if err := runner.StopRunnerContainer(ctx, name); err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "停止 Runner 容器失败: "+err.Error())
@@ -657,7 +690,7 @@ func UpdateRunner(c echo.Context) error {
 	msg := "已更新"
 	var started bool
 	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 60*time.Second)
+		ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
 		defer cancel()
 		startErr := runner.StartIfInstalled(ctx, cfg, name, updated.InstallDir)
 		started = (startErr == nil)
