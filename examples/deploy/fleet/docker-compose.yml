@@ -87,6 +87,13 @@ services:
 
   # host-socket 时用不到 DinD。保留是为了随时切回：
   # .env 改 JOB_DOCKER_BACKEND=dind，再 docker compose --profile dind up -d。
+  #
+  # 切换后必须逐个重建已有的 Runner 容器：
+  #   docker rm -f github-runner-<名称>   # 然后在界面点「启动」重建
+  # 后端只在 docker create 时决定（DOCKER_HOST 与 docker.sock 挂载都写在创建参数里），
+  # 已存在的容器只会被 docker start 起来、沿用创建时的后端。不重建的话，先前以
+  # host-socket 创建的 Runner 仍然挂着宿主机 socket，等于没换——想要的隔离并没有生效。
+  #
   # DinD 下镜像缓存同样共享（所有 Runner 容器共用这一个 daemon 与 dind-storage 卷），
   # 代价是 privileged，以及单个 daemon 承担全部并发。
   runner-dind:

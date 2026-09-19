@@ -107,7 +107,13 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   `getent group docker | cut -d: -f3`；修改后需重建 Runner 容器（`docker rm -f github-runner-<名称>` 再启动）。
 - **`host-socket` 下 Job 里的 `docker run -v $PWD:/x` 挂到了空目录**
   `-v` 的源路径由宿主机 daemon 解析，而 `$PWD` 是 Runner 容器内的路径（`/runner/_work/...`），两者不一致。
-  这类 workflow 改用 DinD（`JOB_DOCKER_BACKEND=dind`），或在 Job 里换成宿主机上的真实路径。
+  这类 workflow 改用 DinD（`JOB_DOCKER_BACKEND=dind`，切换后需 `docker rm -f github-runner-<名称>`
+  重建容器才生效），或在 Job 里换成宿主机上的真实路径。
+- **改了 `JOB_DOCKER_BACKEND` 却没生效**
+  后端只在 `docker create` 时决定（`DOCKER_HOST` 与 `docker.sock` 挂载都写在创建参数里），
+  已存在的 Runner 容器只会被 `docker start` 起来、沿用创建时的后端。改完逐个重建：
+  `docker rm -f github-runner-<名称>`，再在界面点「启动」。`RUNNER_IMAGE`、`CONTAINER_NETWORK`
+  以及镜像里预置的缓存同理。
 - **宿主机磁盘越用越满**
   `host-socket` 下所有 Job 的镜像与构建产物都堆在宿主机 daemon 上：
   `docker image prune -f && docker builder prune -f`。Runner 自己的目录（`_work` 与 HOME 缓存）也会长大。
