@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "권장: ",
   "probe.alert_check_cmd": "확인 명령: ",
   "probe.alert_error": "프로브 오류: ",
-  "probe.alert_fix_cmd": "수정 명령: "
+  "probe.alert_fix_cmd": "수정 명령: ",
+  "precheck.checking": "충돌을 확인하는 중…",
+  "precheck.ok": "사용 가능한 이름입니다",
+  "precheck.name_taken": "같은 이름의 Runner가 이미 있습니다: {{detail}}",
+  "precheck.container_name": "Runner “{{detail}}”와 같은 컨테이너 이름이 됩니다: {{container}}",
+  "precheck.install_dir": "Runner “{{detail}}”와 설치 디렉터리가 같습니다: {{dir}}",
+  "precheck.dir_registered": "{{dir}}에 이미 등록된 Runner가 있습니다. token과 함께 다시 등록하면 config.sh가 거부합니다",
+  "precheck.dir_adopt": "{{dir}}에 이미 등록된 Runner가 있습니다. 추가하면 그대로 인계받습니다(재등록하지 않음)",
+  "precheck.dir_exists": "{{dir}}가 이미 있고 비어 있지 않습니다. 이미 풀려 있는 runner를 그대로 사용합니다",
+  "precheck.container_exists": "호스트에 {{detail}} 컨테이너가 이미 있으며 현재 설정에 속하지 않습니다. 시작하면 그 컨테이너를 그대로 재사용하며, 마운트는 생성 당시 디렉터리입니다",
+  "precheck.use_suggested": "제안된 이름 {{name}} 사용",
+  "precheck.blocked": "충돌이 있습니다. 이름을 바꾸거나 정리한 뒤 다시 제출하세요"
 }

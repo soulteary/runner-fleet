@@ -54,6 +54,8 @@ Avec Basic Auth, toutes les requêtes sauf `/health` doivent inclure `Authorizat
 | `/api/runners/:name` | GET | Détails d'un runner. Même `probe` en cas d'échec de sonde en mode conteneur. |
 | `/api/runners/:name/start` | POST | Démarrer le runner. En cas d'échec de sonde tente quand même le démarrage, retourne `probe` structuré dans la réponse. |
 | `/api/runners/:name/stop` | POST | Arrêter le runner. En cas d'échec de sonde tente quand même l'arrêt, retourne `probe` structuré dans la réponse. |
+| `/api/runners` | POST | Ajoute un runner (installation et enregistrement optionnels). En cas de conflit de nom, renvoie **409** avec `conflicts` et `suggested_name` au lieu de renommer silencieusement ; envoyez `auto_rename: true` pour l'ancien comportement. |
+| `/api/runner-precheck` | GET | Pré-vérification d'un nom avant l'ajout : `?name=&path=`. Renvoie `available`, un `suggested_name` et les `conflicts` détectés (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), chacun avec `level` (`error`/`warn`), `message`, `detail` et un `fix_command` optionnel. En lecture seule ; l'interface l'appelle pendant la saisie. |
 
 ### Changement incompatible (note de mise à jour)
 

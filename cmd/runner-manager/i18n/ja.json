@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "推奨：",
   "probe.alert_check_cmd": "チェックコマンド：",
   "probe.alert_error": "プローブエラー：",
-  "probe.alert_fix_cmd": "修正コマンド："
+  "probe.alert_fix_cmd": "修正コマンド：",
+  "precheck.checking": "競合を確認しています…",
+  "precheck.ok": "この名前は使用できます",
+  "precheck.name_taken": "同名の Runner がすでに存在します: {{detail}}",
+  "precheck.container_name": "Runner「{{detail}}」と同じコンテナ名になります: {{container}}",
+  "precheck.install_dir": "Runner「{{detail}}」とインストール先が同じです: {{dir}}",
+  "precheck.dir_registered": "{{dir}} には登録済みの Runner があります。token 付きで再登録すると config.sh に拒否されます",
+  "precheck.dir_adopt": "{{dir}} には登録済みの Runner があります。追加するとそのまま引き継ぎます（再登録はしません）",
+  "precheck.dir_exists": "{{dir}} はすでに存在し空ではありません。展開済みの runner をそのまま使います",
+  "precheck.container_exists": "ホストに {{detail}} というコンテナがすでに存在し、この設定には含まれていません。起動するとそれをそのまま使い、マウントは作成時のディレクトリのままです",
+  "precheck.use_suggested": "提案された名前 {{name}} を使う",
+  "precheck.blocked": "競合があります。名前を変えるか整理してから送信してください"
 }

@@ -163,6 +163,8 @@ runners:
 
 **注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：在 runner 目录下放 `.github_check_token`（PAT，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。
 
+**名称冲突检查**：在名称输入框里打字时，表单会调用 `/api/runner-precheck`，把可能出问题的地方提前摆出来——配置里已有同名 Runner、名称规范化后与别人撞容器名、安装目录被别的 Runner 占了、磁盘上留着一个已注册过的目录（存在 `.runner`）、宿主机上还挂着同名容器。阻塞性的问题标红并给出一键可用的建议名；仅提示性的（目录非空会被复用）不挡提交。强行提交会被服务端以 **409** 拒绝并返回同样的冲突信息——此前「静默加随机后缀」的行为已取消（需要的话传 `auto_rename: true`）。
+
 每台机器可多 Runner，各用独立子目录即可。
 
 ---

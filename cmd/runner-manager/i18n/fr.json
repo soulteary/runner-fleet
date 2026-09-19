@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "Suggestion : ",
   "probe.alert_check_cmd": "Commande de vérification : ",
   "probe.alert_error": "Erreur de sonde : ",
-  "probe.alert_fix_cmd": "Commande de correction : "
+  "probe.alert_fix_cmd": "Commande de correction : ",
+  "precheck.checking": "Vérification des conflits…",
+  "precheck.ok": "Nom disponible",
+  "precheck.name_taken": "Un runner portant ce nom existe déjà : {{detail}}",
+  "precheck.container_name": "Donne le même nom de conteneur que le runner « {{detail}} » : {{container}}",
+  "precheck.install_dir": "Même répertoire d'installation que le runner « {{detail}} » : {{dir}}",
+  "precheck.dir_registered": "{{dir}} contient déjà un runner enregistré ; un nouvel enregistrement avec un token sera refusé par config.sh",
+  "precheck.dir_adopt": "{{dir}} contient déjà un runner enregistré ; l'ajout le reprendra tel quel (pas de nouvel enregistrement)",
+  "precheck.dir_exists": "{{dir}} existe déjà et n'est pas vide ; le runner déjà extrait sera réutilisé",
+  "precheck.container_exists": "Un conteneur nommé {{detail}} existe déjà sur l'hôte et n'appartient pas à cette configuration ; le démarrage le réutiliserait, monté sur le répertoire de sa création",
+  "precheck.use_suggested": "Utiliser le nom proposé {{name}}",
+  "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre"
 }

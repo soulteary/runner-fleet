@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Conflict pre-check when adding a runner. The name field asks `/api/runner-precheck` while you type and reports, before you submit: a runner of that name already in the config, a name that normalizes to a container name already taken, an install directory owned by another runner, a directory that already holds a registered runner (`.runner`), and a leftover container of that name on the host. Blocking findings come with a one-click suggested name and, where useful, a ready-to-run fix command. Warnings do not block: a non-empty directory that will be reused, and — when no registration token is filled in — adopting an already registered runner directory, which is a legitimate way to take an existing runner into the config. With a token that same directory is blocking, because `config.sh` refuses to configure it twice.
 - `examples/deploy/`: two copy-and-go deployments — `standalone/` (one Manager container with the runner processes inside, via `docker run` or Compose) and `fleet/` (container mode, one container per runner, image cache shared through the host daemon, toolchain and action caches baked into a runner image layer, build caches isolated per runner). The README compares both, documents which caches are shared versus isolated and why, and collects the deployment pitfalls (directory ownership, `VOLUME_HOST_PATH`, host-socket disk growth).
 
 ### Changed
 
+- `POST /api/runners` answers a name conflict with **409** plus `conflicts` and `suggested_name` instead of silently appending a random suffix — typing `droiddesk` no longer creates `droiddesk-ab12cd` without saying so. Send `auto_rename: true` to keep the old behaviour; the suggestion is now the predictable `name-2`, `name-3`, … The same checks also cover container-name collisions, install-directory collisions and host leftovers, which previously surfaced as a 500 while saving the config or as `docker create` failing later.
 - `docker-compose.yml` now pins the in-container listen port to `SERVER_PORT` (default 8080) and maps `MANAGER_PORT` to it. Previously a numeric `MANAGER_PORT` also overrode `server.port` while the published target stayed 8080, so `MANAGER_PORT=9000` silently produced an unreachable port.
 
 ## [1.4.0] - 2026-09-18

@@ -196,6 +196,15 @@
       white-space: nowrap;
     }
     .btn-parse:hover { opacity: 0.9; }
+    .check-msg { margin-top: 6px; font-size: 13px; line-height: 1.6; }
+    .check-msg:empty { margin-top: 0; }
+    .check-msg .check-line { display: block; }
+    .check-msg.ok { color: var(--success); }
+    .check-msg.warn { color: var(--warn); }
+    .check-msg.err { color: var(--danger); }
+    .check-msg code { background: rgba(110, 118, 129, 0.2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    .btn-suggest { margin-top: 4px; padding: 3px 10px; font-size: 12px; background: var(--card); color: var(--accent); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .btn-suggest:hover { border-color: var(--accent); }
     .parse-msg { margin-top: 8px; font-size: 13px; }
     .parse-msg.ok { color: var(--success); }
     .parse-msg.err { color: var(--danger); }
@@ -302,6 +311,7 @@
     <form id="addForm">
       <label>{{index .T "form.name_label"}}</label>
       <input name="name" id="addFormName" required placeholder="{{index .T "form.name_placeholder"}}">
+      <div id="nameCheckMsg" class="check-msg" aria-live="polite"></div>
       <label>{{index .T "form.path_label"}}</label>
       <input name="path" id="addFormPath" placeholder="{{index .T "form.path_placeholder"}}">
       <label>{{index .T "form.target_type_label"}}</label>
@@ -441,11 +451,131 @@
       if (result.suggested_name && !document.getElementById('addFormName').value) {
         document.getElementById('addFormName').value = result.suggested_name;
         document.getElementById('addFormPath').value = '';
+        // 用仓库名自动填出来的名字最容易撞上已有 Runner，填完立刻查一次
+        schedulePrecheck();
       }
       msgEl.className = 'parse-msg ok';
       var filled = t('parse.filled').replace('{{"{{"}}target_type{{"}}"}}', result.target_type).replace('{{"{{"}}target{{"}}"}}', result.target).replace('{{"{{"}}token_part{{"}}"}}', result.registration_token ? t('parse.filled_token') : '');
       msgEl.textContent = filled;
     });
+
+    // ===== 添加前的冲突预检 =====
+    // 名字撞车的形态不止一种：配置里已有同名、规范化后撞容器名、安装目录被占、
+    // 磁盘上留着上次注册过的目录、宿主机上还挂着同名容器。等到提交才发现太晚了，
+    // 这里在输入时就问一次服务端（/api/runner-precheck），并在提交前再确认一次。
+    var PH_OPEN = '{' + '{', PH_CLOSE = '}' + '}';
+    function fillVars(str, vars) {
+      Object.keys(vars).forEach(function(k) {
+        str = str.split(PH_OPEN + k + PH_CLOSE).join(vars[k] == null ? '' : vars[k]);
+      });
+      return str;
+    }
+    var PRECHECK_KEYS = {
+      name_taken: 'precheck.name_taken',
+      container_name: 'precheck.container_name',
+      install_dir: 'precheck.install_dir',
+      dir_registered: 'precheck.dir_registered',
+      dir_adopt: 'precheck.dir_adopt',
+      dir_exists: 'precheck.dir_exists',
+      container_exists: 'precheck.container_exists'
+    };
+    function conflictText(conflict, resp) {
+      var key = PRECHECK_KEYS[conflict.type];
+      if (!key) return conflict.message || '';
+      return fillVars(t(key), {
+        detail: conflict.detail || '',
+        dir: (resp && resp.install_dir) || conflict.detail || '',
+        container: (resp && resp.container_name) || conflict.detail || '',
+        status: conflict.status || ''
+      });
+    }
+    var nameCheckEl = document.getElementById('nameCheckMsg');
+    var nameInput = document.getElementById('addFormName');
+    var pathInput = document.getElementById('addFormPath');
+    var tokenInput = document.getElementById('addFormToken');
+    var precheckSeq = 0;
+
+    function clearNameCheck() {
+      nameCheckEl.className = 'check-msg';
+      nameCheckEl.textContent = '';
+    }
+    function renderPrecheck(resp) {
+      nameCheckEl.textContent = '';
+      if (!resp) { clearNameCheck(); return; }
+      var worst = 'ok';
+      (resp.conflicts || []).forEach(function(c) {
+        if (c.level === 'error') worst = 'err';
+        else if (c.level === 'warn' && worst !== 'err') worst = 'warn';
+      });
+      nameCheckEl.className = 'check-msg ' + worst;
+      if (!resp.conflicts || resp.conflicts.length === 0) {
+        var okLine = document.createElement('span');
+        okLine.className = 'check-line';
+        okLine.textContent = t('precheck.ok');
+        nameCheckEl.appendChild(okLine);
+        return;
+      }
+      resp.conflicts.forEach(function(c) {
+        var line = document.createElement('span');
+        line.className = 'check-line';
+        line.textContent = conflictText(c, resp);
+        if (c.fix_command) {
+          line.appendChild(document.createTextNode(' '));
+          var code = document.createElement('code');
+          code.textContent = c.fix_command;
+          line.appendChild(code);
+        }
+        nameCheckEl.appendChild(line);
+      });
+      if (resp.suggested_name) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-suggest';
+        btn.textContent = fillVars(t('precheck.use_suggested'), { name: resp.suggested_name });
+        btn.addEventListener('click', function() {
+          nameInput.value = resp.suggested_name;
+          runPrecheck(nameInput.value, pathInput.value.trim(), false).then(renderPrecheck);
+        });
+        nameCheckEl.appendChild(btn);
+      }
+    }
+    // 返回 null 表示这次没查成（接口不可用等），此时不挡提交，交给服务端兜底。
+    // guardStale：边输入边查时，后发的请求先回来就该丢掉旧结果；
+    // 而点建议名、点提交这类明确动作必须拿到结论，不能被后续输入顺手丢掉。
+    async function runPrecheck(name, path, guardStale) {
+      if (!name) return null;
+      var seq = ++precheckSeq;
+      try {
+        // has_token 只传「填没填」，不传 token 本身：目录里已注册过的 Runner，
+        // 带 token 再注册会被 config.sh 拒绝（error），不带 token 只是接管（提示即可）
+        var url = '/api/runner-precheck?name=' + encodeURIComponent(name) +
+          (path ? '&path=' + encodeURIComponent(path) : '') +
+          (tokenInput && tokenInput.value.trim() ? '&has_token=1' : '');
+        var r = await fetch(url);
+        if (!r.ok) return null;
+        var data = await r.json();
+        if (guardStale && seq !== precheckSeq) return null;
+        return data;
+      } catch (e) {
+        return null;
+      }
+    }
+    var precheckTimer = null;
+    function schedulePrecheck() {
+      if (precheckTimer) clearTimeout(precheckTimer);
+      var name = nameInput.value.trim();
+      if (!name) { clearNameCheck(); return; }
+      precheckTimer = setTimeout(function() {
+        nameCheckEl.className = 'check-msg';
+        nameCheckEl.textContent = t('precheck.checking');
+        runPrecheck(name, pathInput.value.trim(), true).then(function(resp) {
+          if (resp) renderPrecheck(resp); else clearNameCheck();
+        });
+      }, 400);
+    }
+    nameInput.addEventListener('input', schedulePrecheck);
+    pathInput.addEventListener('input', schedulePrecheck);
+    tokenInput.addEventListener('input', schedulePrecheck);
 
     document.getElementById('addForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -464,6 +594,16 @@
       msgEl.className = 'msg';
       msgWrap.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
+      // 输入框上的提示可能已经过期（别处刚加了同名 Runner），提交前再确认一次
+      const pre = await runPrecheck(body.name, body.path || '', false);
+      if (pre && !pre.available) {
+        renderPrecheck(pre);
+        msgEl.className = 'msg err';
+        msgEl.textContent = t('precheck.blocked');
+        msgWrap.style.display = 'block';
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+      }
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
@@ -476,8 +616,15 @@
         clearTimeout(timeoutId);
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
-          msgEl.className = 'msg err';
-          msgEl.textContent = data.message || r.statusText || t('msg.request_failed');
+          // 409：服务端检出冲突，把冲突和建议名渲染到名称输入框下面，顺手给出「使用建议名」
+          if (r.status === 409 && data.conflicts) {
+            renderPrecheck(data);
+            msgEl.className = 'msg err';
+            msgEl.textContent = t('precheck.blocked');
+          } else {
+            msgEl.className = 'msg err';
+            msgEl.textContent = data.message || r.statusText || t('msg.request_failed');
+          }
           if (submitBtn) submitBtn.disabled = false;
           msgWrap.style.display = 'block';
           return;
@@ -490,6 +637,7 @@
           setTimeout(function() { location.reload(); }, 5000);
         }
         e.target.reset();
+        clearNameCheck();
         if (submitBtn) submitBtn.disabled = false;
         msgWrap.style.display = 'block';
       } catch (err) {

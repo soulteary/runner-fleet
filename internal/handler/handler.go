@@ -178,16 +178,6 @@ func shortRandomSuffix() string {
 	return string(b)
 }
 
-// runnerNameExists 判断配置中是否已存在同名 runner
-func runnerNameExists(cfg *config.Config, name string) bool {
-	for _, item := range cfg.Runners.Items {
-		if item.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 // runInstallRunnerScript 执行容器内 install-runner.sh，下载并解压 runner 到 basePath/runnerName；超时返回 error
 func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -342,6 +332,9 @@ type AddRunnerRequest struct {
 	Target            string   `json:"target" form:"target"`
 	Labels            []string `json:"labels" form:"labels"`
 	RegistrationToken string   `json:"registration_token" form:"registration_token"`
+	// AutoRename 为 true 时沿用旧行为：名称冲突自动改名。默认改为返回 409 并给出建议名，
+	// 免得界面上填了 foo 却静默建出 foo-ab12cd，用户以为自己在操作 foo。
+	AutoRename bool `json:"auto_rename" form:"auto_rename"`
 }
 
 // AddRunner 添加并可选注册新 runner
@@ -370,16 +363,43 @@ func AddRunner(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "name、path 不可包含 / \\ .. 等非法字符")
 	}
 	targetNorm := req.Target
-	// 若已存在同名 runner，自动添加短随机后缀直至名称唯一
+	// 冲突预检：同名 Runner、撞容器名、安装目录被占、磁盘上有已注册的残留目录、宿主机上有同名容器。
+	// 与 /api/runner-precheck 用的是同一套判断，保证界面提示和这里的结论一致。
 	name := req.Name
-	for i := 0; i < 20; i++ {
-		if !runnerNameExists(cfg, name) {
-			break
-		}
-		name = req.Name + "-" + shortRandomSuffix()
+	lookupCtx, lookupCancel := lifecycleContext(c.Request().Context(), 5*time.Second)
+	defer lookupCancel()
+	var lookup containerLookup
+	if cfg.Runners.ContainerMode {
+		lookup = dockerContainerLookup(lookupCtx)
 	}
-	if runnerNameExists(cfg, name) {
-		return echo.NewHTTPError(http.StatusConflict, "已存在同名 runner，且无法生成唯一名称，请更换 name 后重试")
+	willRegister := req.RegistrationToken != ""
+	conflicts := collectRunnerConflicts(cfg, name, req.Path, lookup, willRegister)
+	if hasErrorConflict(conflicts) {
+		if !req.AutoRename {
+			suggested := ""
+			if req.Path == "" {
+				suggested = suggestRunnerName(cfg, name, req.Path, lookup, willRegister)
+			}
+			resp := map[string]any{
+				"message":        conflicts[0].Message,
+				"name":           name,
+				"conflicts":      conflicts,
+				"suggested_name": suggested,
+				"install_dir":    config.RunnerItem{Name: name, Path: req.Path}.InstallPath(cfg.Runners.BasePath),
+			}
+			if cfg.Runners.ContainerMode {
+				resp["container_name"] = config.NormalizedContainerName(name)
+			}
+			return c.JSON(http.StatusConflict, resp)
+		}
+		// auto_rename：沿用旧行为，自动找一个可用名
+		if req.Path != "" {
+			return echo.NewHTTPError(http.StatusConflict, "同时指定 path 时无法自动改名："+conflicts[0].Message)
+		}
+		name = suggestRunnerName(cfg, name, req.Path, lookup, willRegister)
+		if name == "" {
+			return echo.NewHTTPError(http.StatusConflict, "已存在同名 runner，且无法生成唯一名称，请更换 name 后重试")
+		}
 	}
 	item := config.RunnerItem{
 		Name:       name,

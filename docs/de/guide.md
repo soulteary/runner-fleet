@@ -163,6 +163,8 @@ runners:
 
 **Registrierungsergebnis**: Wird in `.registration_result.json` im Runner-Verzeichnis geschrieben. **GitHub-Sichtbarkeitsprüfung** (optional): `.github_check_token` (PAT; Org braucht `admin:org`, Repo braucht `repo`) ins Runner-Verzeichnis legen; wird ca. alle 5 Minuten geprüft, Ergebnis in `.github_status.json`.
 
+**Namenskonflikt-Prüfung**: Während der Eingabe fragt das Formular `/api/runner-precheck` und zeigt vor dem Absenden, was schiefgehen würde — ein Runner dieses Namens existiert bereits, der Name ergibt denselben Containernamen wie ein anderer, das Installationsverzeichnis ist belegt, ein übrig gebliebenes Verzeichnis enthält bereits einen registrierten Runner (`.runner`), oder auf dem Host existiert noch ein Container dieses Namens. Blockierendes wird rot angezeigt, mit einem Vorschlagsnamen zum Übernehmen; Warnungen (ein nicht leeres Verzeichnis wird weiterverwendet) lassen sich übergehen. Trotzdem Absenden lehnt der Server mit **409** und denselben Konflikten ab — das frühere stille Anhängen eines Zufallssuffixes entfällt (bei Bedarf `auto_rename: true`).
+
 Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 
 ---
