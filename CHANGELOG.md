@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting or stopping a runner no longer dies with the browser request. The lifecycle context was derived from the HTTP request, so a page reload (the UI reloads 5 seconds after a runner is added, and the message box close button reloads too) cancelled the in-flight request, and `exec.CommandContext` turned that into a SIGKILL for the `docker` child — leaving `docker create 失败。输出: (无输出): signal: killed` in the log while the daemon may already have created the container, so the next start hit a name conflict. Start/stop now keep their timeout but drop the request's cancellation, matching what runner removal and the background registration worker already did.
+
+### Added
+
+- `examples/deploy/`: two copy-and-go deployments — `standalone/` (one Manager container with the runner processes inside, via `docker run` or Compose) and `fleet/` (container mode, one container per runner, image cache shared through the host daemon, toolchain and action caches baked into a runner image layer, build caches isolated per runner). The README compares both, documents which caches are shared versus isolated and why, and collects the deployment pitfalls (directory ownership, `VOLUME_HOST_PATH`, host-socket disk growth).
+
+### Changed
+
+- `docker-compose.yml` now pins the in-container listen port to `SERVER_PORT` (default 8080) and maps `MANAGER_PORT` to it. Previously a numeric `MANAGER_PORT` also overrode `server.port` while the published target stayed 8080, so `MANAGER_PORT=9000` silently produced an unreachable port.
+
 ## [1.4.0] - 2026-09-18
 
 ### Added

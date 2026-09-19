@@ -18,6 +18,8 @@
 # DinD 为可选：仅当 config/config.yaml 中 job_docker_backend: dind 时需要。
 # 启动 DinD：docker compose --profile dind up -d
 # 仅 Manager（host-socket 或 none）：docker compose up -d
+#
+# 两种形态的完整可复制配置（单容器 / 多容器并行 + 共享缓存）见 examples/deploy/
 services:
   runner-dind:
     profiles:
@@ -55,8 +57,12 @@ services:
       # 宿主机 docker 组 GID：除下方 group_add 外，也传给 Manager，用于 job_docker_backend=host-socket 时
       # 给 Runner 容器追加 --group-add（留空则由 Manager 自动探测 docker.sock 所属组）
       DOCKER_GID: ${DOCKER_GID:-}
+      # 容器内监听端口。显式固定后，MANAGER_PORT 只负责宿主机映射，不会再连带把 server.port 改掉：
+      # 两者都会覆盖 server.port，SERVER_PORT 在后生效。否则 MANAGER_PORT=9000 会让容器改听 9000，
+      # 而映射目标仍是 8080，端口不通。
+      SERVER_PORT: ${SERVER_PORT:-8080}
     ports:
-      - "${MANAGER_PORT:-8080}:8080"
+      - "${MANAGER_PORT:-8080}:${SERVER_PORT:-8080}"
     # 仅挂载 config 目录（勿挂载 config/config.yaml 单文件，否则宿主机无该文件时 Docker 会创建空文件导致启动失败）
     volumes:
       - ./config:/app/config
@@ -69,7 +75,7 @@ services:
       - runner-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${SERVER_PORT:-8080}/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s

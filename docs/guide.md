@@ -90,6 +90,8 @@ Runner image: same name as Manager with `-runner` tag (production: use a version
 
 **Extending the runner image**: GitHub-hosted runners bundle toolchains (Android SDK, Node, Python…) that self-hosted runners do not. Workflows written for `ubuntu-24.04` often rely on this implicitly and fail after the move — `SDK location not found`, `node: command not found`. Layer your toolchain on top of this repo's runner image; ready-to-use examples and the four rules that matter (chown to UID 1001, bake env vars into the image, passwordless sudo is inherited, warm caches after `USER app`) are in [`examples/runner-images/`](../examples/runner-images/). Point a single runner at it with `items[].container_image` and select it from the workflow with a label.
 
+**Ready-made deployment examples**: [`examples/deploy/`](../examples/deploy/) holds two copy-and-go setups — `standalone/` (one Manager container with the runner processes inside it; `docker run` or Compose) and `fleet/` (container mode: one container per runner, image cache shared through the host daemon, toolchain and action caches baked into a layer of the runner image, build caches isolated per runner). Its README compares the two, spells out which caches are shared and which are isolated, and collects the deployment pitfalls (directory ownership, `VOLUME_HOST_PATH`, disk growth under host-socket).
+
 ### Troubleshooting
 
 - **Anything not working**: Check the startup self-test first — `docker compose logs runner-manager | grep 自检`. It reports the runners directory, Docker reachability, network, runner image and in-job Docker backend at boot, each failing item with a copy-pasteable fix.

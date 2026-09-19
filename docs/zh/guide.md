@@ -90,6 +90,8 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
+**现成的部署示例**：[`examples/deploy/`](../../examples/deploy/) 提供两套可直接复制的配置——`standalone/`（单容器：Manager 与 Runner 进程同处一个容器，`docker run` 或 Compose 均可）与 `fleet/`（容器模式：每个 Runner 一个容器，镜像缓存靠共用宿主机 daemon 共享，工具链与 Action 缓存预置在 Runner 镜像的层里，构建缓存按 Runner 隔离）。其 README 对比了两者的取舍、说明哪些缓存共享哪些隔离，并收录了部署中最容易踩的坑（目录属主、`VOLUME_HOST_PATH`、host-socket 下的磁盘增长）。
+
 ### 排障
 
 - **哪里不对先看启动自检**：`docker compose logs runner-manager | grep 自检`。Manager 启动时会检查 runners 目录、Docker 可达性、容器网络、Runner 镜像与 Job 内 Docker 后端，失败项会直接给出可照做的修复命令。

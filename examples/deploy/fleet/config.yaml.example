@@ -1,0 +1,28 @@
+# 开关大多由 .env 注入（配置加载后会被环境变量覆盖，见 internal/config/config.go 的 applyEnvOverrides），
+# 这里只放没有环境变量对应项的内容：resources 与 items。
+# 用法：mkdir -p config && cp config.yaml.example config/config.yaml
+# 界面里增删 Runner 时 Manager 会重写该文件，下面两项会被保留。
+server:
+    port: 8080
+    addr: 0.0.0.0
+runners:
+    base_path: /app/runners
+    items: []
+
+    # 强烈建议设置：不限制时，单个失控 Job（Gradle daemon、-j$(nproc) 编译）能吃光整机内存，
+    # 连带把 Manager 一起拖垮。按「并发 Runner 数 × 单个上限 ≈ 整机资源的 80%」分配。
+    # 修改后对已存在的容器同样生效（启停时通过 docker update 施加）。
+    resources:
+        cpus: "4"
+        memory: 8g
+        memory_swap: 8g      # 等于 memory 表示禁用 swap
+        pids_limit: 4096
+
+    # 某个项目需要自己的工具链镜像时，在这里按 Runner 覆盖：
+    # items:
+    #   - name: android
+    #     target_type: repo
+    #     target: your-org/your-app
+    #     labels: [android]
+    #     container_image: local/android-runner:1
+    #     job_docker_backend: none

@@ -1,0 +1,59 @@
+# 带共享缓存的 Runner 镜像。
+#
+# 为什么把缓存放镜像里：容器模式下 Manager 创建 Runner 容器时只挂载
+# <VOLUME_HOST_PATH>/<name>:/runner（host-socket 时再加 docker.sock），没有额外挂载的配置项。
+# 而同一个 Docker daemon 上，镜像层在所有 Runner 容器之间只存一份（overlayfs），
+# Job 往里写走 copy-on-write —— 正好是「物理上共享一份、写入互不污染」。
+#
+# 构建：docker compose --profile build build runner-image
+# 更新缓存内容后：docker rm -f github-runner-<名称>，再到界面点「启动」重建容器。
+#
+# 语言与平台 SDK（Android、Flutter 等）的扩展方式见 ../../runner-images/。
+
+ARG RUNNER_BASE_IMAGE=ghcr.io/soulteary/runner-fleet:v1.4.0-runner
+FROM ${RUNNER_BASE_IMAGE}
+
+USER root
+
+# ============ 共享工具链缓存（收益最大的一块） ============
+# 布局必须是 <tool>/<version>/<arch>，并在同级放一个 <arch>.complete 空文件，
+# 否则 actions/setup-* 认不出来，仍会重新下载（@actions/tool-cache 就按这个路径找）。
+# 下面以 Node 为例；Python、Go、Java 同理，换 tool 名与解包路径即可。
+ARG NODE_VERSION=22.14.0
+RUN set -eux; \
+    case "$(uname -m)" in \
+      x86_64)  arch=x64 ;; \
+      aarch64) arch=arm64 ;; \
+      *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    dir="/opt/hostedtoolcache/node/${NODE_VERSION}"; \
+    mkdir -p "$dir"; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${arch}.tar.gz" \
+      | tar xz -C "$dir"; \
+    mv "$dir/node-v${NODE_VERSION}-linux-${arch}" "$dir/$arch"; \
+    touch "$dir/$arch.complete"
+
+# ============ 共享 Action 归档缓存（可选，收益小） ============
+# 目录格式：<owner>_<repo>/<commit-sha>.tar.gz，内容为 GitHub 仓库 tarball（带一层嵌套目录）。
+# 只有 workflow 把 action pin 到 commit sha 时才稳定命中；写 @v4 这类 tag 时 sha 会漂移。
+# 单个 action 通常只有几百 KB，别为它过度设计——先做上面的工具链缓存。
+RUN mkdir -p /opt/actions-cache
+# 示例（替换 <sha> 后取消注释）：
+# RUN mkdir -p /opt/actions-cache/actions_checkout \
+#  && curl -fsSL -o /opt/actions-cache/actions_checkout/<sha>.tar.gz \
+#        https://api.github.com/repos/actions/checkout/tarball/<sha>
+
+# 容器内 Job 以 app(UID 1001) 运行
+RUN chown -R 1001:1001 /opt/hostedtoolcache /opt/actions-cache
+
+# 把缓存位置写进镜像环境变量：Agent 带着这套环境拉起 run.sh，Runner.Listener 继承后传给 Job，
+# 所以不用再给每个 Runner 目录单独放 .env 文件。
+ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+ENV ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/opt/actions-cache
+
+# 不要开 ACTIONS_RUNNER_SYMLINK_CACHED_ACTIONS=true：
+# 它会把 _work/_actions/<action> 做成指向共享目录的符号链接，Job 里对 action 目录的任何写入
+# 都会污染所有 Runner。默认的「拷 tar.gz 再解压」才是安全的。
+
+USER app
+RUN node --version

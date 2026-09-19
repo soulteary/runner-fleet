@@ -1,0 +1,79 @@
+# 单容器部署：一个 Manager 容器，Runner 进程跑在它内部（默认模式）
+#
+# 适合：1~2 个 Runner、项目工具链单一、不追求 Runner 之间的强隔离。
+# 需要多个 Runner 并行且互不干扰时用 ../fleet/（容器模式），对比见 ../README.md。
+#
+# 这套模式下需要知道的两件事：
+#   - 所有 Runner 进程共用容器内同一个用户与 HOME=/app，因此 ~/.gradle、~/.m2、~/.npm
+#     是**共享**的：并发 Job 可能互相踩（Gradle daemon、Maven 本地库锁），且 /app 不在挂载卷里，
+#     容器一重建就没了。每个 Runner 的 _work 仍是各自独立的。
+#   - Job 里的 docker 用的是下面挂进来的宿主机 socket，所以镜像缓存本来就共享。
+#
+# === 首次部署 ===
+#   1. cp .env.example .env（按需改端口与 Basic Auth）
+#   2. mkdir -p config runners && sudo chown -R 1001:1001 config runners
+#      （Manager 以 UID 1001 运行；先放文件再 chown，否则会报
+#        「保存配置失败: open /app/config/config.yaml: permission denied」）
+#   3. docker compose up -d
+#   4. 打开 http://127.0.0.1:8080 添加 Runner
+#
+# config/config.yaml 不存在时会在首次启动自动生成，无需手工准备。
+services:
+  runner-manager:
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.4.0}
+    container_name: runner-manager
+    environment:
+      # 不设 DOCKER_HOST 时走下面挂载的宿主机 socket；改用 DinD 见 .env.example
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
+      RUNNERS_BASE_PATH: ${RUNNERS_BASE_PATH:-/app/runners}
+      # 容器内监听端口。显式固定后，MANAGER_PORT 只负责宿主机映射，
+      # 不会再连带把 server.port 改掉（两者都会覆盖 server.port，SERVER_PORT 在后生效）。
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      SERVER_ADDR: ${SERVER_ADDR:-0.0.0.0}
+    ports:
+      - "${MANAGER_PORT:-8080}:${SERVER_PORT:-8080}"
+    # 只挂 config 目录，不要挂 config/config.yaml 单文件：
+    # 宿主机无该文件时 Docker 会建一个空目录/空文件，导致启动失败
+    volumes:
+      - ./config:/app/config
+      - ./runners:/app/runners
+      # Job 里不需要 docker 时可以删掉这一行与下面的 group_add
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-999}"
+    networks:
+      - runner-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${SERVER_PORT:-8080}/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # 可选：Job 内 Docker 改用 DinD（.env 里设 DOCKER_HOST=tcp://runner-dind:2375）
+  #   docker compose --profile dind up -d
+  runner-dind:
+    profiles:
+      - dind
+    image: docker:dind
+    container_name: runner-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["--tls=false"]
+    volumes:
+      - dind-storage:/var/lib/docker
+    networks:
+      - runner-net
+    restart: unless-stopped
+
+# 单容器模式下 Manager 不会创建别的容器，网络可以由 compose 自行管理，
+# 不必像容器模式那样预先 docker network create。
+networks:
+  runner-net:
+
+volumes:
+  dind-storage:

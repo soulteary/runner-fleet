@@ -90,6 +90,8 @@ Runner-Image: gleicher Name wie Manager mit Tag `-runner` (Produktion: Version z
 
 **Runner-Image erweitern**: GitHub-gehostete Runner bringen Toolchains mit (Android SDK, Node, Python …), selbst gehostete nicht. Für `ubuntu-24.04` geschriebene Workflows setzen das oft implizit voraus und scheitern nach dem Umzug. Legen Sie Ihre Toolchain über das Runner-Image dieses Repos — fertige Beispiele und die vier wichtigen Regeln (chown auf UID 1001, Umgebungsvariablen ins Image, passwortloses sudo wird geerbt, Warmlauf nach `USER app`) stehen in [`examples/runner-images/`](../../examples/runner-images/). Mit `items[].container_image` nutzt es nur ein bestimmter Runner; im Workflow per Label auswählen.
 
+**Fertige Deployment-Beispiele**: [`examples/deploy/`](../../examples/deploy/) enthält zwei sofort kopierbare Setups — `standalone/` (ein Manager-Container, die Runner-Prozesse laufen darin; per `docker run` oder Compose) und `fleet/` (Container-Modus: ein Container je Runner, Image-Cache über den gemeinsamen Host-Daemon, Toolchain- und Action-Caches in einer Schicht des Runner-Images, Build-Caches je Runner getrennt). Die README vergleicht beide, erklärt welche Caches geteilt und welche isoliert sind, und sammelt die typischen Stolperstellen (Verzeichnis-Eigentümer, `VOLUME_HOST_PATH`, wachsender Speicherbedarf unter host-socket).
+
 ### Fehlerbehebung
 
 - **Wenn etwas nicht läuft, zuerst den Startup-Selbsttest ansehen**: `docker compose logs runner-manager | grep 自检`. Beim Start werden runners-Verzeichnis, Docker-Erreichbarkeit, Netzwerk, Runner-Image und Job-Docker-Backend geprüft; fehlgeschlagene Punkte nennen direkt den Fix.

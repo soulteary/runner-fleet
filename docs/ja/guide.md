@@ -90,6 +90,8 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 
 **Runner イメージの拡張**: GitHub ホストの runner には Android SDK・Node・Python などのツールチェーンが同梱されていますが、セルフホストにはありません。`ubuntu-24.04` 向けに書かれた workflow はこれを暗黙に前提としていることが多く、移行後に `SDK location not found` などで失敗します。本リポジトリの Runner イメージの上に自分のツールチェーンを重ねてください。すぐ使える例と重要な四つの規則（/opt 配下は UID 1001 に chown、環境変数はイメージに埋め込む、パスワードなし sudo は継承、ウォームアップは `USER app` の後）は [`examples/runner-images/`](../../examples/runner-images/) にあります。`items[].container_image` で特定の Runner だけに適用し、workflow からは label で選択します。
 
+**すぐ使えるデプロイ例**: [`examples/deploy/`](../../examples/deploy/) には、そのままコピーして使える構成が 2 つあります。`standalone/`（Manager 1 コンテナで、Runner プロセスもその中。`docker run` でも Compose でも可）と `fleet/`（コンテナモード: Runner ごとに 1 コンテナ。イメージキャッシュはホストの daemon を共用することで共有、ツールチェーンと Action のキャッシュは Runner イメージのレイヤーに同梱、ビルドキャッシュは Runner ごとに分離）。README では両者の比較、どのキャッシュが共有でどれが分離されるか、デプロイで踏みやすい落とし穴（ディレクトリの所有者、`VOLUME_HOST_PATH`、host-socket でのディスク増加）をまとめています。
+
 ### トラブルシューティング
 
 - **うまく動かないときはまず起動時セルフチェック**: `docker compose logs runner-manager | grep 自检`。起動時に runners ディレクトリ、Docker 到達性、ネットワーク、Runner イメージ、Job 内 Docker バックエンドを検査し、失敗項目にはそのまま実行できる修正コマンドが出ます。
