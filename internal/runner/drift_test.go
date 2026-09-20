@@ -372,3 +372,28 @@ func TestDriftReason_MissingAgentToken(t *testing.T) {
 		t.Fatalf("没有令牌可注入时不该报漂移: %q", got)
 	}
 }
+
+// TestDriftReason_EmptyAgentTokenCountsAsMissing
+// 「有这个变量」不等于「有令牌」。镜像里一句 ENV AGENT_TOKEN= 就会让变量存在而取值为空，
+// Agent 侧 TrimSpace 后当作未配置，转去读挂载的 .agent_token；读不到（root 拥有的 0600，
+// 正是本项要修的迁移场景）就完全不鉴权，而且没有任何 401 能暴露它。
+// 只看键在不在的话，这种容器会永远绕过重建，本项的修复对它等于没做。
+func TestDriftReason_EmptyAgentTokenCountsAsMissing(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.AgentToken = "tok-abc"
+
+	for _, v := range []string{"", "   ", "\t"} {
+		facts := factsFor(spec)
+		facts.Env = append(facts.Env, "AGENT_TOKEN="+v)
+		if got := spec.driftReason(facts, "sha256:aaa"); got != "agent_token: (none) → set" {
+			t.Fatalf("AGENT_TOKEN=%q（Agent 判定为未配置）未被检出: %q", v, got)
+		}
+	}
+
+	// 对照：非空取值仍然只看「有」，不比对是否与当前令牌相同
+	ok := factsFor(spec)
+	ok.Env = append(ok.Env, "AGENT_TOKEN=tok-old")
+	if got := spec.driftReason(ok, "sha256:aaa"); got != "" {
+		t.Fatalf("非空令牌不该因取值不同而报漂移: %q", got)
+	}
+}

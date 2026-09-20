@@ -300,11 +300,16 @@ func (s containerSpec) driftReason(facts *containerFacts, desiredImageID string)
 	if reason := s.backendDrift(facts); reason != "" {
 		return reason
 	}
-	// 令牌只看「有没有注入过」：本特性之前建的容器没有 AGENT_TOKEN，Agent 退化为不鉴权，
+	// 令牌只看「有没有一个非空值」：本特性之前建的容器没有 AGENT_TOKEN，Agent 退化为不鉴权，
 	// 同网络里的其它容器就能控制这个 Runner。重建一次即可补上。
-	// 刻意不比对取值——那属于运行期故障（Agent 返回 401），由探测去暴露。
+	//
+	// 刻意不比对取值——令牌不一致属于运行期故障（Agent 返回 401），由探测去暴露，
+	// 不该成为删容器的理由。但「空值」不是不一致，而是没有：Agent 侧 TrimSpace 后为空
+	// 就会转去读挂载的 .agent_token，读不到（root 拥有的 0600，正是本项要修的迁移场景）
+	// 便完全不鉴权，且没有任何 401 能暴露它。所以这里按 Agent 的口径判空，
+	// 否则镜像里一句 ENV AGENT_TOKEN= 就能让这个容器永远绕过重建。
 	if s.AgentToken != "" {
-		if _, ok := envValue(facts.Env, "AGENT_TOKEN"); !ok {
+		if v, ok := envValue(facts.Env, "AGENT_TOKEN"); !ok || strings.TrimSpace(v) == "" {
 			return "agent_token: (none) → set"
 		}
 	}
