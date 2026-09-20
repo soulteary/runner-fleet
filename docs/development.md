@@ -119,6 +119,31 @@ Two consequences for callers:
 Container mode uses Agent from `cmd/runner-agent` and Runner image from `Dockerfile.runner`.
 
 
+## Tests
+
+`go test ./...`, plus `go test -race ./...` before pushing. The repo's golangci-lint runs in
+CI; `errcheck` and `staticcheck` via `go run` cover most of what it flags if you cannot run
+it locally.
+
+A few conventions worth knowing before adding to the suite:
+
+- **Process detection is exercised against real processes**, not just a fake `/proc`
+  (`internal/runnerproc`, `internal/runner`, `cmd/runner-agent`). A scratch `run.sh` that
+  sleeps stands in for the runner; it must not `exec`, or the shell is replaced and the argv
+  no longer matches what `internal/runnerproc` looks for.
+- **`cmd/runner-manager` tests reach the wiring through the functions `main()` calls**
+  (`basicAuthMiddleware`, `httpErrorHandler`, `registerRoutes`, `listenAddr`, `loadI18n`).
+  Adding a route means updating `TestRegisterRoutes_AllEndpointsPresent`, which asserts the
+  exact set — the prompt to think about whether the new route needs authentication.
+- **The i18n files are cross-checked.** A key in `en.json` with no counterpart elsewhere
+  renders as a blank, silently, so tests assert the key sets match across all six languages,
+  that no value is empty, and that every key the template references exists.
+- **Template defects get template-level tests.** Two past bugs lived in `index.html` rather
+  than in Go — a `{{if}}` on a `*bool` that read a pointer to `false` as true, and an
+  `innerHTML` assignment that skipped `escapeHtml`. Both are covered by rendering the real
+  template or scanning it, because a test of the Go helper alone would not have noticed
+  either.
+
 ## Releasing
 
 Version references in docs and examples must match the default image tag in `internal/config/config.go`. CI enforces this via `scripts/check-version-consistency.sh`; run it locally before opening a release PR:

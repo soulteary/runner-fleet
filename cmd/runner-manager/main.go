@@ -82,71 +82,18 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover(), middleware.RequestLogger(), middleware.Secure())
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		code := http.StatusInternalServerError
-		msg := err.Error()
-		if he, ok := err.(*echo.HTTPError); ok {
-			code = he.Code
-			if m, ok := he.Message.(string); ok {
-				msg = m
-			}
-		}
-		_ = c.JSON(code, map[string]string{"message": msg})
-	}
+	e.HTTPErrorHandler = httpErrorHandler
 
-	if pw := os.Getenv("BASIC_AUTH_PASSWORD"); pw != "" {
-		expectedUser := strings.TrimSpace(os.Getenv("BASIC_AUTH_USER"))
-		if expectedUser == "" {
-			expectedUser = "admin"
-		}
-		expectedPassword := pw
-		e.Use(middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
-			Skipper: func(c echo.Context) bool {
-				return c.Path() == "/health"
-			},
-			Validator: func(username, password string, c echo.Context) (bool, error) {
-				userOk := subtle.ConstantTimeCompare([]byte(username), []byte(expectedUser)) == 1
-				passOk := subtle.ConstantTimeCompare([]byte(password), []byte(expectedPassword)) == 1
-				return userOk && passOk, nil
-			},
-		}))
-		log.Printf("Basic Auth 已启用（用户: %s）", expectedUser)
+	if mw, user := basicAuthMiddleware(); mw != nil {
+		e.Use(mw)
+		log.Printf("Basic Auth 已启用（用户: %s）", user)
 	}
 
 	e.Renderer = newTemplateRenderer()
-	handler.I18nLoader = func(lang string) (map[string]string, error) {
-		data, err := i18nFS.ReadFile("i18n/" + lang + ".json")
-		if err != nil {
-			return nil, err
-		}
-		var t map[string]string
-		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, err
-		}
-		return t, nil
-	}
-	e.GET("/health", handler.Health)
-	e.GET("/version", handler.VersionInfo)
-	e.GET("/", handler.Index)
-	e.GET("/api/runners", handler.ListRunners)
-	e.GET("/api/runners/:name", handler.GetRunner)
-	e.POST("/api/runners", handler.AddRunner)
-	// 静态路径，放在 /api/runners/:name 之外，避免与名为 check 的 Runner 抢路由
-	e.GET("/api/runner-precheck", handler.PrecheckRunner)
-	e.PUT("/api/runners/:name", handler.UpdateRunner)
-	e.DELETE("/api/runners/:name", handler.RemoveRunnerByName)
-	e.POST("/api/runners/:name/start", handler.StartRunner)
-	e.POST("/api/runners/:name/stop", handler.StopRunner)
-	e.POST("/api/runners/:name/recreate", handler.RecreateRunner)
+	handler.I18nLoader = loadI18n
+	registerRoutes(e)
 
-	addr := ":8080"
-	if cfg.Server.Port > 0 {
-		if cfg.Server.Addr != "" {
-			addr = fmt.Sprintf("%s:%d", cfg.Server.Addr, cfg.Server.Port)
-		} else {
-			addr = fmt.Sprintf(":%d", cfg.Server.Port)
-		}
-	}
+	addr := listenAddr(cfg)
 	srv := &http.Server{Addr: addr, Handler: e}
 	go runAutoStartRunners(*configPath)
 	go runRegistrationCheck(*configPath)
@@ -218,4 +165,86 @@ func runRegistrationCheck(configPath string) {
 		}
 		<-ticker.C
 	}
+}
+
+// httpErrorHandler 统一把错误渲染成 {"message": ...}；echo.HTTPError 保留它自己的状态码
+func httpErrorHandler(err error, c echo.Context) {
+	code := http.StatusInternalServerError
+	msg := err.Error()
+	if he, ok := err.(*echo.HTTPError); ok {
+		code = he.Code
+		if m, ok := he.Message.(string); ok {
+			msg = m
+		}
+	}
+	_ = c.JSON(code, map[string]string{"message": msg})
+}
+
+// basicAuthMiddleware 按环境变量构造 Basic Auth 中间件，同时返回生效的用户名。
+//
+// 未设置 BASIC_AUTH_PASSWORD 时返回 nil —— 此时整个鉴权中间件不会挂载，
+// 所有接口（不只是 /health）都可无凭据访问。这是刻意保留的默认行为，
+// 便于在内网或 localhost 上零配置起步；对外暴露前务必设置密码。
+func basicAuthMiddleware() (echo.MiddlewareFunc, string) {
+	pw := os.Getenv("BASIC_AUTH_PASSWORD")
+	if pw == "" {
+		return nil, ""
+	}
+	expectedUser := strings.TrimSpace(os.Getenv("BASIC_AUTH_USER"))
+	if expectedUser == "" {
+		expectedUser = "admin"
+	}
+	return middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
+		// /health 供 Ingress / K8s 探针使用，必须免鉴权
+		Skipper: func(c echo.Context) bool {
+			return c.Path() == "/health"
+		},
+		Validator: func(username, password string, c echo.Context) (bool, error) {
+			// 定长比较：用 == 会让比对耗时随匹配前缀长度变化
+			userOk := subtle.ConstantTimeCompare([]byte(username), []byte(expectedUser)) == 1
+			passOk := subtle.ConstantTimeCompare([]byte(password), []byte(pw)) == 1
+			return userOk && passOk, nil
+		},
+	}), expectedUser
+}
+
+// loadI18n 读取内嵌的语言文件
+func loadI18n(lang string) (map[string]string, error) {
+	data, err := i18nFS.ReadFile("i18n/" + lang + ".json")
+	if err != nil {
+		return nil, err
+	}
+	var t map[string]string
+	if err := json.Unmarshal(data, &t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// registerRoutes 挂载全部路由
+func registerRoutes(e *echo.Echo) {
+	e.GET("/health", handler.Health)
+	e.GET("/version", handler.VersionInfo)
+	e.GET("/", handler.Index)
+	e.GET("/api/runners", handler.ListRunners)
+	e.GET("/api/runners/:name", handler.GetRunner)
+	e.POST("/api/runners", handler.AddRunner)
+	// 静态路径，放在 /api/runners/:name 之外，避免与名为 check 的 Runner 抢路由
+	e.GET("/api/runner-precheck", handler.PrecheckRunner)
+	e.PUT("/api/runners/:name", handler.UpdateRunner)
+	e.DELETE("/api/runners/:name", handler.RemoveRunnerByName)
+	e.POST("/api/runners/:name/start", handler.StartRunner)
+	e.POST("/api/runners/:name/stop", handler.StopRunner)
+	e.POST("/api/runners/:name/recreate", handler.RecreateRunner)
+}
+
+// listenAddr 由配置推出监听地址；未配置端口时回落到 :8080
+func listenAddr(cfg *config.Config) string {
+	if cfg == nil || cfg.Server.Port <= 0 {
+		return ":8080"
+	}
+	if cfg.Server.Addr != "" {
+		return fmt.Sprintf("%s:%d", cfg.Server.Addr, cfg.Server.Port)
+	}
+	return fmt.Sprintf(":%d", cfg.Server.Port)
 }
