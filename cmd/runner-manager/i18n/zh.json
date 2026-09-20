@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "建议：",
   "probe.alert_check_cmd": "检查命令：",
   "probe.alert_error": "探测错误：",
-  "probe.alert_fix_cmd": "修复命令："
+  "probe.alert_fix_cmd": "修复命令：",
+  "precheck.checking": "正在检查冲突…",
+  "precheck.ok": "名称可用",
+  "precheck.name_taken": "配置中已存在同名 Runner：{{detail}}",
+  "precheck.container_name": "与已有 Runner「{{detail}}」规范化后是同一个容器名：{{container}}",
+  "precheck.install_dir": "与已有 Runner「{{detail}}」的安装目录相同：{{dir}}",
+  "precheck.dir_registered": "目录 {{dir}} 下已有注册过的 Runner，带 token 再注册一次会被 config.sh 拒绝",
+  "precheck.dir_adopt": "目录 {{dir}} 下已有注册过的 Runner，添加后会直接接管它（不会重新注册）",
+  "precheck.dir_exists": "目录 {{dir}} 已存在且非空，将直接复用其中已解压的 runner",
+  "precheck.container_exists": "宿主机上已存在容器 {{detail}}，且不属于当前配置；启动时会直接复用它，而它挂的是创建时的目录",
+  "precheck.use_suggested": "使用建议名 {{name}}",
+  "precheck.blocked": "存在冲突，请先改名或清理后再提交"
 }

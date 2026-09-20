@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "Vorschlag: ",
   "probe.alert_check_cmd": "Prüfbefehl: ",
   "probe.alert_error": "Probe-Fehler: ",
-  "probe.alert_fix_cmd": "Fix-Befehl: "
+  "probe.alert_fix_cmd": "Fix-Befehl: ",
+  "precheck.checking": "Konflikte werden geprüft…",
+  "precheck.ok": "Name ist verfügbar",
+  "precheck.name_taken": "Ein Runner mit diesem Namen existiert bereits: {{detail}}",
+  "precheck.container_name": "Ergibt denselben Containernamen wie Runner „{{detail}}“: {{container}}",
+  "precheck.install_dir": "Gleiches Installationsverzeichnis wie Runner „{{detail}}“: {{dir}}",
+  "precheck.dir_registered": "In {{dir}} liegt bereits ein registrierter Runner; eine erneute Registrierung mit Token weist config.sh zurück",
+  "precheck.dir_adopt": "In {{dir}} liegt bereits ein registrierter Runner; das Hinzufügen übernimmt ihn unverändert (keine erneute Registrierung)",
+  "precheck.dir_exists": "{{dir}} existiert bereits und ist nicht leer; der dort entpackte Runner wird weiterverwendet",
+  "precheck.container_exists": "Auf dem Host existiert bereits ein Container {{detail}}, der nicht zu dieser Konfiguration gehört; beim Start würde er weiterverwendet — mit dem Verzeichnis, mit dem er erstellt wurde",
+  "precheck.use_suggested": "Vorgeschlagenen Namen {{name}} übernehmen",
+  "precheck.blocked": "Konflikte gefunden — bitte erst umbenennen oder aufräumen, dann erneut senden"
 }

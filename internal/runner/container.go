@@ -432,3 +432,16 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 		return false, StatusMissing, nil
 	}
 }
+
+// ContainerState 返回容器是否存在及其状态（running / exited / created 等）。
+// 容器不存在时返回 exists=false 且不报错——调用方多数只关心「名字是否被占用」。
+func ContainerState(ctx context.Context, containerName string) (exists bool, status string, err error) {
+	out, err := dockerCmd(ctx, "inspect", "-f", "{{.State.Status}}", containerName)
+	if err != nil {
+		if containerNotFound(out) {
+			return false, "", nil
+		}
+		return false, "", dockerCmdError("docker inspect", out, err)
+	}
+	return true, strings.TrimSpace(string(out)), nil
+}

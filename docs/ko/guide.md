@@ -90,6 +90,8 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 **Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 네 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 비밀번호 없는 sudo 상속, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
 
+**바로 쓸 수 있는 배포 예제**: [`examples/deploy/`](../../examples/deploy/)에 복사해서 그대로 쓰는 구성 두 가지가 있습니다. `standalone/`(Manager 컨테이너 하나, Runner 프로세스도 그 안에서 실행. `docker run` 또는 Compose)와 `fleet/`(컨테이너 모드: Runner마다 컨테이너 하나, 이미지 캐시는 호스트 daemon 공유로 자연히 공유되고, 툴체인·Action 캐시는 Runner 이미지 레이어에 미리 넣으며, 빌드 캐시는 Runner별로 분리). README에 두 방식의 비교, 어떤 캐시가 공유되고 어떤 것이 분리되는지, 그리고 자주 겪는 배포 함정(디렉터리 소유자, `VOLUME_HOST_PATH`, host-socket에서의 디스크 증가)을 정리했습니다.
+
 ### 문제 해결
 
 - **문제가 있으면 먼저 시작 자가 점검 확인**: `docker compose logs runner-manager | grep 自检`. 시작 시 runners 디렉터리, Docker 접근성, 네트워크, Runner 이미지, Job 내 Docker 백엔드를 점검하며, 실패 항목에는 바로 실행 가능한 수정 명령이 표시됩니다.
@@ -160,6 +162,8 @@ runners:
 **Runner가 설치되지 않은 경우**: [GitHub Actions Runner](https://github.com/actions/runner/releases)에서 다운로드 후 `runners/<name>/`에 풀고, UI에 토큰 입력 또는 해당 디렉터리에서 `./config.sh` 실행. 컨테이너 배포 시 UI에서 토큰 제출 시 먼저 설치 후 등록. 컨테이너 모드는 먼저 Runner 이미지와 `volume_host_path` 설정 필요(위 컨테이너 모드 참조).
 
 **등록 결과**: 해당 Runner 디렉터리의 `.registration_result.json`에 기록. **GitHub 표시 확인**(선택): Runner 디렉터리에 `.github_check_token`(PAT; 조직은 `admin:org`, 저장소는 `repo` 필요)을 두면 약 5분마다 확인하며 결과는 `.github_status.json`에 기록.
+
+**이름 충돌 검사**: 이름을 입력하는 동안 폼이 `/api/runner-precheck`를 호출해 제출 전에 문제를 보여 줍니다 — 설정에 같은 이름의 Runner가 있음, 정규화하면 다른 Runner와 컨테이너 이름이 같아짐, 설치 디렉터리가 이미 사용 중, 등록된 Runner가 남아 있는 디렉터리(`.runner` 존재), 호스트에 같은 이름의 컨테이너가 남아 있음. 차단성 항목은 빨간색으로 표시되고 한 번의 클릭으로 쓸 수 있는 추천 이름을 제공합니다. 경고(비어 있지 않은 디렉터리를 재사용)는 계속 진행할 수 있습니다. 그대로 제출해도 서버가 **409**와 동일한 충돌 정보로 거부합니다 — 예전의 '조용히 임의 접미사를 붙이는' 동작은 없어졌습니다(원하면 `auto_rename: true`).
 
 머신당 여러 Runner: 별도 하위 디렉터리 사용.
 

@@ -107,5 +107,16 @@
   "probe.alert_suggestion": "Suggestion: ",
   "probe.alert_check_cmd": "Check command: ",
   "probe.alert_error": "Probe error: ",
-  "probe.alert_fix_cmd": "Fix command: "
+  "probe.alert_fix_cmd": "Fix command: ",
+  "precheck.checking": "Checking for conflicts…",
+  "precheck.ok": "Name is available",
+  "precheck.name_taken": "A runner with this name already exists: {{detail}}",
+  "precheck.container_name": "Normalizes to the same container name as runner “{{detail}}”: {{container}}",
+  "precheck.install_dir": "Same install directory as runner “{{detail}}”: {{dir}}",
+  "precheck.dir_registered": "{{dir}} already holds a registered runner; registering again with a token will be refused by config.sh",
+  "precheck.dir_adopt": "{{dir}} already holds a registered runner; adding will adopt it as is (no re-registration)",
+  "precheck.dir_exists": "{{dir}} already exists and is not empty; the runner already extracted there will be reused",
+  "precheck.container_exists": "A container named {{detail}} already exists on the host and is not part of this config; starting would reuse it, mounted on the directory it was created with",
+  "precheck.use_suggested": "Use suggested name {{name}}",
+  "precheck.blocked": "Conflicts found — rename or clean up first, then submit again"
 }

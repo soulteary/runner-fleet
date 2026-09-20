@@ -90,6 +90,8 @@ Image runner : même nom que le Manager avec le tag `-runner` (production : vers
 
 **Étendre l'image runner** : les runners hébergés par GitHub embarquent des toolchains (SDK Android, Node, Python…), pas les runners auto-hébergés. Les workflows écrits pour `ubuntu-24.04` s'appuient souvent dessus implicitement et échouent après la migration. Superposez votre toolchain à l'image runner de ce dépôt — des exemples prêts à l'emploi et les quatre règles qui comptent (chown vers UID 1001, variables d'environnement dans l'image, sudo sans mot de passe hérité, préchauffage après `USER app`) sont dans [`examples/runner-images/`](../../examples/runner-images/). `items[].container_image` la réserve à un runner précis ; sélectionnez-le par label dans le workflow.
 
+**Exemples de déploiement prêts à l'emploi** : [`examples/deploy/`](../../examples/deploy/) propose deux configurations à copier telles quelles — `standalone/` (un seul conteneur Manager, les processus runner tournent dedans ; `docker run` ou Compose) et `fleet/` (mode conteneur : un conteneur par runner, cache d'images partagé via le daemon de l'hôte, caches de toolchain et d'actions embarqués dans une couche de l'image runner, caches de build isolés par runner). Son README compare les deux, explique quels caches sont partagés ou isolés, et recense les pièges de déploiement (propriétaire des répertoires, `VOLUME_HOST_PATH`, croissance disque avec host-socket).
+
 ### Dépannage
 
 - **En cas de problème, regardez d'abord l'autotest de démarrage** : `docker compose logs runner-manager | grep 自检`. Au démarrage, le répertoire runners, l'accès à Docker, le réseau, l'image runner et le backend Docker des jobs sont vérifiés ; chaque échec indique la commande de correction.
@@ -160,6 +162,8 @@ runners:
 **Quand le runner n'est pas installé** : Téléchargez depuis [GitHub Actions Runner](https://github.com/actions/runner/releases), extrayez dans `runners/<name>/`, puis saisissez le token dans l'interface ou exécutez `./config.sh`. Avec déploiement conteneur, soumettre un token dans l'interface déclenche l'installation puis l'enregistrement ; le mode conteneur nécessite d'abord l'image Runner et `volume_host_path` (voir mode conteneur ci-dessus).
 
 **Résultat d'enregistrement** : Écrit dans `.registration_result.json` dans le répertoire du runner. **Vérification de visibilité GitHub** (optionnel) : Placez `.github_check_token` (PAT ; org nécessite `admin:org`, repo nécessite `repo`) dans le répertoire du runner ; vérifié ~toutes les 5 minutes, résultat dans `.github_status.json`.
+
+**Vérification des conflits de nom** : pendant la saisie du nom, le formulaire interroge `/api/runner-precheck` et montre avant l'envoi ce qui poserait problème — un runner de ce nom existe déjà, le nom donne le même nom de conteneur qu'un autre, le répertoire d'installation est déjà pris, un répertoire résiduel contient déjà un runner enregistré (`.runner`), ou un conteneur de ce nom traîne encore sur l'hôte. Les blocages s'affichent en rouge avec un nom proposé applicable en un clic ; les avertissements (répertoire non vide réutilisé) n'empêchent pas de continuer. Envoyer quand même est refusé côté serveur par un **409** portant les mêmes conflits — l'ancien ajout silencieux d'un suffixe aléatoire est supprimé (`auto_rename: true` pour le retrouver).
 
 Plusieurs runners par machine : utilisez des sous-répertoires distincts.
 

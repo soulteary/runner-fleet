@@ -90,6 +90,8 @@ Runner image: same name as Manager with `-runner` tag (production: use a version
 
 **Extending the runner image**: GitHub-hosted runners bundle toolchains (Android SDK, Node, Python…) that self-hosted runners do not. Workflows written for `ubuntu-24.04` often rely on this implicitly and fail after the move — `SDK location not found`, `node: command not found`. Layer your toolchain on top of this repo's runner image; ready-to-use examples and the four rules that matter (chown to UID 1001, bake env vars into the image, passwordless sudo is inherited, warm caches after `USER app`) are in [`examples/runner-images/`](../examples/runner-images/). Point a single runner at it with `items[].container_image` and select it from the workflow with a label.
 
+**Ready-made deployment examples**: [`examples/deploy/`](../examples/deploy/) holds two copy-and-go setups — `standalone/` (one Manager container with the runner processes inside it; `docker run` or Compose) and `fleet/` (container mode: one container per runner, image cache shared through the host daemon, toolchain and action caches baked into a layer of the runner image, build caches isolated per runner). Its README compares the two, spells out which caches are shared and which are isolated, and collects the deployment pitfalls (directory ownership, `VOLUME_HOST_PATH`, disk growth under host-socket).
+
 ### Troubleshooting
 
 - **Anything not working**: Check the startup self-test first — `docker compose logs runner-manager | grep 自检`. It reports the runners directory, Docker reachability, network, runner image and in-job Docker backend at boot, each failing item with a copy-pasteable fix.
@@ -160,6 +162,8 @@ runners:
 **When runner not installed**: Download from [GitHub Actions Runner](https://github.com/actions/runner/releases), extract to `runners/<name>/`, then enter token in the UI or run `./config.sh` there. With container deploy, submitting a token in the UI triggers install then register; container mode needs Runner image and `volume_host_path` configured first (see container mode above).
 
 **Registration result**: Written to `.registration_result.json` in that runner dir. **GitHub visibility check** (optional): Put `.github_check_token` (PAT; org needs `admin:org`, repo needs `repo`) in the runner dir; checked ~every 5 minutes, result in `.github_status.json`.
+
+**Name conflict check**: While you type a name, the form asks `/api/runner-precheck` and shows what would go wrong before you submit — a runner with that name already in the config, a name that normalizes to a container name already in use, an install directory taken by another runner, a leftover directory that already holds a registered runner (`.runner`), or a leftover container of that name on the host. Blocking findings are shown in red with a one-click suggested name; warnings (a non-empty directory that will be reused) let you continue. Submitting anyway is rejected server-side with **409** plus the same conflicts — the old behaviour of silently appending a random suffix is gone (send `auto_rename: true` if you want it back).
 
 Multiple runners per machine: use separate subdirs.
 

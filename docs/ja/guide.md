@@ -90,6 +90,8 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 
 **Runner イメージの拡張**: GitHub ホストの runner には Android SDK・Node・Python などのツールチェーンが同梱されていますが、セルフホストにはありません。`ubuntu-24.04` 向けに書かれた workflow はこれを暗黙に前提としていることが多く、移行後に `SDK location not found` などで失敗します。本リポジトリの Runner イメージの上に自分のツールチェーンを重ねてください。すぐ使える例と重要な四つの規則（/opt 配下は UID 1001 に chown、環境変数はイメージに埋め込む、パスワードなし sudo は継承、ウォームアップは `USER app` の後）は [`examples/runner-images/`](../../examples/runner-images/) にあります。`items[].container_image` で特定の Runner だけに適用し、workflow からは label で選択します。
 
+**すぐ使えるデプロイ例**: [`examples/deploy/`](../../examples/deploy/) には、そのままコピーして使える構成が 2 つあります。`standalone/`（Manager 1 コンテナで、Runner プロセスもその中。`docker run` でも Compose でも可）と `fleet/`（コンテナモード: Runner ごとに 1 コンテナ。イメージキャッシュはホストの daemon を共用することで共有、ツールチェーンと Action のキャッシュは Runner イメージのレイヤーに同梱、ビルドキャッシュは Runner ごとに分離）。README では両者の比較、どのキャッシュが共有でどれが分離されるか、デプロイで踏みやすい落とし穴（ディレクトリの所有者、`VOLUME_HOST_PATH`、host-socket でのディスク増加）をまとめています。
+
 ### トラブルシューティング
 
 - **うまく動かないときはまず起動時セルフチェック**: `docker compose logs runner-manager | grep 自检`。起動時に runners ディレクトリ、Docker 到達性、ネットワーク、Runner イメージ、Job 内 Docker バックエンドを検査し、失敗項目にはそのまま実行できる修正コマンドが出ます。
@@ -160,6 +162,8 @@ runners:
 **Runner が未インストールの場合**: [GitHub Actions Runner](https://github.com/actions/runner/releases) からダウンロードし、`runners/<name>/` に展開。その後 UI でトークン入力またはそのディレクトリで `./config.sh` を実行。コンテナデプロイでは UI でトークン送信時にまずインストール、続いて登録。コンテナモードでは先に Runner イメージと `volume_host_path` の設定が必要（上記コンテナモード参照）。
 
 **登録結果**: その Runner ディレクトリの `.registration_result.json` に書き込み。**GitHub 表示チェック**（任意）: Runner ディレクトリに `.github_check_token`（PAT。組織は `admin:org`、リポジトリは `repo` が必要）を置くと約 5 分ごとにチェックし、結果は `.github_status.json` に書き込み。
+
+**名前の衝突チェック**: 名前を入力している間にフォームが `/api/runner-precheck` を呼び、送信前に問題を提示します——設定に同名の Runner がある、正規化すると他とコンテナ名が同じになる、インストール先が他の Runner に使われている、登録済みの Runner が残ったディレクトリ（`.runner` がある）、ホストに同名のコンテナが残っている。送信を妨げるものは赤で表示し、ワンクリックで使える候補名を出します。警告（中身のあるディレクトリを再利用する）は続行できます。無理に送信してもサーバー側が **409** と同じ衝突情報で拒否します——従来の「黙ってランダムな接尾辞を付ける」動作は廃止しました（必要なら `auto_rename: true`）。
 
 1 台のマシンに複数 Runner: 別々のサブディレクトリを使用。
 

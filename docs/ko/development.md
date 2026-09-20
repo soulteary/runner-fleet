@@ -54,6 +54,8 @@ Basic Auth 사용 시 `/health`를 제외한 모든 요청에 Header `Authorizat
 | `/api/runners/:name` | GET | 단일 Runner 상세. 컨테이너 모드에서 probe 실패 시 동일한 `probe`. |
 | `/api/runners/:name/start` | POST | Runner 시작. probe 실패 시에도 시작 시도, 응답에 구조화된 `probe` 반환. |
 | `/api/runners/:name/stop` | POST | Runner 중지. probe 실패 시에도 중지 시도, 응답에 구조화된 `probe` 반환. |
+| `/api/runners` | POST | Runner 추가(선택적으로 설치 및 등록). 이름이 충돌하면 조용히 이름을 바꾸지 않고 **409**와 함께 `conflicts`, `suggested_name`을 반환합니다. 예전의 자동 개명 동작이 필요하면 `auto_rename: true`를 보내세요. |
+| `/api/runner-precheck` | GET | 추가 전 이름 사전 점검: `?name=&path=`. `available`, `suggested_name`과 발견된 `conflicts`(`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`)를 반환하며, 각 항목에는 `level`(`error`/`warn`), `message`, `detail`과 선택적 `fix_command`가 있습니다. 읽기 전용이며 웹 UI가 입력 중에 호출합니다. |
 
 ### 호환성 변경 (업그레이드 참고)
 

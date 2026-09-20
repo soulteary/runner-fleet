@@ -40,6 +40,8 @@ docker compose up -d
 
 Open http://localhost:8080. The default image tag is the stable release (e.g. v1.4.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
 
+Two copy-and-go deployments live in [`examples/deploy/`](examples/deploy/): `standalone/` (single container, runner processes inside the Manager — `docker run` or Compose) and `fleet/` (one container per runner, image and toolchain caches shared, build caches isolated).
+
 ## Use cases
 
 - **Personal / team**: One machine as self-hosted runners for multiple repos or orgs; manage via Web UI, no need to remember CLI.
@@ -49,6 +51,7 @@ Open http://localhost:8080. The default image tag is the stable release (e.g. v1
 ## Documentation
 
 - **[User Guide](docs/guide.md)** — Deployment (Docker/docker-compose), config, adding runners, security & troubleshooting
+- **[Deployment examples](examples/deploy/)** — Single-container and multi-container setups, what each cache shares or isolates, deployment pitfalls
 - **[Development & Build](docs/development.md)** — Go build, local debug, HTTP API, Makefile
 - **[Changelog](CHANGELOG.md)** — Release history and upgrade notes
 
