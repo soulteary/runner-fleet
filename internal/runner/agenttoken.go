@@ -65,13 +65,14 @@ func EnsureAgentToken(installDir string) (string, error) {
 		return "", fmt.Errorf("写入 Agent 令牌 %s 失败: %w", path, err)
 	}
 	if _, err := f.Write([]byte(token)); err != nil {
-		// 半截文件留着会让后续的 O_EXCL 一直撞上一个空文件，谁也写不进去
-		f.Close()
-		os.Remove(path)
+		// 半截文件留着会让后续的 O_EXCL 一直撞上一个空文件，谁也写不进去。
+		// 这两步是清理，失败了也只能照样把原始错误报上去
+		_ = f.Close()
+		_ = os.Remove(path)
 		return "", fmt.Errorf("写入 Agent 令牌 %s 失败: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return "", fmt.Errorf("写入 Agent 令牌 %s 失败: %w", path, err)
 	}
 	return token, nil
