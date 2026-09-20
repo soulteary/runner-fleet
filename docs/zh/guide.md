@@ -103,6 +103,8 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 - **Job 中 `command not found` 或缺少某个 SDK**：自托管 runner 不像 GitHub 托管的那样预装工具链。先看启动自检（`docker compose logs runner-manager | grep 自检`），它会指出配置中每个 Runner 镜像缺少 `git`/`unzip`/`tar`/`curl` 中的哪些。语言与平台 SDK 需自行扩展镜像，见 [`examples/runner-images/`](../../examples/runner-images/)。
 - **旧 Runner 镜像**：拉取或重新构建后直接启动该 Runner 即可——Manager 会发现镜像变了（比对引用与镜像 ID，同名 tag 重新构建同样算）并重建容器。正在运行的容器不会被动，可在该行点「重建容器」选择何时中断。
 - **日志里每 5 分钟刷一遍 `已定时拉起 runner: <名称>`，界面上也从来不显示「运行中」**：本版本已修复，升级即可，不需要重新注册任何 Runner。运行状态此前取自 pid 文件（`Runner.Listener.pid`，回退到 `.path`），而 actions/runner 这两个都不写：它的启动脚本没有一处落 pid 文件，`.path` 里装的是 PATH 字符串。于是每个 Runner 都被读成「已注册但没在跑」，5 分钟一次的巡检每轮都把它们再拉起一遍。现在改为查进程表；容器模式下则由各容器内的 Agent 作答——Manager 看不到别的容器里的进程。同一个根因还有一处：默认（非容器）模式下点「停止」必然报 `未找到 runner pid 文件或 pid 无效`。
+- **在界面上删掉的 Runner，GitHub 上还在；用同一个名字加回来还会注册失败**：删除现在会一并从 GitHub 注销，但前提是该 Runner 目录下放了 `.github_check_token`（可选 PAT，组织需 `admin:org`，仓库需 `repo`）。没有这个凭据就注销不了，删除响应会直接说明并指向 Settings → Actions → Runners。旧版本删掉的 Runner 从未被注销过，需要手动清理。
+- **某个 Runner 显示「GitHub 查询失败」**：查询发出去了但没得到答案，悬停可看原因（令牌过期、权限不足、限流、目标不可见）。它和「GitHub 未显示」是两回事——后者是 GitHub 答了、列表里确实没有。旧版本把前者一律报成后者。
 - **status=unknown**：详情弹窗看 `probe`，可尝试「启动/停止」自愈。
 
 ### 本地构建镜像

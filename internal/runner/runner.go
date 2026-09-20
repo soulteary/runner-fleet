@@ -42,15 +42,28 @@ type RunnerInfo struct {
 	Labels                []string   `json:"labels"`
 	Status                Status     `json:"status"`
 	InstallDir            string     `json:"install_dir"`
-	Running               bool       `json:"running"`                   // 进程是否在跑
-	Probe                 *ProbeInfo `json:"probe,omitempty"`           // 结构化探测信息（error/type/suggestion/check_command/fix_command）
-	JobDockerBackend      string     `json:"job_docker_backend"`        // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
-	ContainerDrift        string     `json:"container_drift,omitempty"` // 容器创建参数与当前配置的差异，非空表示容器是按旧配置建的
-	RegistrationMessage   string     `json:"registration_message"`      // 最近一次注册结果信息（成功或失败原因）
-	RegistrationCheckedAt string     `json:"registration_checked_at"`   // 注册结果时间
-	RegisteredOnGitHub    *bool      `json:"registered_on_github"`      // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
-	GitHubCheckAt         string     `json:"github_check_at"`           // 最近一次 GitHub 检查时间
+	Running               bool       `json:"running"`                      // 进程是否在跑
+	Probe                 *ProbeInfo `json:"probe,omitempty"`              // 结构化探测信息（error/type/suggestion/check_command/fix_command）
+	JobDockerBackend      string     `json:"job_docker_backend"`           // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
+	ContainerDrift        string     `json:"container_drift,omitempty"`    // 容器创建参数与当前配置的差异，非空表示容器是按旧配置建的
+	RegistrationMessage   string     `json:"registration_message"`         // 最近一次注册结果信息（成功或失败原因）
+	RegistrationCheckedAt string     `json:"registration_checked_at"`      // 注册结果时间
+	RegisteredOnGitHub    *bool      `json:"registered_on_github"`         // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查或查不到答案
+	GitHubCheckAt         string     `json:"github_check_at"`              // 最近一次 GitHub 检查时间
+	GitHubCheckError      string     `json:"github_check_error,omitempty"` // 查不到答案时的原因（令牌过期、限流、网络不通等）
 }
+
+// GitHubYes / GitHubNo / GitHubUnknown 供模板判断三态。
+//
+// 模板里不能直接写 {{if .RegisteredOnGitHub}}：html/template 对指针只看是否为 nil，
+// 指向 false 的指针同样为真，于是「GitHub 上没有这个 Runner」会被渲染成「GitHub ✓」。
+func (r RunnerInfo) GitHubYes() bool { return r.RegisteredOnGitHub != nil && *r.RegisteredOnGitHub }
+
+// GitHubNo 表示查到了答案且答案是「没有」
+func (r RunnerInfo) GitHubNo() bool { return r.RegisteredOnGitHub != nil && !*r.RegisteredOnGitHub }
+
+// GitHubUnknown 表示这次检查没能得出答案（与「从未检查」由 GitHubCheckAt 区分）
+func (r RunnerInfo) GitHubUnknown() bool { return r.RegisteredOnGitHub == nil }
 
 // ProbeInfo 为容器探测失败的结构化信息。
 type ProbeInfo struct {
@@ -87,7 +100,7 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 		}
 		info.Status, info.Running = getStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubCheckAt = readGitHubStatus(installDir)
+		info.RegisteredOnGitHub, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
 		return info
 	}
 	return nil
@@ -122,7 +135,7 @@ func List(cfg *config.Config) []RunnerInfo {
 		}
 		info.Status = diskStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubCheckAt = readGitHubStatus(installDir)
+		info.RegisteredOnGitHub, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
 		list = append(list, info)
 		dirs = append(dirs, installDir)
 	}
@@ -207,29 +220,37 @@ func readRegistrationResult(installDir string) (message, at string) {
 }
 
 // readGitHubStatus 读取 cron 写入的 GitHub 检查结果
-func readGitHubStatus(installDir string) (registered *bool, checkAt string) {
+// readGitHubStatus 读取上一次 GitHub 查询的结论。
+// registered 为 nil 表示没有结论——要么从未查过（checkAt 也为空），
+// 要么查过但没查出来（checkAt 非空，checkErr 说明原因）。
+// 老版本写下的文件里 registered 是普通 bool，反序列化成非 nil 指针，语义不变。
+func readGitHubStatus(installDir string) (registered *bool, checkAt, checkErr string) {
 	b, err := os.ReadFile(filepath.Join(installDir, GitHubStatusFile))
 	if err != nil {
-		return nil, ""
+		return nil, "", ""
 	}
 	var v struct {
-		Registered bool   `json:"registered"`
+		Registered *bool  `json:"registered"`
 		LastCheck  string `json:"last_check"`
+		Error      string `json:"error"`
 	}
 	if json.Unmarshal(b, &v) != nil {
-		return nil, ""
+		return nil, "", ""
 	}
-	reg := v.Registered
-	return &reg, v.LastCheck
+	return v.Registered, v.LastCheck, v.Error
 }
 
 // WriteGitHubStatus 由 cron 调用，写入 GitHub 检查结果到 runner 目录
-func WriteGitHubStatus(installDir string, registered bool) error {
+// WriteGitHubStatus 记录一次 GitHub 查询的结论。
+// registered 为 nil 表示这次没查出答案，checkErr 说明原因；
+// 「查不出来」不可以写成 false——那会在界面上变成一句确定的「未显示」。
+func WriteGitHubStatus(installDir string, registered *bool, checkErr string) error {
 	p := filepath.Join(installDir, GitHubStatusFile)
 	body := struct {
-		Registered bool   `json:"registered"`
+		Registered *bool  `json:"registered"`
 		LastCheck  string `json:"last_check"`
-	}{Registered: registered, LastCheck: time.Now().Format(time.RFC3339)}
+		Error      string `json:"error,omitempty"`
+	}{Registered: registered, LastCheck: time.Now().Format(time.RFC3339), Error: checkErr}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err

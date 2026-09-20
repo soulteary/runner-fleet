@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/lab-dev/github-actions-runner-manager/internal/githubcheck"
 	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
 )
@@ -761,6 +762,10 @@ func UpdateRunner(c echo.Context) error {
 	})
 }
 
+// deregisterFromGitHub 做成变量便于测试替换：真实实现要打 GitHub API，
+// 而这里真正要钉住的是「在删目录之前调用它」——令牌就放在那个目录里。
+var deregisterFromGitHub = githubcheck.Deregister
+
 // RemoveRunnerByName 从路径参数获取 name 并移除（DELETE /api/runners/:name）
 // 会先停止 runner 进程，再删除其安装目录，最后从配置中移除。
 func RemoveRunnerByName(c echo.Context) error {
@@ -788,6 +793,15 @@ func RemoveRunnerByName(c echo.Context) error {
 	} else {
 		_ = runner.Stop(installDir)
 	}
+	// 必须赶在删目录之前注销：GitHub 侧的删除要用该 Runner 目录里的 PAT。
+	// 从本工具删掉不等于从 GitHub 删掉——留下的那个会让之后用同一名称重新添加时
+	// 撞上「存在同名 Runner」而注册失败。
+	deregCtx, deregCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	dereg := deregisterFromGitHub(deregCtx, installDir, info.TargetType, info.Target, name)
+	deregCancel()
+	if !dereg.Done {
+		log.Printf("[remove] %s：%s", name, dereg.Message)
+	}
 	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
 	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {
 		_ = os.RemoveAll(installDir)
@@ -800,7 +814,10 @@ func RemoveRunnerByName(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败: "+err.Error())
 	}
-	return c.JSON(http.StatusOK, map[string]any{"message": "已从配置中移除"})
+	return c.JSON(http.StatusOK, map[string]any{
+		"message":             "已从配置中移除。" + dereg.Message,
+		"github_deregistered": dereg.Done,
+	})
 }
 
 // isUnderBasePath 判断 dir 是否在 basePath 之下（用于安全删除），且不为 basePath 自身
