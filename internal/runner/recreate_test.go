@@ -73,7 +73,11 @@ func stoppedHostSocketInspect(mountSrc string) string {
 	return `[{
 	  "Image": "sha256:aaa",
 	  "State": {"Status": "exited", "Running": false},
-	  "Config": {"Image": "img:tag", "Env": ["DOCKER_HOST=unix:///var/run/docker.sock"]},
+	  "Config": {
+	    "Image": "img:tag",
+	    "Env": ["DOCKER_HOST=unix:///var/run/docker.sock", "AGENT_TOKEN=already-injected"],
+	    "Labels": {"io.runner-fleet.job-docker-backend": "host-socket"}
+	  },
 	  "HostConfig": {
 	    "Binds": ["` + mountSrc + `:/runner", "/var/run/docker.sock:/var/run/docker.sock"],
 	    "GroupAdd": ["999"],
@@ -245,5 +249,26 @@ func TestImageIDCache_StatusPathCachesStartPathDoesNot(t *testing.T) {
 	resolveImageID(context.Background(), "img:cache-test")
 	if got := countInspects(); got != 3 {
 		t.Fatalf("实时查询应每次都执行，累计应为 3 次，实际 %d 次", got)
+	}
+}
+
+// TestStartRunnerContainer_RecreatesContainerWithoutAgentToken
+// 本特性之前建的容器没有 AGENT_TOKEN，Agent 不鉴权——同网络里的其它容器就能控制这个 Runner。
+// 启动时应当自动重建补上，而不是等人手动 docker rm。
+func TestStartRunnerContainer_RecreatesContainerWithoutAgentToken(t *testing.T) {
+	cfg, installDir := driftTestConfig(t, "host-socket")
+	cfg.Runners.DockerGID = 999
+	legacy := strings.Replace(stoppedHostSocketInspect(installDir),
+		`"AGENT_TOKEN=already-injected"`, `"LANG=C.UTF-8"`, 1)
+	logPath := fakeDocker(t, legacy)
+
+	_ = StartRunnerContainer(context.Background(), cfg, "a", installDir)
+
+	calls := dockerCalls(t, logPath)
+	if !strings.Contains(calls, "rm -f github-runner-a") || !strings.Contains(calls, "create --name github-runner-a") {
+		t.Fatalf("没有 AGENT_TOKEN 的旧容器应被重建，实际调用:\n%s", calls)
+	}
+	if !strings.Contains(calls, "-e AGENT_TOKEN=") {
+		t.Fatalf("重建时应注入 AGENT_TOKEN，实际调用:\n%s", calls)
 	}
 }

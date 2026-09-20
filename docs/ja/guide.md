@@ -99,9 +99,9 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 - **うまく動かないときはまず起動時セルフチェック**: `docker compose logs runner-manager | grep 自检`。起動時に runners ディレクトリ、Docker 到達性、ネットワーク、Runner イメージ、Job 内 Docker バックエンドを検査し、失敗項目にはそのまま実行できる修正コマンドが出ます。
 - **compose down 後に Runner が起動しない**: 一度 `docker network create runner-net` を実行。まだ失敗する場合は UI の「Start」で再作成するか、`docker rm -f github-runner-<name>` のあと「Start」。
 - **root で実行**: マウントしたディレクトリはプロセスユーザーが書き込み可能である必要あり。root の場合は `RUNNER_ALLOW_RUNASROOT=1` を設定。
-- **Job 内で docker.sock が `permission denied`**: `job_docker_backend: host-socket` ではコンテナのユーザー（UID 1001）が socket の所有グループに属している必要があります。Manager はコンテナ作成時に検出したホストの docker GID で `--group-add` を付与するため、アップグレード後は Runner コンテナを再作成してください（`docker rm -f github-runner-<name>` のあと「Start」）。検出できない場合は `runners.docker_gid`（または `.env` の `DOCKER_GID`）に `getent group docker | cut -d: -f3` の値を設定します。
+- **Job 内で docker.sock が `permission denied`**: `job_docker_backend: host-socket` ではコンテナのユーザー（UID 1001）が socket の所有グループに属している必要があります。Manager はコンテナ作成時に検出したホストの docker GID で `--group-add` を付与します。GID が合っていないコンテナは「設定変更あり」と判定され、次回起動時に自動で作り直されます（実行中ならバッジが出るので「コンテナ再作成」を使ってください）。検出できない場合は `runners.docker_gid`（または `.env` の `DOCKER_GID`）に `getent group docker | cut -d: -f3` の値を設定します。
 - **Job 内で `command not found` や SDK 不足**: セルフホスト runner には GitHub ホストのようなツールチェーンは同梱されていません。まず起動時セルフチェック（`docker compose logs runner-manager | grep 自检`）を確認してください。設定中の各 Runner イメージに `git`/`unzip`/`tar`/`curl` のどれが欠けているかを示します。言語・プラットフォーム SDK はイメージを拡張してください（[`examples/runner-images/`](../../examples/runner-images/)）。
-- **古い Runner イメージ**: `docker rm -f github-runner-<name>` のあと、UI の「Start」で再作成。
+- **古い Runner イメージ**: pull または再ビルドしてから Runner を起動すれば、Manager がイメージの変化（参照とイメージ ID の両方を見るので同じ tag の再ビルドも対象）を検出してコンテナを作り直します。実行中のコンテナには触れないので、中断してよいタイミングで行の「コンテナ再作成」を使ってください。
 - **status=unknown**: 詳細ポップアップの probe を確認。「Start/Stop」で自己修復を試す。
 
 ### イメージのローカルビルド
@@ -177,7 +177,7 @@ runners:
 
 **パスと一意性**: name/path に `..`、`/`、`\` は不可。ディレクトリは `runners.base_path` 以下である必要あり。名前の重複不可。編集時は名前は読み取り専用。コンテナモードでは名前はコンテナ名に正規化され、マッピング後の重複はエラーになります。
 
-**Agent 認証**（コンテナモード）: Manager は Runner ごとにランダムなトークンを `<runner ディレクトリ>/.agent_token`（0600）へ書き込み、コンテナ作成時に `AGENT_TOKEN` として注入し、Agent 呼び出し時に `Authorization: Bearer` で送ります。Agent は環境変数を読むため、Manager と Agent の UID 一致に依存しません。ファイルは Manager 側の永続コピーです。Agent は `/status`、`/start`、`/stop` をトークンなしでは拒否します。`/health` は HEALTHCHECK 用に開放したままです。本機能より前に作成したコンテナはトークンがなく従来どおり動作します。再作成すると有効になります。
+**Agent 認証**（コンテナモード）: Manager は Runner ごとにランダムなトークンを `<runner ディレクトリ>/.agent_token`（0600）へ書き込み、コンテナ作成時に `AGENT_TOKEN` として注入し、Agent 呼び出し時に `Authorization: Bearer` で送ります。Agent は環境変数を読むため、Manager と Agent の UID 一致に依存しません。ファイルは Manager 側の永続コピーです。Agent は `/status`、`/start`、`/stop` をトークンなしでは拒否します。`/health` は HEALTHCHECK 用に開放したままです。本機能より前に作成したコンテナはトークンが注入されておらず、認証なしのまま動作します。現在はこれを「設定変更あり」と判定し、次回起動時に自動で作り直して補います（実行中なら「コンテナ再作成」で）。
 
 **機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 

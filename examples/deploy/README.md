@@ -104,7 +104,7 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   （在 compose 所在目录执行 `realpath runners`）。
 - **Job 里 `docker` 报 `permission denied`**
   容器内是 UID 1001，需要在宿主机 `docker.sock` 的属组里。核对 `.env` 的 `DOCKER_GID` 是否等于
-  `getent group docker | cut -d: -f3`；修改后需重建 Runner 容器（`docker rm -f github-runner-<名称>` 再启动）。
+  `getent group docker | cut -d: -f3`；改完直接启动该 Runner 即可，GID 对不上的容器会被判为「配置已变更」并自动重建（正在运行的点「重建容器」）。
 - **`host-socket` 下 Job 里的 `docker run -v $PWD:/x` 挂到了空目录**
   `-v` 的源路径由宿主机 daemon 解析，而 `$PWD` 是 Runner 容器内的路径（`/runner/_work/...`），两者不一致。
   这类 workflow 改用 DinD（`JOB_DOCKER_BACKEND=dind`，改完在界面点「启动」即按新后端重建容器），

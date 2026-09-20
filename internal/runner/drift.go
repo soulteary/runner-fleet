@@ -300,6 +300,14 @@ func (s containerSpec) driftReason(facts *containerFacts, desiredImageID string)
 	if reason := s.backendDrift(facts); reason != "" {
 		return reason
 	}
+	// 令牌只看「有没有注入过」：本特性之前建的容器没有 AGENT_TOKEN，Agent 退化为不鉴权，
+	// 同网络里的其它容器就能控制这个 Runner。重建一次即可补上。
+	// 刻意不比对取值——那属于运行期故障（Agent 返回 401），由探测去暴露。
+	if s.AgentToken != "" {
+		if _, ok := envValue(facts.Env, "AGENT_TOKEN"); !ok {
+			return "agent_token: (none) → set"
+		}
+	}
 	if s.JobBackend == "host-socket" && s.DockerGID >= 0 {
 		gid := strconv.Itoa(s.DockerGID)
 		if len(facts.GroupAdd) > 0 && !containsString(facts.GroupAdd, gid) {
@@ -386,8 +394,8 @@ func driftFromFacts(ctx context.Context, cfg *config.Config, runnerName, install
 	if cfg == nil || !cfg.Runners.ContainerMode || facts == nil {
 		return ""
 	}
-	// 令牌不参与比对：它只影响 Agent 鉴权，换了也不必重建容器
-	spec := desiredContainerSpec(cfg, runnerName, installDir, "")
+	// 传入真实令牌：比对只看容器有没有被注入过 AGENT_TOKEN，不比对取值
+	spec := desiredContainerSpec(cfg, runnerName, installDir, ReadAgentToken(installDir))
 	if _, err := spec.createArgs(); err != nil {
 		// 后端配置本身非法时不谈漂移，启动时会报明确错误
 		return ""

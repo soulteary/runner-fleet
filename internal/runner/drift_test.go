@@ -310,3 +310,30 @@ func TestCreateArgs_RecordsBackendLabel(t *testing.T) {
 		}
 	}
 }
+
+// TestDriftReason_MissingAgentToken
+// 本特性之前建的容器没有 AGENT_TOKEN，Agent 退化为不鉴权——同网络里的其它容器就能控制它。
+// 这种容器应当被判为漂移，下次启动时自动补上。
+func TestDriftReason_MissingAgentToken(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.AgentToken = "tok-abc"
+	facts := factsFor(spec) // factsFor 不注入 AGENT_TOKEN，正是旧容器的样子
+
+	if got := spec.driftReason(facts, "sha256:aaa"); got != "agent_token: (none) → set" {
+		t.Fatalf("缺少 AGENT_TOKEN 未被检出: %q", got)
+	}
+
+	// 已注入过就不管取值是否相同：令牌轮换属于运行期故障，由探测暴露，不该删容器
+	withToken := factsFor(spec)
+	withToken.Env = append(withToken.Env, "AGENT_TOKEN=tok-old")
+	if got := spec.driftReason(withToken, "sha256:aaa"); got != "" {
+		t.Fatalf("已注入令牌的容器不该报漂移: %q", got)
+	}
+
+	// 手头没有令牌时（读不到文件）不做判断
+	noToken := spec
+	noToken.AgentToken = ""
+	if got := noToken.driftReason(facts, "sha256:aaa"); got != "" {
+		t.Fatalf("没有令牌可注入时不该报漂移: %q", got)
+	}
+}
