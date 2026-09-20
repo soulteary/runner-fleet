@@ -256,29 +256,64 @@ func TestDriftFromFacts_SkipsNonContainerMode(t *testing.T) {
 
 // TestDriftReason_ImageProvidedDockerHostIsNotOurs
 // 自定义 Runner 镜像在 Dockerfile 里写了 ENV DOCKER_HOST 时，docker inspect 的 Config.Env
-// 里也会有它。若把它当成我们注入的，backend=none 会被永远判成漂移，每次启动都删容器重建。
+// 里也会有它。若把它当成我们注入的，backend=none 会被反复判成漂移，每次启动都删容器重建。
+// 标签是正解：带标签的容器一律按标签判，镜像自带的 ENV 再也干扰不到。
 func TestDriftReason_ImageProvidedDockerHostIsNotOurs(t *testing.T) {
 	spec := hostSocketSpec()
 	spec.JobBackend = "none"
 
-	// 新容器：有标签，直接按标签判，镜像自带的 ENV 干扰不到
 	withLabel := factsFor(spec)
 	withLabel.Env = append(withLabel.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
 	if got := spec.driftReason(withLabel, "sha256:aaa"); got != "" {
 		t.Fatalf("有标签时不该被镜像自带的 DOCKER_HOST 干扰: %q", got)
 	}
 
-	// 旧容器：没有标签，只认我们会写出来的取值，镜像自带的一律当作与我们无关
-	legacy := legacyFactsFor(spec)
-	legacy.Env = append(legacy.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
-	if got := spec.driftReason(legacy, "sha256:aaa"); got != "" {
-		t.Fatalf("旧容器上镜像自带的 DOCKER_HOST 被误判为漂移: %q", got)
-	}
-
-	// 但真正由我们注入的值仍要认出来：之前是 host-socket，现在配置成 none
+	// 真正由我们注入的值要认出来：之前是 host-socket，现在配置成 none
 	wasHostSocket := legacyFactsFor(hostSocketSpec())
 	if got := spec.driftReason(wasHostSocket, "sha256:aaa"); got == "" {
 		t.Fatal("host-socket → none 漏报")
+	}
+}
+
+// TestDriftReason_LegacyImageDockerHostSettlesAfterOneRebuild
+// 没有标签的旧容器分不出 DOCKER_HOST 是我们注入的还是镜像自带的（见 looksInjectedDockerHost），
+// 这里选择宁可多重建一次也不漏报。这一次的代价必须是有界的：重建后容器带上标签，
+// 从此走标签比对，不能变成每次启动都重建。
+func TestDriftReason_LegacyImageDockerHostSettlesAfterOneRebuild(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.JobBackend = "none"
+
+	legacy := legacyFactsFor(spec)
+	legacy.Env = append(legacy.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(legacy, "sha256:aaa"); got == "" {
+		t.Fatal("旧容器上的 tcp://…:2375 一律当作可能是我们注入的，应报漂移")
+	}
+
+	// 重建之后：同样的 ENV 还在（none 不会去掉镜像自带的变量），但标签在了
+	rebuilt := factsFor(spec)
+	rebuilt.Env = append(rebuilt.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(rebuilt, "sha256:aaa"); got != "" {
+		t.Fatalf("重建一次后应当安静下来，否则就是反复重建: %q", got)
+	}
+}
+
+// TestDriftReason_LegacyDindHostChangedThenNone
+// 旧容器按 dind + dind_host=old-dind 建出来，之后配置改成 none 并且把 dind_host 也换了
+// （不用 dind 了顺手改掉，很自然）。若只认当前的 dind_host，tcp://old-dind:2375 会被当成
+// 与我们无关而漏报，容器于是带着通往旧 DinD 的 DOCKER_HOST 继续跑——none 想断的正是这个。
+func TestDriftReason_LegacyDindHostChangedThenNone(t *testing.T) {
+	old := hostSocketSpec()
+	old.JobBackend = "dind"
+	old.DindHost = "old-dind"
+	legacy := legacyFactsFor(old) // DOCKER_HOST=tcp://old-dind:2375，无 socket 挂载
+
+	for _, nowHost := range []string{"new-dind", "runner-dind"} {
+		now := hostSocketSpec()
+		now.JobBackend = "none"
+		now.DindHost = nowHost // 改成别的地址 / 删掉后回落默认值
+		if got := now.driftReason(legacy, "sha256:aaa"); got == "" {
+			t.Fatalf("dind_host=%s 时漏报：容器仍可达 old-dind，配置却是 none", nowHost)
+		}
 	}
 }
 

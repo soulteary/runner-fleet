@@ -342,7 +342,7 @@ func (s containerSpec) backendDrift(facts *containerFacts) string {
 func (s containerSpec) legacyBackendDrift(facts *containerFacts) string {
 	got, _ := envValue(facts.Env, "DOCKER_HOST")
 	_, hasSocket := bindSource(facts.Binds, HostDockerSocket)
-	injected := hasSocket || s.looksInjected(got)
+	injected := hasSocket || looksInjectedDockerHost(got)
 
 	switch s.JobBackend {
 	case "none":
@@ -369,12 +369,25 @@ func (s containerSpec) legacyBackendDrift(facts *containerFacts) string {
 	return ""
 }
 
-// looksInjected DOCKER_HOST 的取值是否正是我们会注入的那两种之一
-func (s containerSpec) looksInjected(v string) bool {
+// looksInjectedDockerHost DOCKER_HOST 的取值是否像我们注入的。
+//
+// 刻意不与当前的 dind_host 比对：容器是按「当时」的配置建的，而切到 none 时往往顺手把
+// dind_host 也改掉或删掉（不用 dind 了留着它没意义）。只认当前值的话，tcp://old-dind:2375
+// 会被当成与我们无关而漏报，容器于是带着通往旧 DinD 的 DOCKER_HOST 继续跑——正是 none
+// 要断掉的那条路。所以按形状认，与 legacyBackendDrift 的 dind 分支保持一致。
+//
+// 代价：自定义镜像自带的 ENV DOCKER_HOST 若恰好也是 tcp://…:2375，这类旧容器会被多重建一次
+// （重建并不会去掉镜像自带的 ENV，那一次是白做的）。但重建后它就带上了标签，之后一律走标签
+// 比对，不会反复——拿一次无谓重建换「不漏掉一条真实的 Docker 通路」。
+func looksInjectedDockerHost(v string) bool {
 	if v == "" {
 		return false
 	}
-	return v == "unix://"+HostDockerSocket || v == "tcp://"+s.DindHost+":2375"
+	if v == "unix://"+HostDockerSocket {
+		return true
+	}
+	// 我们注入的 DinD 地址形如 tcp://<dind_host>:2375
+	return strings.HasPrefix(v, "tcp://") && strings.HasSuffix(v, ":2375")
 }
 
 func containsString(list []string, want string) bool {
