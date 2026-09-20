@@ -103,6 +103,26 @@ Two consequences for callers:
   so "registered but not running, so start it" cannot fire on a runner it could not reach.
 - Detection needs `/proc`, so it is Linux-only; elsewhere it reports "not running".
 
+### Runner directory permissions
+
+A runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams`
+there — the RSA private key the runner authenticates to GitHub with — and actions/runner
+sets no Unix permissions on it (`ConfigurationStore` only sets the Windows Hidden attribute,
+so the file follows the umask, usually 0644). The directory mode is therefore the only thing
+standing between that key and other local users on the host.
+
+`MkdirAll` leaves an existing directory's mode alone, so directories created by older
+versions stay 0755. `Preflight` reports those with a ready-to-run `chmod 700` instead of
+changing them: tightening a directory when the Manager and the container run as different
+UIDs would break a working deployment, and that call belongs to a person.
+
+`base_path` itself is left traversable — it holds no credentials, and it is the host mount
+point in container mode.
+
+This does not change what a job can reach. Under `job_docker_backend: host-socket` a job can
+bind-mount any host path, which the deployment docs already warn about; the mode protects
+against other local users, not against that.
+
 ## Makefile targets
 
 - `make help`: List all targets.

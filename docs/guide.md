@@ -182,4 +182,6 @@ Multiple runners per machine: use separate subdirs.
 
 **Sensitive files**: config/config.yaml and .env are in `.gitignore`. For each runner's `.github_check_token` use `chmod 600`; add `**/.github_check_token` to `.gitignore` if under version control.
 
+**Runner directory permissions**: each runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams` there — the RSA private key the runner authenticates to GitHub with — and actions/runner sets no Unix permissions on it, so the directory mode is what keeps other local users on the host from reading it and impersonating that runner. Directories created by earlier versions are still 0755; the startup self-test names them (`docker compose logs runner-manager | grep 自检`) with the exact `chmod 700` to run. It does not change them for you: under a UID mismatch (Manager as root, container as app(1001)) tightening a directory breaks a deployment that currently works, so look before you run it.
+
 [← Back to project home](../README.md)
