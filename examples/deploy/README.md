@@ -99,6 +99,15 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   接管过时，Manager 建不出它、容器内的 app(1001) 也读不动它——前者会让这个 Runner 拿不到令牌，
   后者会让没有注入过 `AGENT_TOKEN` 的旧容器**静默不鉴权**。根因与第一条的 chown 相同：
   `sudo chown -R 1001:1001 runners`，然后点该行「重建容器」。
+- **GitHub 上只出现一个 Runner，名字还是一串十六进制（像 `dd014243d356`）**
+  旧版本调 `config.sh` 时没传 `--name`，而它的默认值是本机 hostname；又因为 `config.sh` 是在
+  **Manager 容器内**执行的，一个部署里的每个 Runner 都用同一个名字（Manager 容器的 hostname）
+  去注册，GitHub 侧自然只剩一个。同时它也没传 `--unattended`，撞上重名会进入交互式重试循环，
+  在没有 TTY 的环境里一直耗到超时——而注册是单 worker 顺序执行的，后面排队的 Runner 全被堵住，
+  表现就是「加了三个，只有第一个成功，另外两个连日志都没有」。
+  该问题已修复。**升级不会自动修好已经注册错的 Runner**：先到目标仓库或组织的
+  Settings → Actions → Runners 删掉那个以容器 ID 命名的 Runner，再在界面上重新添加，
+  它们就会按各自的名称注册。
 - **添加 Runner 后日志里出现容器名冲突**（`The container name "/github-runner-<名称>" is already in use`）
   同一个 Runner 会被多条路径同时碰：Manager 启动 15 秒后的自动拉起、每 5 分钟的定时拉起、
   注册完成后的启动、界面点击。该问题已修复——启停与重建现在按容器名串行化，后到的一方会发现

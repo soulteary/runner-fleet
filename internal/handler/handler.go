@@ -90,7 +90,7 @@ func runRegistrationJob(j registrationJob) {
 			return
 		}
 	}
-	out, err := runConfigScript(installDir, j.URL, j.Token, j.Labels, 2*time.Minute)
+	out, err := runConfigScript(installDir, j.URL, j.Token, j.RunnerName, j.Labels, 2*time.Minute)
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
@@ -104,6 +104,12 @@ func runRegistrationJob(j registrationJob) {
 			(strings.Contains(outLower, "invalid") || strings.Contains(outLower, "expired") ||
 				strings.Contains(outLower, "already") || strings.Contains(outLower, "used")) {
 			msg += "。请为每个 Runner 在 GitHub 重新生成新的注册 Token"
+		}
+		// --unattended 下重名会直接失败退出，错误里只说「存在同名 Runner」，
+		// 但没说该去哪儿删——GitHub 侧的 Runner 列表不在本工具的管辖范围内
+		if strings.Contains(outLower, "runner exists with the same name") ||
+			strings.Contains(outLower, "a runner exists with the same name") {
+			msg += "。GitHub 上已存在同名 Runner：到目标仓库或组织的 Settings → Actions → Runners 删除它后重试"
 		}
 		writeRegistrationResult(installDir, false, msg)
 		log.Printf("[registration] %s 注册失败: %s", j.RunnerName, msg)
@@ -195,14 +201,26 @@ func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) 
 
 // runConfigScript 在 installDir 下执行 config 脚本向 GitHub 注册，超时 2 分钟；返回输出与 error
 // 将 installDir 转为绝对路径，避免相对路径在 exec 时随进程 CWD 解析导致找不到 config 脚本
-func runConfigScript(installDir, url, token string, labels []string, timeout time.Duration) ([]byte, error) {
+//
+// 必须传 --name：不传时 config.sh 取本机 hostname 作为 Runner 名，而它是在 Manager 容器内
+// 执行的，于是一个部署里的每个 Runner 都用同一个名字（Manager 容器的 hostname）去注册。
+// 结果是 GitHub 上只看得到一个 Runner，名字还是个容器 ID，与界面上的名称对不上。
+//
+// 必须传 --unattended：撞上重名时，带 --unattended 会直接抛错退出，不带则进入交互式重试循环
+// （"Failed to replace the runner. Try again or ctrl-c to quit"）。这里没有 TTY，
+// 那个循环会一直耗到超时才结束，而注册是单 worker 顺序执行的，后面排队的 Runner 全被堵住——
+// 表现为「加了三个，只有第一个注册成功，另外两个连一行日志都没有」。
+func runConfigScript(installDir, url, token, name string, labels []string, timeout time.Duration) ([]byte, error) {
 	absDir, err := filepath.Abs(installDir)
 	if err != nil {
 		return nil, fmt.Errorf("解析 runner 路径失败: %w", err)
 	}
 	installDir = absDir
 	configScript := filepath.Join(installDir, runner.ConfigScriptName())
-	args := []string{"--url", url, "--token", token}
+	args := []string{"--url", url, "--token", token, "--unattended"}
+	if name != "" {
+		args = append(args, "--name", name)
+	}
 	if len(labels) > 0 {
 		args = append(args, "--labels", strings.Join(labels, ","))
 	}
