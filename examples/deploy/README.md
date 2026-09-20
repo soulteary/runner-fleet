@@ -90,10 +90,19 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
 - **`保存配置失败: open /app/config/config.yaml: permission denied`**
   Manager 以 UID 1001 运行，而 `config.yaml` 是 root 放进去的。**先放文件，再 chown**：
   `sudo chown -R 1001:1001 config runners`。不用重启，下一次写配置就会成功。
+- **Runner 标着「配置已变更」，悬停显示差异是 `agent_token`**
+  容器内的 Agent 暴露 `/start`、`/stop` 等控制接口，同网络的任何容器都能访问，因此 Manager 会给
+  每个 Runner 生成一个令牌，创建容器时以 `-e AGENT_TOKEN=` 注入。本特性之前创建的容器没有这个
+  变量，其 Agent 谁都不拒绝，所以会被判为漂移。点「重建容器」补上即可（已停止的下次启动时自动补）。
+- **日志里出现「令牌文件 … 已存在但读不到内容」，或 Agent 侧「令牌文件 … 存在但无法读取，接口将不启用鉴权」**
+  令牌文件是 `runners/<名称>/.agent_token`（0600，属主为 Manager 的 UID 1001）。runners 目录被 root
+  接管过时，Manager 建不出它、容器内的 app(1001) 也读不动它——前者会让这个 Runner 拿不到令牌，
+  后者会让没有注入过 `AGENT_TOKEN` 的旧容器**静默不鉴权**。根因与第一条的 chown 相同：
+  `sudo chown -R 1001:1001 runners`，然后点该行「重建容器」。
 - **添加 Runner 后日志里出现容器名冲突**（`The container name "/github-runner-<名称>" is already in use`）
-  Manager 启动 15 秒后会把「已注册但未运行」的 Runner 统一拉起一次，若此时后台注册任务正好也在
-  创建同一个容器，就会有一方报冲突。容器实际已经建好并在运行，可以忽略；想避开就在 Manager
-  启动 20 秒后再添加 Runner。
+  同一个 Runner 会被多条路径同时碰：Manager 启动 15 秒后的自动拉起、每 5 分钟的定时拉起、
+  注册完成后的启动、界面点击。该问题已修复——启停与重建现在按容器名串行化，后到的一方会发现
+  容器已存在并转为启动，不再重复创建。仍在旧版本上时这条日志可以忽略，容器实际已经建好并在运行。
 - **`docker create 失败。输出: (无输出): signal: killed`**
   旧版本里，启停 Runner 的上下文挂在 HTTP 请求上，浏览器刷新（添加成功后有 5 秒自动刷新）会取消
   在途请求，连带把 `docker create` 子进程 SIGKILL 掉。该问题已修复；仍在旧版本上时，改用 API 触发

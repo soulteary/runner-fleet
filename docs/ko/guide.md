@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 일부 필드는 환경 변수로 덮어쓸 수 있음(`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` 등). 전체 컨테이너 시 `.env`만 수정하면 됨. `.env.example` 참조.
 
-**검증**: 중복 이름 불가. 컨테이너 모드에서는 컨테이너 이름 충돌을 검사합니다. `job_docker_backend`는 `dind`/`host-socket`/`none`만 허용. 컨테이너 모드에서 컨테이너 `base_path` 사용 시 `volume_host_path` 필수. `job_docker_backend`를 생략하면 `dind`. 백엔드 변경 후 UI에서 Runner 재시작하세요.
+**검증**: 중복 이름 불가. 컨테이너 모드에서는 컨테이너 이름 충돌을 검사합니다. `job_docker_backend`는 `dind`/`host-socket`/`none`만 허용. 컨테이너 모드에서 컨테이너 `base_path` 사용 시 `volume_host_path` 필수. `job_docker_backend`를 생략하면 `dind`. 백엔드 변경 후 **중지된** 컨테이너는 다음 시작 시 자동으로 재생성되고, **실행 중인** 컨테이너는 "설정 변경됨"으로 표시되며 해당 행의 "컨테이너 재생성"으로 즉시 적용됩니다 — 위의 "설정 변경과 컨테이너 재생성" 참고.
 
 예시:
 
