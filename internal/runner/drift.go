@@ -31,6 +31,11 @@ const runnerMountDest = "/runner"
 // 于是每次启动都把容器删了重建。标签是我们自己写的，不会与镜像混淆。
 const labelJobBackend = "io.runner-fleet.job-docker-backend"
 
+// labelNetwork 创建时写下的网络名。与后端标签同理：
+// 容器可以事后被 docker network connect 接进别的网络，所以「它连着哪些网络」
+// 回答不了「它是按哪个网络建的」，只有创建时记下来才作数。
+const labelNetwork = "io.runner-fleet.network"
+
 // containerSpec 按当前配置推导出的容器形态
 type containerSpec struct {
 	ContainerName string
@@ -112,6 +117,7 @@ func (s containerSpec) createArgs() ([]string, error) {
 		"-v", s.runnerBind(),
 		"--network", s.Network,
 		"--label", labelJobBackend + "=" + s.JobBackend,
+		"--label", labelNetwork + "=" + s.Network,
 	}
 	// 资源上限：不限制时单个失控 Job 能耗尽整机资源，连带拖垮 Manager
 	args = append(args, s.Limits.Args()...)
@@ -147,8 +153,10 @@ type containerFacts struct {
 	Binds    []string
 	Env      []string
 	Networks []string
-	GroupAdd []string
-	Labels   map[string]string
+	// NetworkMode 是 docker create --network 传进去的那个，与事后 connect 上来的区分开
+	NetworkMode string
+	GroupAdd    []string
+	Labels      map[string]string
 }
 
 // dockerInspectRaw 只取需要的字段，其余忽略
@@ -205,7 +213,8 @@ func parseInspect(out []byte) (*containerFacts, error) {
 		GroupAdd: c.HostConfig.GroupAdd,
 		Labels:   c.Config.Labels,
 	}
-	// 网络名在 NetworkMode 与 NetworkSettings.Networks 里都能拿到，两处都收，比对时任一命中即可
+	facts.NetworkMode = c.HostConfig.NetworkMode
+	// 网络名在 NetworkMode 与 NetworkSettings.Networks 里都能拿到，两处都收
 	if c.HostConfig.NetworkMode != "" {
 		facts.Networks = append(facts.Networks, c.HostConfig.NetworkMode)
 	}
@@ -291,8 +300,8 @@ func (s containerSpec) driftReason(facts *containerFacts, desiredImageID string)
 	if desiredImageID != "" && facts.ImageID != "" && facts.ImageID != desiredImageID {
 		return fmt.Sprintf("container_image rebuilt: %s", s.Image)
 	}
-	if len(facts.Networks) > 0 && !containsString(facts.Networks, s.Network) {
-		return fmt.Sprintf("container_network: %s → %s", strings.Join(facts.Networks, ","), s.Network)
+	if reason := s.networkDrift(facts); reason != "" {
+		return reason
 	}
 	if src, ok := bindSource(facts.Binds, runnerMountDest); ok && src != s.MountSrc {
 		return fmt.Sprintf("volume_host_path: %s → %s", src, s.MountSrc)
@@ -321,6 +330,38 @@ func (s containerSpec) driftReason(facts *containerFacts, desiredImageID string)
 		if len(facts.GroupAdd) == 0 {
 			return "docker_gid: (none) → " + gid
 		}
+	}
+	return ""
+}
+
+// networkDrift 比对容器所在网络：新容器看创建标签，旧容器只能从 NetworkMode 推断。
+//
+// 不能只问「容器有没有连在目标网络上」：docker create --network 只设一个网络，
+// 而容器可以另外被 docker network connect 接进别的网络。配置从 runner-net 改成 net-b、
+// 容器又恰好两个都连着时，「任一命中」会放行，于是它继续连着 runner-net——
+// 恰恰是这次改配置想断掉的那条。
+//
+// NetworkMode 才是 create 时那个参数，但它可能被规范化（或在旧 docker 上取值不同），
+// 直接拿它做严格比对，万一对不上就会每次启动都重建。所以与后端一样记在创建标签上：
+// 带标签的以标签为准，没有标签的才退回 NetworkMode 推断——推断即使误判也只重建一次，
+// 重建后就有标签了，不会反复。
+func (s containerSpec) networkDrift(facts *containerFacts) string {
+	if got, ok := facts.Labels[labelNetwork]; ok {
+		if got != s.Network {
+			return fmt.Sprintf("container_network: %s → %s", got, s.Network)
+		}
+		return ""
+	}
+	if facts.NetworkMode != "" {
+		if facts.NetworkMode != s.Network {
+			return fmt.Sprintf("container_network: %s → %s", facts.NetworkMode, s.Network)
+		}
+		return ""
+	}
+	// 连 NetworkMode 都拿不到（旧 docker、信息不全）：退回「连着就算数」，
+	// 与其余比对项一样，宁可漏报也不凭空把容器删了重建
+	if len(facts.Networks) > 0 && !containsString(facts.Networks, s.Network) {
+		return fmt.Sprintf("container_network: %s → %s", strings.Join(facts.Networks, ","), s.Network)
 	}
 	return ""
 }

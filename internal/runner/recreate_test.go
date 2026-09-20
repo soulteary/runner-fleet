@@ -76,7 +76,10 @@ func stoppedHostSocketInspect(mountSrc string) string {
 	  "Config": {
 	    "Image": "img:tag",
 	    "Env": ["DOCKER_HOST=unix:///var/run/docker.sock", "AGENT_TOKEN=already-injected"],
-	    "Labels": {"io.runner-fleet.job-docker-backend": "host-socket"}
+	    "Labels": {
+      "io.runner-fleet.job-docker-backend": "host-socket",
+      "io.runner-fleet.network": "runner-net"
+    }
 	  },
 	  "HostConfig": {
 	    "Binds": ["` + mountSrc + `:/runner", "/var/run/docker.sock:/var/run/docker.sock"],

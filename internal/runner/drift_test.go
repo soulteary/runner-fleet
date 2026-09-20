@@ -23,19 +23,23 @@ func hostSocketSpec() containerSpec {
 // factsFor 按 spec 造出「一致」的 inspect 结果（带创建标签，即新版本建的容器）
 func factsFor(s containerSpec) *containerFacts {
 	f := legacyFactsFor(s)
-	f.Labels = map[string]string{labelJobBackend: s.JobBackend}
+	f.Labels = map[string]string{
+		labelJobBackend: s.JobBackend,
+		labelNetwork:    s.Network,
+	}
 	return f
 }
 
 // legacyFactsFor 不带标签，模拟旧版本建出来的容器
 func legacyFactsFor(s containerSpec) *containerFacts {
 	f := &containerFacts{
-		Running:  true,
-		Status:   "running",
-		ImageRef: s.Image,
-		ImageID:  "sha256:aaa",
-		Binds:    []string{s.runnerBind()},
-		Networks: []string{s.Network},
+		Running:     true,
+		Status:      "running",
+		ImageRef:    s.Image,
+		ImageID:     "sha256:aaa",
+		Binds:       []string{s.runnerBind()},
+		Networks:    []string{s.Network},
+		NetworkMode: s.Network,
 	}
 	if host := s.dockerHostEnv(); host != "" {
 		f.Env = append(f.Env, "DOCKER_HOST="+host)
@@ -142,6 +146,62 @@ func TestDriftReason_NetworkAndMount(t *testing.T) {
 	moved.MountSrc = "/data/runners/a"
 	if got := moved.driftReason(facts, "sha256:aaa"); !strings.Contains(got, "/data/runners/a") {
 		t.Fatalf("挂载目录变化未被检出: %q", got)
+	}
+}
+
+// TestDriftReason_NetworkUsesCreationNotAttachment
+// docker create --network 只设一个网络，但容器可以事后被 docker network connect
+// 接进别的网络。所以「它连着目标网络吗」回答不了「它是按哪个网络建的」：
+// 配置从 runner-net 改到 net-b、而容器两个都连着时，按「连着就算数」会放行，
+// 于是它继续连着 runner-net——恰恰是这次改配置想断掉的那条。
+func TestDriftReason_NetworkUsesCreationNotAttachment(t *testing.T) {
+	spec := hostSocketSpec() // Network = runner-net
+
+	// 新版本建的容器：以创建标签为准
+	labeled := factsFor(spec)
+	labeled.Networks = []string{"runner-net", "net-b"} // 手工 connect 了 net-b
+
+	// 配置仍是 runner-net：多连一个网络是运维自己接的，不该因此重建
+	if got := spec.driftReason(labeled, "sha256:aaa"); got != "" {
+		t.Fatalf("多连一个网络不该触发重建: %q", got)
+	}
+
+	// 配置改成 net-b：标签记的还是 runner-net，必须报
+	moved := spec
+	moved.Network = "net-b"
+	if got := moved.driftReason(labeled, "sha256:aaa"); got != "container_network: runner-net → net-b" {
+		t.Fatalf("配置改网络后仍连着旧网络，未被检出: %q", got)
+	}
+
+	// 旧版本建的容器没有标签，退回 NetworkMode 推断（它才是 create 时那个参数）
+	legacy := legacyFactsFor(spec)
+	legacy.Networks = []string{"runner-net", "net-b"}
+	if got := moved.driftReason(legacy, "sha256:aaa"); got != "container_network: runner-net → net-b" {
+		t.Fatalf("旧容器按 NetworkMode 推断未被检出: %q", got)
+	}
+	if got := spec.driftReason(legacy, "sha256:aaa"); got != "" {
+		t.Fatalf("旧容器 NetworkMode 与配置一致时不该报: %q", got)
+	}
+
+	// 连 NetworkMode 都拿不到时保持原先的「连着就算数」，宁可漏报也不凭空重建
+	blind := legacyFactsFor(spec)
+	blind.NetworkMode = ""
+	blind.Networks = []string{"runner-net", "net-b"}
+	if got := moved.driftReason(blind, "sha256:aaa"); got != "" {
+		t.Fatalf("信息不全时不该报漂移: %q", got)
+	}
+}
+
+// TestCreateArgs_RecordsNetworkLabel 创建时必须把网络记进标签，否则后续只能靠推断
+func TestCreateArgs_RecordsNetworkLabel(t *testing.T) {
+	spec := hostSocketSpec()
+	args, err := spec.createArgs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, labelNetwork+"=runner-net") {
+		t.Fatalf("create 参数缺少网络标签: %s", joined)
 	}
 }
 
