@@ -58,6 +58,11 @@ func driftTestConfig(t *testing.T, backend string) (*config.Config, string) {
 	if err := os.MkdirAll(installDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// 漂移只对已注册的 Runner 有意义：没有 .runner 的目录状态是 new，
+	// ContainerRunnerStatus 会如实回落到磁盘状态而不是 installed
+	if err := os.WriteFile(filepath.Join(installDir, ".runner"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	return &config.Config{Runners: config.RunnersConfig{
 		BasePath:         base,
 		ContainerMode:    true,

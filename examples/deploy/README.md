@@ -48,6 +48,19 @@ docker compose up -d
 
 打开界面逐个添加 Runner。**一个 Runner 同时只跑一个 Job**，要 N 路并发就开 N 个 Runner。
 
+怎么确认 N 路并发真的生效：
+
+1. GitHub 的 Settings → Actions → Runners 里应当看到 **N 个**各自独立的 Runner，名字与界面上的一致，
+   状态都是 Idle。只出现一个、名字是一串十六进制的，见排障里
+   「GitHub 上只出现一个 Runner」那条。
+2. 界面上 N 行都应显示「运行中」。**只有已注册且在运行的 Runner 才会接 Job**；
+   若一行都不显示运行中，见排障里「每 5 分钟刷一遍『已定时拉起』」那条。
+3. 跑一个带 `matrix` 的 workflow（N 个互不依赖的 Job），在 Actions 页面看它们是否同时进入
+   in-progress。若只有一个在跑、其余排队，说明实际在线的 Runner 不足 N 个。
+
+标签会影响分派：`runs-on` 命中哪些 Runner，就只在那批里挑空闲的。想让一组 Runner 共同承担同一类
+Job，就给它们相同的标签。
+
 ## 多容器下的缓存：什么共享、什么隔离
 
 GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，共享与隔离要分开处理：
@@ -108,6 +121,15 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   该问题已修复。**升级不会自动修好已经注册错的 Runner**：先到目标仓库或组织的
   Settings → Actions → Runners 删掉那个以容器 ID 命名的 Runner，再在界面上重新添加，
   它们就会按各自的名称注册。
+- **日志里每 5 分钟刷一遍「已定时拉起 runner: …」，把所有 Runner 轮番拉一遍；界面上也从来不显示「运行中」**
+  运行状态此前取自 pid 文件（`Runner.Listener.pid`，回退到 `.path`），而 actions/runner 这两个都不写：
+  它的启动脚本（`run.sh`、`run-helper.sh`、`runsvc.sh`）没有一处落 pid 文件，`.path` 里装的是 PATH
+  字符串。于是每个 Runner 都被读成「已注册但没在跑」，5 分钟一次的巡检每轮都把它们再拉起一遍。
+  容器模式下还多错一层：Manager 与 Runner 不在同一个 PID namespace，就算真有 pid 文件也对不上号。
+  该问题已修复——现在查进程表判定，容器模式下由各容器内的 Agent 作答，探测不到时置为 `unknown`
+  并跳过拉起（不确知它没在跑就别动它）。升级即可，不需要重新注册任何 Runner。
+  同一个根因还有两处表现：默认（非容器）模式下点「停止」必然报
+  `未找到 runner pid 文件或 pid 无效`；Agent 里「已在运行就不重复启动」的护栏形同虚设。
 - **添加 Runner 后日志里出现容器名冲突**（`The container name "/github-runner-<名称>" is already in use`）
   同一个 Runner 会被多条路径同时碰：Manager 启动 15 秒后的自动拉起、每 5 分钟的定时拉起、
   注册完成后的启动、界面点击。该问题已修复——启停与重建现在按容器名串行化，后到的一方会发现

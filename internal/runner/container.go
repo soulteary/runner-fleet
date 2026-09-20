@@ -31,13 +31,19 @@ type AgentStatus struct {
 	Running bool   `json:"running"`
 }
 
+// agentBaseURL 拼出容器内 Agent 的基址。做成变量是为了让测试把它指向本地
+// httptest 服务——容器名在测试进程里解析不了，否则只能验到「连不上」那条路径。
+var agentBaseURL = func(containerName string, port int) string {
+	return fmt.Sprintf("http://%s:%d", containerName, port)
+}
+
 // GetAgentStatus 请求 Runner 容器内 Agent 的 /status，超时 5 秒。
 // token 为空时不带鉴权头，兼容本特性之前创建的容器。
 func GetAgentStatus(ctx context.Context, containerName string, port int, token string) (*AgentStatus, error) {
 	if port <= 0 {
 		port = 8081
 	}
-	url := fmt.Sprintf("http://%s:%d/status", containerName, port)
+	url := agentBaseURL(containerName, port) + "/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func CallAgentStart(ctx context.Context, containerName string, port int, token s
 	if port <= 0 {
 		port = 8081
 	}
-	url := fmt.Sprintf("http://%s:%d/start", containerName, port)
+	url := agentBaseURL(containerName, port) + "/start"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return err
@@ -413,7 +419,12 @@ func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 
 // ContainerRunnerStatus 在容器模式下获取某 runner 的状态：先看容器是否运行，再问 Agent。
 // 同一次 inspect 顺带比对创建参数，drift 非空表示容器是按旧配置建的。
-// 容器未运行时仍返回 StatusInstalled（与磁盘一致），仅 Running=false，便于界面显示「已注册未运行」
+//
+// 容器不存在或未运行时没有人可问，此时如实回落到磁盘状态（已注册的仍为 StatusInstalled，
+// 界面据此显示「已注册未运行」）。这里曾经不看磁盘、一律返回 StatusInstalled，于是配置里
+// 一个从没注册过的 runner（磁盘上是 new/missing）会被说成「已注册未运行」——界面显示错误，
+// 而后台的「已注册未运行则拉起」会照着给它建容器、发 /start；安装目录压根不存在时，
+// bind mount 的源路径还会被 Docker 以 root 属主创建出来，之后 Manager（UID 1001）就写不进去了。
 func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, installDir string) (running bool, status Status, drift string, err error) {
 	cn := ContainerName(runnerName)
 	facts, err := inspectRunnerContainer(ctx, cn)
@@ -421,7 +432,7 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 		return false, StatusUnknown, "", newProbeError(ProbeErrorTypeDockerAccess, err)
 	}
 	if facts == nil {
-		return false, StatusInstalled, "", nil
+		return false, diskStatus(installDir), "", nil
 	}
 	// 这里也要 Ensure 而不是 Read：升级时那些正在运行的旧容器目录里还没有令牌文件，
 	// 而自动拉起只管没在跑的，它们永远等不到有人替它生成——不生成就报不出 agent_token 漂移，
@@ -433,7 +444,8 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	WarnAgentTokenUnavailable(installDir, tokenErr)
 	drift = driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, cachedImageID)
 	if !facts.Running {
-		return false, StatusInstalled, drift, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
+		// 容器未跑时保留磁盘状态（已注册即「已注册未运行」），不覆盖为 unknown
+		return false, diskStatus(installDir), drift, nil
 	}
 	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, token)
 	if err != nil {

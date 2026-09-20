@@ -177,15 +177,23 @@ func runAutoStartRunners(configPath string) {
 		log.Printf("自动启动 runner 时加载配置失败: %v", err)
 		return
 	}
-	list := runner.List(cfg)
-	ctx := context.Background()
-	for _, info := range list {
-		if info.Status == runner.StatusInstalled && !info.Running {
-			if err := runner.StartIfInstalled(ctx, cfg, info.Name, info.InstallDir); err != nil {
-				log.Printf("自动启动 runner %s 失败: %v", info.Name, err)
-			} else {
-				log.Printf("已自动启动 runner: %s", info.Name)
-			}
+	startIdleRunners(context.Background(), cfg, "自动启动")
+}
+
+// startIdleRunners 把「已注册但没在跑」的 runner 拉起来，供启动后的一次性拉起与定时巡检共用。
+//
+// 判据取自 ListWithLiveStatus 而不是 List：容器模式下 Manager 与 Runner 不在同一个
+// PID namespace，List 的 Running 恒为 false，照着它拉会把每个 runner 每轮都再起一遍。
+// 探测不出来的（StatusUnknown）一律跳过——不确知它没在跑，就别动它。
+func startIdleRunners(ctx context.Context, cfg *config.Config, action string) {
+	for _, info := range runner.ListWithLiveStatus(ctx, cfg) {
+		if info.Status != runner.StatusInstalled || info.Running {
+			continue
+		}
+		if err := runner.StartIfInstalled(ctx, cfg, info.Name, info.InstallDir); err != nil {
+			log.Printf("%s runner %s 失败: %v", action, info.Name, err)
+		} else {
+			log.Printf("已%s runner: %s", action, info.Name)
 		}
 	}
 }
@@ -204,17 +212,7 @@ func runRegistrationCheck(configPath string) {
 			githubcheck.Run(cfg)
 			// 首次不执行拉起，避免与 runAutoStartRunners(15s) 重叠导致重复启动同一 runner
 			if !firstRun {
-				list := runner.List(cfg)
-				ctx := context.Background()
-				for _, info := range list {
-					if info.Status == runner.StatusInstalled && !info.Running {
-						if err := runner.StartIfInstalled(ctx, cfg, info.Name, info.InstallDir); err != nil {
-							log.Printf("定时拉起 runner %s 失败: %v", info.Name, err)
-						} else {
-							log.Printf("已定时拉起 runner: %s", info.Name)
-						}
-					}
-				}
+				startIdleRunners(context.Background(), cfg, "定时拉起")
 			}
 			firstRun = false
 		}
