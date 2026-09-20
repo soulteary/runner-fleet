@@ -33,9 +33,7 @@ func newRunnerDir(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, ".runner"), []byte("{}"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/bash\nsleep 120\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	writeBlockingRunScript(t, dir)
 	t.Setenv("RUNNER_INSTALL_DIR", dir)
 	t.Cleanup(func() {
 		for _, pid := range runnerproc.Find(dir) {
@@ -162,5 +160,26 @@ func TestGetStatus_UnregisteredDirIsNew(t *testing.T) {
 	dir := t.TempDir()
 	if status, running := getStatus(dir); status != "new" || running {
 		t.Fatalf("没有 .runner 时应为 new/false，得到 %q/%v", status, running)
+	}
+}
+
+// writeBlockingRunScript 写一个会一直挂住、且**不产生任何子进程**的 run.sh。
+//
+// 不能用 `sleep 120`：bash 会 fork 一个子进程去 exec sleep，而在 fork 与 execve 之间，
+// 子进程的 /proc/<pid>/cmdline 仍是 bash 的 argv（`/bin/bash <dir>/run.sh`），
+// 于是被认成第二个监护脚本。窗口只有几微秒，本机几乎碰不到，CI 上机器一忙就中招——
+// 「10 次 /start 之后应只有 1 个 runner 进程，实际 2 个: [2727 2728]」正是这么来的。
+//
+// read 是 builtin，重定向由当前 shell 自己完成，打开一个没有写端的 FIFO 会就地阻塞，
+// 全程不 fork，进程数因此是确定的。
+func writeBlockingRunScript(t *testing.T, dir string) {
+	t.Helper()
+	fifo := filepath.Join(dir, ".test-block")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatalf("创建 FIFO 失败: %v", err)
+	}
+	script := "#!/bin/bash\nread -r -t 120 < \"" + fifo + "\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
 	}
 }
