@@ -120,3 +120,17 @@ jobs:
       - name: Skip (no project structure)
         if: steps.modroot.outputs.found != 'true'
         run: 'echo "Skipped: no go.mod + cmd/runner-manager in this repo."'
+
+  image:
+    name: Image build context
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 与 CI (Agent) 中的同名 job 成对：镜像的 builder 阶段只 COPY 了工作区的一部分，
+      # 完整工作区里的 go build 验不出构建上下文缺路径。Manager 侧目前 COPY 了 cmd 与
+      # internal 全量、没出过问题，这一步是防止它哪天被收窄成 Dockerfile.runner 那样。
+      - name: Build Manager image builder stage
+        run: docker build --target builder -f Dockerfile .

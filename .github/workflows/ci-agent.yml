@@ -89,3 +89,20 @@ jobs:
       - name: Skip (no project structure)
         if: steps.modroot.outputs.found != 'true'
         run: 'echo "Skipped: no go.mod + cmd/runner-agent in this repo."'
+
+  image:
+    name: Image build context
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 上面的 Build 在完整工作区里跑 go build，而镜像的 builder 阶段只 COPY 了其中一部分，
+      # 两者能力不同：Agent 新 import 一个 internal 包，Build 照过，镜像构建却直接失败。
+      # #25 就是这么漏过去的，之后每一次 main 推送都把 Publish image (Runner) 打红。
+      # 这里按 Dockerfile 自己的 COPY 列表真构建一次 builder 阶段——不另写一份路径清单，
+      # 所以它不会跟 Dockerfile 漂移。只构建 builder：运行阶段的 apt 安装与发布无关，
+      # 要验的是「构建上下文够不够编出这个二进制」。
+      - name: Build Runner image builder stage
+        run: docker build --target builder -f Dockerfile.runner .
