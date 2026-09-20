@@ -20,8 +20,15 @@ func hostSocketSpec() containerSpec {
 	}
 }
 
-// factsFor 按 spec 造出「一致」的 inspect 结果，测试再逐项改动它
+// factsFor 按 spec 造出「一致」的 inspect 结果（带创建标签，即新版本建的容器）
 func factsFor(s containerSpec) *containerFacts {
+	f := legacyFactsFor(s)
+	f.Labels = map[string]string{labelJobBackend: s.JobBackend}
+	return f
+}
+
+// legacyFactsFor 不带标签，模拟旧版本建出来的容器
+func legacyFactsFor(s containerSpec) *containerFacts {
 	f := &containerFacts{
 		Running:  true,
 		Status:   "running",
@@ -239,10 +246,67 @@ func TestDesiredContainerSpec_UsesVolumeHostPath(t *testing.T) {
 func TestDriftFromFacts_SkipsNonContainerMode(t *testing.T) {
 	cfg := &config.Config{Runners: config.RunnersConfig{BasePath: "/app/runners"}}
 	spec := hostSocketSpec()
-	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", factsFor(spec)); got != "" {
+	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("非容器模式不该报漂移: %q", got)
 	}
-	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", factsFor(spec)); got != "" {
+	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("配置为空不该报漂移: %q", got)
+	}
+}
+
+// TestDriftReason_ImageProvidedDockerHostIsNotOurs
+// 自定义 Runner 镜像在 Dockerfile 里写了 ENV DOCKER_HOST 时，docker inspect 的 Config.Env
+// 里也会有它。若把它当成我们注入的，backend=none 会被永远判成漂移，每次启动都删容器重建。
+func TestDriftReason_ImageProvidedDockerHostIsNotOurs(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.JobBackend = "none"
+
+	// 新容器：有标签，直接按标签判，镜像自带的 ENV 干扰不到
+	withLabel := factsFor(spec)
+	withLabel.Env = append(withLabel.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(withLabel, "sha256:aaa"); got != "" {
+		t.Fatalf("有标签时不该被镜像自带的 DOCKER_HOST 干扰: %q", got)
+	}
+
+	// 旧容器：没有标签，只认我们会写出来的取值，镜像自带的一律当作与我们无关
+	legacy := legacyFactsFor(spec)
+	legacy.Env = append(legacy.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(legacy, "sha256:aaa"); got != "" {
+		t.Fatalf("旧容器上镜像自带的 DOCKER_HOST 被误判为漂移: %q", got)
+	}
+
+	// 但真正由我们注入的值仍要认出来：之前是 host-socket，现在配置成 none
+	wasHostSocket := legacyFactsFor(hostSocketSpec())
+	if got := spec.driftReason(wasHostSocket, "sha256:aaa"); got == "" {
+		t.Fatal("host-socket → none 漏报")
+	}
+}
+
+// TestDriftReason_LabelWins 标签与配置不一致即漂移，不必再看 DOCKER_HOST
+func TestDriftReason_LabelWins(t *testing.T) {
+	spec := hostSocketSpec()
+	facts := factsFor(spec) // 标签记的是 host-socket
+
+	want := spec
+	want.JobBackend = "dind"
+	got := want.driftReason(facts, "sha256:aaa")
+	if got != "job_docker_backend: host-socket → dind" {
+		t.Fatalf("标签比对结果不对: %q", got)
+	}
+}
+
+// TestCreateArgs_RecordsBackendLabel 创建时必须打上标签，否则后续只能靠推断
+func TestCreateArgs_RecordsBackendLabel(t *testing.T) {
+	for _, backend := range []string{"dind", "host-socket", "none"} {
+		spec := hostSocketSpec()
+		spec.JobBackend = backend
+		args, err := spec.createArgs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := labelJobBackend + "=" + backend
+		if !containsString(args, want) {
+			t.Fatalf("backend=%s 的 create 参数缺少标签 %s: %v", backend, want, args)
+		}
 	}
 }

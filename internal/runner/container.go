@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -179,6 +180,21 @@ func ManagerDockerHostIsDind() bool {
 // HostDockerSocket job_docker_backend=host-socket 时挂载进 Runner 容器的宿主机 Docker socket
 const HostDockerSocket = "/var/run/docker.sock"
 
+// runnerOps 按 Runner 串行化启停与重建。
+//
+// 同一个 Runner 会被多条路径同时碰：Manager 启动 15 秒后的自动拉起、每 5 分钟的定时拉起、
+// 注册完成后的启动、界面上的点击。以前撞车最多留下一条「container name is already in use」
+// 的日志；现在重建会先 docker rm，两个调用交叉执行就可能删掉对方刚建好的容器。
+var runnerOps sync.Map // 容器名 -> *sync.Mutex
+
+// lockRunnerOps 取得某个容器的操作锁，返回解锁函数
+func lockRunnerOps(containerName string) func() {
+	v, _ := runnerOps.LoadOrStore(containerName, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 // 启动容器后给 Agent 的就绪时间：新建的容器要等镜像入口起来，已存在的容器快一些。
 // 做成变量只为测试能调小，生产路径上取值与此前一致。
 var (
@@ -278,6 +294,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return fmt.Errorf("%s", errContainerModeNeedHostDocker)
 	}
 	cn := ContainerName(runnerName)
+	defer lockRunnerOps(cn)()
 	// 在创建/启动容器之前写好令牌：容器内 Agent 启动时即可从挂载目录读到
 	token, tokenErr := EnsureAgentToken(installDir)
 	if tokenErr != nil {
@@ -289,7 +306,8 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return err
 	}
 	if facts != nil {
-		drift := driftFromFacts(ctx, cfg, runnerName, installDir, facts)
+		// 启停路径不用缓存：刚 build 完就点「启动」是常见操作，读到旧镜像 ID 会让重建不发生
+		drift := driftFromFacts(ctx, cfg, runnerName, installDir, facts, resolveImageID)
 		switch {
 		case forceRecreate:
 			log.Printf("按要求重建容器 %s%s", cn, driftSuffix(drift))
@@ -366,6 +384,7 @@ func driftSuffix(drift string) string {
 // StopRunnerContainer 停止容器（不删除，便于下次 start）
 func StopRunnerContainer(ctx context.Context, runnerName string) error {
 	cn := ContainerName(runnerName)
+	defer lockRunnerOps(cn)()
 	out, err := dockerCmd(ctx, "stop", "-t", "30", cn)
 	if err != nil {
 		inspectOut, _ := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", cn)
@@ -380,6 +399,7 @@ func StopRunnerContainer(ctx context.Context, runnerName string) error {
 // RemoveRunnerContainer 停止并删除 Runner 容器（移除 runner 时调用）
 func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 	cn := ContainerName(runnerName)
+	defer lockRunnerOps(cn)()
 	_, _ = dockerCmd(ctx, "stop", "-t", "30", cn)
 	out, err := dockerCmd(ctx, "rm", "-f", cn)
 	if err != nil {
@@ -403,7 +423,7 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	if facts == nil {
 		return false, StatusInstalled, "", nil
 	}
-	drift = driftFromFacts(ctx, cfg, runnerName, installDir, facts)
+	drift = driftFromFacts(ctx, cfg, runnerName, installDir, facts, cachedImageID)
 	if !facts.Running {
 		return false, StatusInstalled, drift, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}

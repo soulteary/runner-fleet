@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 )
@@ -177,5 +178,72 @@ func TestContainerRunnerStatus_ReportsDrift(t *testing.T) {
 	}
 	if !strings.Contains(drift, "dind") {
 		t.Fatalf("drift = %q, 应指出后端已改为 dind", drift)
+	}
+}
+
+// TestLockRunnerOps_SerializesSameRunner 同一个 Runner 的启停必须串行：
+// 重建会先 docker rm 再 create，两路交叉执行就可能删掉对方刚建好的容器。
+func TestLockRunnerOps_SerializesSameRunner(t *testing.T) {
+	unlock := lockRunnerOps("github-runner-a")
+
+	acquired := make(chan struct{})
+	go func() {
+		defer lockRunnerOps("github-runner-a")()
+		close(acquired)
+	}()
+
+	select {
+	case <-acquired:
+		t.Fatal("同名 Runner 的第二次操作不该在持锁期间拿到锁")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	unlock()
+	select {
+	case <-acquired:
+	case <-time.After(2 * time.Second):
+		t.Fatal("释放后第二次操作仍未拿到锁")
+	}
+}
+
+// TestLockRunnerOps_DifferentRunnersRunInParallel 不同 Runner 之间不该互相排队
+func TestLockRunnerOps_DifferentRunnersRunInParallel(t *testing.T) {
+	defer lockRunnerOps("github-runner-a")()
+
+	done := make(chan struct{})
+	go func() {
+		defer lockRunnerOps("github-runner-b")()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("不同 Runner 被无谓地串行了")
+	}
+}
+
+// TestImageIDCache_StatusPathCachesStartPathDoesNot
+// 列表页每个 Runner 都要比一次镜像，缓存省掉重复的 docker image inspect；
+// 但启停路径必须读实时值——刚 build 完就点「启动」，读到旧 ID 就不会重建了。
+func TestImageIDCache_StatusPathCachesStartPathDoesNot(t *testing.T) {
+	logPath := fakeDocker(t, `[]`)
+	imageIDCache.Delete("img:cache-test")
+	t.Cleanup(func() { imageIDCache.Delete("img:cache-test") })
+
+	countInspects := func() int {
+		return strings.Count(dockerCalls(t, logPath), "image inspect -f {{.Id}} img:cache-test")
+	}
+
+	cachedImageID(context.Background(), "img:cache-test")
+	cachedImageID(context.Background(), "img:cache-test")
+	if got := countInspects(); got != 1 {
+		t.Fatalf("带缓存的查询执行了 %d 次 docker image inspect，应为 1 次", got)
+	}
+
+	resolveImageID(context.Background(), "img:cache-test")
+	resolveImageID(context.Background(), "img:cache-test")
+	if got := countInspects(); got != 3 {
+		t.Fatalf("实时查询应每次都执行，累计应为 3 次，实际 %d 次", got)
 	}
 }
