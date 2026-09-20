@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -142,5 +143,16 @@ func TestEnsureRunnerDir(t *testing.T) {
 	rel3, _ := filepath.Rel(base, dir3)
 	if strings.HasPrefix(rel3, "..") || rel3 == ".." {
 		t.Errorf("path traversal not sanitized: %q", dir3)
+	}
+}
+
+// 配置为空时不能 panic。ListWithLiveStatus 里原本就有 cfg == nil 的判断，
+// 但它排在 List(cfg) 之后，而 List 会先读 cfg.Runners —— 那句判断成了永远走不到的死代码。
+func TestList_NilConfig(t *testing.T) {
+	if got := List(nil); got != nil {
+		t.Fatalf("配置为空应返回 nil，得到 %v", got)
+	}
+	if got := ListWithLiveStatus(context.Background(), nil); got != nil {
+		t.Fatalf("配置为空应返回 nil，得到 %v", got)
 	}
 }

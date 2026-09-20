@@ -98,6 +98,9 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 // 注意：容器模式下每项的 Running 不可信——Runner 进程在各自的容器里，
 // 本进程扫 /proc 看不到它们。需要真实运行状态的调用方请用 ListWithLiveStatus。
 func List(cfg *config.Config) []RunnerInfo {
+	if cfg == nil {
+		return nil
+	}
 	base := cfg.Runners.BasePath
 	list := make([]RunnerInfo, 0, len(cfg.Runners.Items))
 	dirs := make([]string, 0, len(cfg.Runners.Items))
@@ -141,8 +144,11 @@ func List(cfg *config.Config) []RunnerInfo {
 // 探测失败时把该项置为 StatusUnknown 而不是保留 installed：拉起的前提是
 // 「确知它没在跑」，Docker 不可达时并不确知，此时什么都不做比反复重启稳妥。
 func ListWithLiveStatus(ctx context.Context, cfg *config.Config) []RunnerInfo {
+	if cfg == nil {
+		return nil
+	}
 	list := List(cfg)
-	if cfg == nil || !cfg.Runners.ContainerMode {
+	if !cfg.Runners.ContainerMode {
 		return list
 	}
 	for i := range list {
