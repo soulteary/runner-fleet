@@ -635,7 +635,10 @@
           return;
         }
         msgEl.className = 'msg ok';
-        msgEl.innerHTML = data.message + (data.install_dir ? '<br><span class="path">' + data.install_dir + '</span>' : '');
+        // message 与 install_dir 里都嵌着用户填的 Runner 名，必须转义：
+        // 名称校验只拦 .. / \，`<img src=x onerror=...>` 这样的名字是收得进来的
+        msgEl.innerHTML = escapeHtml(data.message || '') +
+          (data.install_dir ? '<br><span class="path">' + escapeHtml(data.install_dir) + '</span>' : '');
         if (data.output) msgEl.innerHTML += '<pre style="margin-top:8px;font-size:12px">' + escapeHtml(data.output) + '</pre>';
         if (data.queued) {
           msgEl.innerHTML += '<br><span style="font-size:12px;color:var(--muted)">' + t('msg.reload_in_5s') + '</span>';

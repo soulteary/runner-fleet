@@ -162,15 +162,21 @@ func TestPreflight_DefaultModeSkipsContainerChecks(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://"+ln.Addr().String())
 
 	results := Preflight(context.Background(), cfg)
-	if len(results) != 2 {
-		t.Fatalf("默认模式应只有目录与 Job 内 Docker 两项，实际: %+v", results)
-	}
+	// 按名字断言而不是按条数：加一项无关的检查不该让这个用例失败，
+	// 它要钉的是「默认模式下不碰容器」
+	var names []string
 	for _, r := range results {
+		names = append(names, r.Name)
 		if r.Name == "容器网络" || r.Name == "Runner 镜像" {
 			t.Errorf("默认模式不应执行容器相关检查: %+v", r)
 		}
 	}
-	findCheck(t, results, "runners 目录")
+	for _, want := range []string{"runners 目录", "Runner 目录权限", "Job 内 Docker"} {
+		findCheck(t, results, want)
+	}
+	if len(results) != 3 {
+		t.Fatalf("默认模式的检查项应为 %v，实际 %v", []string{"runners 目录", "Runner 目录权限", "Job 内 Docker"}, names)
+	}
 }
 
 func TestPreflight_NilConfig(t *testing.T) {
