@@ -51,10 +51,11 @@ With Basic Auth, all requests except `/health` must include `Authorization: Basi
 | `/health` | GET | Returns `{"status":"ok"}`; for Ingress/K8s probes; always unauthenticated. |
 | `/version` | GET | Returns `{"version":"..."}`. |
 | `/api/runners` | GET | Runner list. In container mode, on probe failure returns `status=unknown` with structured `probe` (`error/type/suggestion/check_command/fix_command`). |
-| `/api/runners/:name` | GET | Single runner details. Same `probe` on probe failure in container mode. |
+| `/api/runners/:name` | GET | Single runner details. Same `probe` on probe failure in container mode. In container mode the response also carries `container_drift` when the container's create parameters no longer match the config. |
 | `/api/runners/:name/start` | POST | Start runner. On probe failure still attempts start, returns structured `probe` in response. |
 | `/api/runners/:name/stop` | POST | Stop runner. On probe failure still attempts stop, returns structured `probe` in response. |
 | `/api/runners` | POST | Add a runner (optionally install and register). On a name conflict returns **409** with `conflicts` and `suggested_name` instead of silently renaming; send `auto_rename: true` for the old auto-suffix behaviour. |
+| `/api/runners/:name/recreate` | POST | Remove and recreate the runner container with the current config (container mode only). Interrupts a job running on it — starting a stopped container already recreates it automatically when its create parameters drifted. |
 | `/api/runner-precheck` | GET | Pre-flight a name before adding: `?name=&path=`. Returns `available`, a `suggested_name` and the `conflicts` found (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), each with `level` (`error`/`warn`), `message`, `detail` and an optional `fix_command`. Read-only; the Web UI calls it while you type. |
 
 ### Breaking change (upgrade note)

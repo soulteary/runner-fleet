@@ -90,6 +90,8 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
+**改了配置与容器重建**：镜像、网络、挂载目录、Job 内 Docker 后端都只在 `docker create` 时定下来，已存在的容器沿用创建时的参数，光改配置碰不到它。Manager 会把每个容器的实际创建参数与当前配置对一遍：**已停止**的容器若对不上，点「启动」时会删掉重建；列表里该 Runner 会标出「配置已变更」，鼠标悬停可看到具体差异（如 `job_docker_backend: → dind`）。**正在运行**的容器不会被自动重建——上面可能正跑着 Job——需要立刻生效就点该行的「重建容器」（`POST /api/runners/:name/recreate`，会中断正在跑的 Job），或等它空闲后停止再启动。同名 tag 重新构建镜像同样算：比对的是镜像 ID，不只是引用。
+
 **现成的部署示例**：[`examples/deploy/`](../../examples/deploy/) 提供两套可直接复制的配置——`standalone/`（单容器：Manager 与 Runner 进程同处一个容器，`docker run` 或 Compose 均可）与 `fleet/`（容器模式：每个 Runner 一个容器，镜像缓存靠共用宿主机 daemon 共享，工具链与 Action 缓存预置在 Runner 镜像的层里，构建缓存按 Runner 隔离）。其 README 对比了两者的取舍、说明哪些缓存共享哪些隔离，并收录了部署中最容易踩的坑（目录属主、`VOLUME_HOST_PATH`、host-socket 下的磁盘增长）。
 
 ### 排障

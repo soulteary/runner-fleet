@@ -55,6 +55,7 @@ Basic Auth 有効時、`/health` 以外のリクエストには Header に `Auth
 | `/api/runners/:name/start` | POST | Runner を起動。probe 失敗時も起動を試み、レスポンスに構造化された `probe` を返す。 |
 | `/api/runners/:name/stop` | POST | Runner を停止。probe 失敗時も停止を試み、レスポンスに構造化された `probe` を返す。 |
 | `/api/runners` | POST | Runner を追加（任意でインストールと登録）。名前が衝突した場合は黙って改名せず **409** を返し、`conflicts` と `suggested_name` を含めます。従来の自動リネームが必要なら `auto_rename: true` を送ってください。 |
+| `/api/runners/:name/recreate` | POST | 現在の設定で Runner コンテナを削除して作り直します（コンテナモードのみ）。実行中の Job は中断されます。停止中のコンテナは「開始」時に作成パラメータの不一致を検出して自動で作り直されます。 |
 | `/api/runner-precheck` | GET | 追加前の名前チェック: `?name=&path=`。`available`、`suggested_name`、検出した `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`）を返します。各項目は `level`（`error`/`warn`）、`message`、`detail`、任意の `fix_command` を持ちます。読み取り専用で、画面は入力中に随時呼び出します。 |
 
 ### 破壊的変更（アップグレード注意）

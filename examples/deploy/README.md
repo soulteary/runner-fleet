@@ -107,13 +107,15 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   `getent group docker | cut -d: -f3`；修改后需重建 Runner 容器（`docker rm -f github-runner-<名称>` 再启动）。
 - **`host-socket` 下 Job 里的 `docker run -v $PWD:/x` 挂到了空目录**
   `-v` 的源路径由宿主机 daemon 解析，而 `$PWD` 是 Runner 容器内的路径（`/runner/_work/...`），两者不一致。
-  这类 workflow 改用 DinD（`JOB_DOCKER_BACKEND=dind`，切换后需 `docker rm -f github-runner-<名称>`
-  重建容器才生效），或在 Job 里换成宿主机上的真实路径。
-- **改了 `JOB_DOCKER_BACKEND` 却没生效**
-  后端只在 `docker create` 时决定（`DOCKER_HOST` 与 `docker.sock` 挂载都写在创建参数里），
-  已存在的 Runner 容器只会被 `docker start` 起来、沿用创建时的后端。改完逐个重建：
-  `docker rm -f github-runner-<名称>`，再在界面点「启动」。`RUNNER_IMAGE`、`CONTAINER_NETWORK`
-  以及镜像里预置的缓存同理。
+  这类 workflow 改用 DinD（`JOB_DOCKER_BACKEND=dind`，改完在界面点「启动」即按新后端重建容器），
+  或在 Job 里换成宿主机上的真实路径。
+- **改了 `JOB_DOCKER_BACKEND`（或 `RUNNER_IMAGE`、`CONTAINER_NETWORK`、`VOLUME_HOST_PATH`）之后**
+  这些参数只在 `docker create` 时决定，已存在的容器不会自己变。Manager 会比对容器的实际创建参数
+  与当前配置：**已停止的容器在点「启动」时自动删掉重建**，界面上则给出「配置已变更」徽标，
+  鼠标悬停能看到具体差异（如 `job_docker_backend: → dind`）。
+  **正在运行的容器不会被自动重建**——上面可能正跑着 Job；要立刻生效就点该行的「重建容器」
+  （会中断正在跑的 Job），或等它空闲时停止再启动。
+  重新 build 同名 tag 的镜像同样会被识别（比对的是镜像 ID），不必改 tag。
 - **宿主机磁盘越用越满**
   `host-socket` 下所有 Job 的镜像与构建产物都堆在宿主机 daemon 上：
   `docker image prune -f && docker builder prune -f`。Runner 自己的目录（`_work` 与 HOME 缓存）也会长大。

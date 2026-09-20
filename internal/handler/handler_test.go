@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,5 +259,77 @@ func TestLifecycleContext_TimesOut(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("超时未生效")
+	}
+}
+
+// TestRecreateRunner_RejectsNonContainerMode 非容器模式下没有 Runner 容器，重建无从谈起
+func TestRecreateRunner_RejectsNonContainerMode(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	installDir := filepath.Join(dir, "r1")
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installDir, ".runner"), []byte("ok"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Port: 8080},
+		Runners: config.RunnersConfig{
+			BasePath: dir,
+			Items:    []config.RunnerItem{{Name: "r1", TargetType: "org", Target: "o1"}},
+		},
+	}
+	if err := cfg.Save(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	oldConfigPath := ConfigPath
+	ConfigPath = cfgPath
+	defer func() { ConfigPath = oldConfigPath }()
+
+	e := echo.New()
+	e.POST("/api/runners/:name/recreate", RecreateRunner)
+	req := httptest.NewRequest(http.MethodPost, "/api/runners/r1/recreate", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRecreateRunner_RejectsUnregistered 没注册的 Runner 不存在容器，别去删
+func TestRecreateRunner_RejectsUnregistered(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.MkdirAll(filepath.Join(dir, "r1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Port: 8080},
+		Runners: config.RunnersConfig{
+			BasePath:      dir,
+			ContainerMode: true,
+			Items:         []config.RunnerItem{{Name: "r1", TargetType: "org", Target: "o1"}},
+		},
+	}
+	if err := cfg.Save(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	oldConfigPath := ConfigPath
+	ConfigPath = cfgPath
+	defer func() { ConfigPath = oldConfigPath }()
+
+	e := echo.New()
+	e.POST("/api/runners/:name/recreate", RecreateRunner)
+	req := httptest.NewRequest(http.MethodPost, "/api/runners/r1/recreate", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "已注册") {
+		t.Fatalf("应说明只有已注册的 Runner 可重建，实际: %s", rec.Body.String())
 	}
 }

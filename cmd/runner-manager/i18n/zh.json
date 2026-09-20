@@ -118,5 +118,8 @@
   "precheck.dir_exists": "目录 {{dir}} 已存在且非空，将直接复用其中已解压的 runner",
   "precheck.container_exists": "宿主机上已存在容器 {{detail}}，且不属于当前配置；启动时会直接复用它，而它挂的是创建时的目录",
   "precheck.use_suggested": "使用建议名 {{name}}",
-  "precheck.blocked": "存在冲突，请先改名或清理后再提交"
+  "precheck.blocked": "存在冲突，请先改名或清理后再提交",
+  "badge.drift": "配置已变更",
+  "btn.recreate": "重建容器",
+  "confirm_recreate": "按当前配置重建 {{name}} 的容器？\n\n会先删除旧容器再新建。若上面正在跑 Job，会被中断。"
 }
