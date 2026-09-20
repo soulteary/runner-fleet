@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -164,18 +163,6 @@ func dockerCmdError(op string, out []byte, err error) error {
 
 const dockerAccessHint = "若 Manager 在容器内，请为 runner-manager 配置 group_add 使用宿主机 docker 组 GID（.env 中 DOCKER_GID=$(getent group docker | cut -d: -f3)），或使用 user: \"0:0\" 以 root 访问 socket"
 
-// ContainerRunning 判断容器是否在运行
-func ContainerRunning(ctx context.Context, containerName string) (bool, error) {
-	out, err := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", containerName)
-	if err != nil {
-		if containerNotFound(out) {
-			return false, nil
-		}
-		return false, dockerCmdError("docker inspect", out, err)
-	}
-	return strings.TrimSpace(string(out)) == "true", nil
-}
-
 // managerMustUseHostDocker 提示：容器模式下 Manager 必须用宿主机 Docker 创建 Runner 容器，不能把 DOCKER_HOST 设为 DinD
 const errContainerModeNeedHostDocker = "容器模式下 Manager 必须使用宿主机 Docker（unix socket）创建/启停 Runner 容器，不能使用 DinD。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375，使 Manager 使用默认 unix:///var/run/docker.sock；DinD 仅供 Runner 容器内 Job 的 docker build 等使用"
 
@@ -191,6 +178,13 @@ func ManagerDockerHostIsDind() bool {
 
 // HostDockerSocket job_docker_backend=host-socket 时挂载进 Runner 容器的宿主机 Docker socket
 const HostDockerSocket = "/var/run/docker.sock"
+
+// 启动容器后给 Agent 的就绪时间：新建的容器要等镜像入口起来，已存在的容器快一些。
+// 做成变量只为测试能调小，生产路径上取值与此前一致。
+var (
+	agentReadyDelayAfterCreate = 3 * time.Second
+	agentReadyDelayAfterStart  = 2 * time.Second
+)
 
 // unknownDockerGID 表示无法确定 docker.sock 所属组，此时不追加 --group-add
 const unknownDockerGID = -1
@@ -219,38 +213,21 @@ func runnerDockerGID(cfg *config.Config) int {
 }
 
 // runnerCreateArgs 组装创建 Runner 容器的 docker create 参数。
-// dockerGID 为 unknownDockerGID 时不追加 --group-add，仅依赖镜像内预置的 docker 组。
-// limits 中未设置的字段不产生任何参数，保持与旧版本一致的「不限制」行为。
+// 实际形态由 containerSpec 定义（见 drift.go）：创建参数与漂移比对共用同一份定义，
+// 免得改了创建逻辑、漂移比对还停在旧写法上。
 func runnerCreateArgs(containerName, mountSrc, network, img, jobBackend, dindHost string, dockerGID int, limits config.ResourceLimits, agentToken string) ([]string, error) {
-	args := []string{
-		"create",
-		"--name", containerName,
-		"-v", mountSrc + ":/runner",
-		"--network", network,
+	spec := containerSpec{
+		ContainerName: containerName,
+		Image:         img,
+		Network:       network,
+		MountSrc:      mountSrc,
+		JobBackend:    jobBackend,
+		DindHost:      dindHost,
+		DockerGID:     dockerGID,
+		AgentToken:    agentToken,
+		Limits:        limits,
 	}
-	// 资源上限：不限制时单个失控 Job 能耗尽整机资源，连带拖垮 Manager
-	args = append(args, limits.Args()...)
-	// 令牌用环境变量注入，而不是只靠挂载目录下的文件：
-	// Manager 以 root 或非 1001 的 UID 运行时，0600 的令牌文件对容器内 app(1001)
-	// 不可读，Agent 会读到空令牌并静默降级为不鉴权。环境变量不依赖 UID 匹配。
-	if agentToken != "" {
-		args = append(args, "-e", "AGENT_TOKEN="+agentToken)
-	}
-	switch jobBackend {
-	case "dind":
-		args = append(args, "-e", "DOCKER_HOST=tcp://"+dindHost+":2375")
-	case "host-socket":
-		args = append(args, "-v", HostDockerSocket+":"+HostDockerSocket, "-e", "DOCKER_HOST=unix://"+HostDockerSocket)
-		// 容器内以 app(UID 1001) 运行，须加入 socket 所属组，否则 Job 中 docker 报 permission denied
-		if dockerGID >= 0 {
-			args = append(args, "--group-add", strconv.Itoa(dockerGID))
-		}
-	case "none":
-		// Job 内不提供 Docker，不注入环境与挂载
-	default:
-		return nil, fmt.Errorf("不支持的 runners.job_docker_backend=%q（仅支持 dind/host-socket/none）", jobBackend)
-	}
-	return append(args, img), nil
+	return spec.createArgs()
 }
 
 // applyResourceLimitsToExisting 对已存在的容器施加资源上限。
@@ -283,8 +260,20 @@ func resourceUpdateArgs(containerName string, limits config.ResourceLimits) []st
 	return append(append([]string{"update"}, args...), containerName)
 }
 
-// StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner
+// StartRunnerContainer 若容器不存在则创建并启动，若存在则 start；创建时挂载 installDir 到 /runner。
+// 已存在的容器若创建参数与当前配置不一致（换了镜像、网络、挂载目录或 Job Docker 后端），
+// 会先删除再按新配置重建——但仅限已停止的容器，正在运行的不动，见 startRunnerContainer。
 func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
+	return startRunnerContainer(ctx, cfg, runnerName, installDir, false)
+}
+
+// RecreateRunnerContainer 无条件按当前配置重建容器，正在运行也照删。
+// 用于「容器在跑、但配置已经变了」这种只能由人来决定何时中断的情况。
+func RecreateRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string) error {
+	return startRunnerContainer(ctx, cfg, runnerName, installDir, true)
+}
+
+func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, installDir string, forceRecreate bool) error {
 	if cfg.Runners.ContainerMode && managerDockerHostIsDind() {
 		return fmt.Errorf("%s", errContainerModeNeedHostDocker)
 	}
@@ -295,35 +284,49 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		// 拿不到令牌不阻断启停，降级为不带鉴权头（与旧版本行为一致）
 		log.Printf("警告: %s %v，本次调用 Agent 不带鉴权头", runnerName, tokenErr)
 	}
-	running, err := ContainerRunning(ctx, cn)
+	facts, err := inspectRunnerContainer(ctx, cn)
 	if err != nil {
 		return err
 	}
-	if running {
-		// 存量容器可能是在配置资源上限之前创建的，这里补一次
-		applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
-		// 容器已在跑，可选：调 Agent /start 确保 listener 启动（若容器刚启动 agent 可能尚未起 run.sh）
-		_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
-		return nil
-	}
-	// 检查是否存在但已停止
-	out, err := dockerCmd(ctx, "ps", "-a", "-q", "-f", "name=^"+cn+"$")
-	if err != nil {
-		return dockerCmdError("docker ps", out, err)
-	}
-	if len(strings.TrimSpace(string(out))) > 0 {
-		startOut, startErr := dockerCmd(ctx, "start", cn)
-		if startErr == nil {
+	if facts != nil {
+		drift := driftFromFacts(ctx, cfg, runnerName, installDir, facts)
+		switch {
+		case forceRecreate:
+			log.Printf("按要求重建容器 %s%s", cn, driftSuffix(drift))
+			if out, rmErr := dockerCmd(ctx, "rm", "-f", cn); rmErr != nil {
+				return dockerCmdError("docker rm", out, rmErr)
+			}
+			// 落到下方「创建新容器」
+		case facts.Running:
+			// 正在运行的容器不自动重建：上面很可能正跑着 Job，删掉就是把它拦腰截断。
+			// 只记一条日志，由界面提示用户停止后再启动，或显式点「重建容器」。
+			if drift != "" {
+				log.Printf("提示: 容器 %s 的创建参数与当前配置不一致（%s）。正在运行的容器不会自动重建，"+
+					"停止后再启动，或在界面点「重建容器」即可按新配置重建", cn, drift)
+			}
+			// 存量容器可能是在配置资源上限之前创建的，这里补一次
 			applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
-			time.Sleep(2 * time.Second)
-			return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
-		}
-		// start 失败且为网络已删除等不可恢复原因时，删除旧容器并走下方「创建新容器」流程（如 compose down 后网络被删）
-		if containerStartUnrecoverable(startOut) {
+			// 容器已在跑，可选：调 Agent /start 确保 listener 启动（若容器刚启动 agent 可能尚未起 run.sh）
+			_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
+			return nil
+		case drift != "":
+			log.Printf("容器 %s 的创建参数与当前配置不一致（%s），删除后按新配置重建", cn, drift)
+			if out, rmErr := dockerCmd(ctx, "rm", "-f", cn); rmErr != nil {
+				return dockerCmdError("docker rm", out, rmErr)
+			}
+			// 落到下方「创建新容器」
+		default:
+			startOut, startErr := dockerCmd(ctx, "start", cn)
+			if startErr == nil {
+				applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
+				time.Sleep(agentReadyDelayAfterStart)
+				return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
+			}
+			// start 失败且为网络已删除等不可恢复原因时，删除旧容器后重建（如 compose down 后网络被删）
+			if !containerStartUnrecoverable(startOut) {
+				return dockerCmdError("docker start", startOut, startErr)
+			}
 			_, _ = dockerCmd(ctx, "rm", "-f", cn)
-			// fall through to create new container
-		} else {
-			return dockerCmdError("docker start", startOut, startErr)
 		}
 	}
 	// 创建新容器
@@ -334,36 +337,12 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config/config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
 		}
 	}
-	// 镜像与 Job Docker 后端支持按 Runner 覆盖，未设置时回落全局配置
-	img := cfg.ContainerImageFor(runnerName)
-	network := cfg.Runners.ContainerNetwork
-	if network == "" {
-		network = "runner-net"
-	}
-	jobBackend := cfg.JobDockerBackendFor(runnerName)
-	dindHost := cfg.Runners.DindHost
-	if dindHost == "" {
-		dindHost = "runner-dind"
-	}
-	mountSrc := installDir
-	if cfg.Runners.VolumeHostPath != "" {
-		// Manager 在容器内时，installDir 为容器内路径；Docker 需宿主机路径，用 volume_host_path + 相对路径
-		rel, err := filepath.Rel(cfg.Runners.BasePath, installDir)
-		if err != nil {
-			rel = filepath.Base(installDir)
-		}
-		mountSrc = filepath.Join(cfg.Runners.VolumeHostPath, rel)
-	} else {
-		// Manager 在宿主机时，传绝对路径给 docker create，避免 cwd 影响
-		if abs, err := filepath.Abs(installDir); err == nil {
-			mountSrc = abs
-		}
-	}
-	createArgs, err := runnerCreateArgs(cn, mountSrc, network, img, jobBackend, dindHost, runnerDockerGID(cfg), cfg.Runners.Resources, token)
+	spec := desiredContainerSpec(cfg, runnerName, installDir, token)
+	createArgs, err := spec.createArgs()
 	if err != nil {
 		return err
 	}
-	out, err = dockerCmd(ctx, createArgs...)
+	out, err := dockerCmd(ctx, createArgs...)
 	if err != nil {
 		return dockerCmdError("docker create", out, err)
 	}
@@ -372,8 +351,16 @@ func StartRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		return dockerCmdError("docker start", out, err)
 	}
 	// 等待 agent 就绪后调 /start
-	time.Sleep(3 * time.Second)
+	time.Sleep(agentReadyDelayAfterCreate)
 	return CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
+}
+
+// driftSuffix 把漂移原因拼成日志后缀，没有差异时不啰嗦
+func driftSuffix(drift string) string {
+	if drift == "" {
+		return ""
+	}
+	return "（" + drift + "）"
 }
 
 // StopRunnerContainer 停止容器（不删除，便于下次 start）
@@ -404,16 +391,21 @@ func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 	return nil
 }
 
-// ContainerRunnerStatus 在容器模式下获取某 runner 的状态：先看容器是否运行，再问 Agent
+// ContainerRunnerStatus 在容器模式下获取某 runner 的状态：先看容器是否运行，再问 Agent。
+// 同一次 inspect 顺带比对创建参数，drift 非空表示容器是按旧配置建的。
 // 容器未运行时仍返回 StatusInstalled（与磁盘一致），仅 Running=false，便于界面显示「已注册未运行」
-func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, installDir string) (running bool, status Status, err error) {
+func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, installDir string) (running bool, status Status, drift string, err error) {
 	cn := ContainerName(runnerName)
-	ok, err := ContainerRunning(ctx, cn)
+	facts, err := inspectRunnerContainer(ctx, cn)
 	if err != nil {
-		return false, StatusUnknown, newProbeError(ProbeErrorTypeDockerAccess, err)
+		return false, StatusUnknown, "", newProbeError(ProbeErrorTypeDockerAccess, err)
 	}
-	if !ok {
-		return false, StatusInstalled, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
+	if facts == nil {
+		return false, StatusInstalled, "", nil
+	}
+	drift = driftFromFacts(ctx, cfg, runnerName, installDir, facts)
+	if !facts.Running {
+		return false, StatusInstalled, drift, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}
 	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, ReadAgentToken(installDir))
 	if err != nil {
@@ -421,27 +413,24 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 		if strings.Contains(err.Error(), "agent 返回") {
 			agentErrType = ProbeErrorTypeAgentHTTP
 		}
-		return true, StatusUnknown, newProbeError(agentErrType, err)
+		return true, StatusUnknown, drift, newProbeError(agentErrType, err)
 	}
 	switch agent.Status {
 	case "installed":
-		return agent.Running, StatusInstalled, nil
+		return agent.Running, StatusInstalled, drift, nil
 	case "new":
-		return false, StatusNew, nil
+		return false, StatusNew, drift, nil
 	default:
-		return false, StatusMissing, nil
+		return false, StatusMissing, drift, nil
 	}
 }
 
 // ContainerState 返回容器是否存在及其状态（running / exited / created 等）。
 // 容器不存在时返回 exists=false 且不报错——调用方多数只关心「名字是否被占用」。
 func ContainerState(ctx context.Context, containerName string) (exists bool, status string, err error) {
-	out, err := dockerCmd(ctx, "inspect", "-f", "{{.State.Status}}", containerName)
-	if err != nil {
-		if containerNotFound(out) {
-			return false, "", nil
-		}
-		return false, "", dockerCmdError("docker inspect", out, err)
+	facts, err := inspectRunnerContainer(ctx, containerName)
+	if err != nil || facts == nil {
+		return false, "", err
 	}
-	return true, strings.TrimSpace(string(out)), nil
+	return true, facts.Status, nil
 }

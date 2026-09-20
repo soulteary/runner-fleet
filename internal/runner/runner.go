@@ -41,13 +41,14 @@ type RunnerInfo struct {
 	Labels                []string   `json:"labels"`
 	Status                Status     `json:"status"`
 	InstallDir            string     `json:"install_dir"`
-	Running               bool       `json:"running"`                 // 进程是否在跑
-	Probe                 *ProbeInfo `json:"probe,omitempty"`         // 结构化探测信息（error/type/suggestion/check_command/fix_command）
-	JobDockerBackend      string     `json:"job_docker_backend"`      // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
-	RegistrationMessage   string     `json:"registration_message"`    // 最近一次注册结果信息（成功或失败原因）
-	RegistrationCheckedAt string     `json:"registration_checked_at"` // 注册结果时间
-	RegisteredOnGitHub    *bool      `json:"registered_on_github"`    // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
-	GitHubCheckAt         string     `json:"github_check_at"`         // 最近一次 GitHub 检查时间
+	Running               bool       `json:"running"`                   // 进程是否在跑
+	Probe                 *ProbeInfo `json:"probe,omitempty"`           // 结构化探测信息（error/type/suggestion/check_command/fix_command）
+	JobDockerBackend      string     `json:"job_docker_backend"`        // 容器模式下 Job 内 Docker 后端：dind / host-socket / none
+	ContainerDrift        string     `json:"container_drift,omitempty"` // 容器创建参数与当前配置的差异，非空表示容器是按旧配置建的
+	RegistrationMessage   string     `json:"registration_message"`      // 最近一次注册结果信息（成功或失败原因）
+	RegistrationCheckedAt string     `json:"registration_checked_at"`   // 注册结果时间
+	RegisteredOnGitHub    *bool      `json:"registered_on_github"`      // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查
+	GitHubCheckAt         string     `json:"github_check_at"`           // 最近一次 GitHub 检查时间
 }
 
 // ProbeInfo 为容器探测失败的结构化信息。

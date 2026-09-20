@@ -55,6 +55,7 @@ Mit Basic Auth müssen alle Anfragen außer `/health` den Header `Authorization:
 | `/api/runners/:name/start` | POST | Runner starten. Bei Probe-Fehler startet trotzdem, gibt strukturiertes `probe` in der Antwort zurück. |
 | `/api/runners/:name/stop` | POST | Runner stoppen. Bei Probe-Fehler stoppt trotzdem, gibt strukturiertes `probe` in der Antwort zurück. |
 | `/api/runners` | POST | Runner hinzufügen (optional installieren und registrieren). Bei einem Namenskonflikt kommt **409** mit `conflicts` und `suggested_name`, statt still umzubenennen; für das alte Verhalten `auto_rename: true` senden. |
+| `/api/runners/:name/recreate` | POST | Entfernt den Runner-Container und erstellt ihn mit der aktuellen Konfiguration neu (nur Container-Modus). Ein laufender Job wird abgebrochen; ein gestoppter Container wird beim Start ohnehin automatisch neu erstellt, wenn seine Erstellungsparameter abweichen. |
 | `/api/runner-precheck` | GET | Namensprüfung vor dem Hinzufügen: `?name=&path=`. Liefert `available`, einen `suggested_name` und die gefundenen `conflicts` (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`) mit je `level` (`error`/`warn`), `message`, `detail` und optionalem `fix_command`. Nur lesend; die Web-UI ruft sie während der Eingabe auf. |
 
 ### Breaking Change (Upgrade-Hinweis)

@@ -156,7 +156,9 @@ func applyContainerStatus(ctx context.Context, cfg *config.Config, list []runner
 
 // applyContainerStatusOne 容器模式下用 Agent 状态覆盖单条 info 的 Running/Status/Probe
 func applyContainerStatusOne(ctx context.Context, cfg *config.Config, info *runner.RunnerInfo) {
-	running, status, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+	running, status, drift, statusErr := runner.ContainerRunnerStatus(ctx, cfg, info.Name, info.InstallDir)
+	// 漂移信息与探测结果无关：探测失败时也照样带上，界面才能提示「这个容器是按旧配置建的」
+	info.ContainerDrift = drift
 	if statusErr != nil {
 		log.Printf("[container-status] name=%s: %v", info.Name, statusErr)
 		applyProbeFailure(info, statusErr)
@@ -563,6 +565,40 @@ func StartRunner(c echo.Context) error {
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "已发起启动"})
+}
+
+// RecreateRunner 按当前配置重建 Runner 容器（POST /api/runners/:name/recreate）。
+//
+// 启动已停止的容器时，发现创建参数与配置不一致会自动重建；但正在运行的容器不会——
+// 上面很可能正跑着 Job。这个接口就是那扇「我知道会中断，现在就换」的门。
+func RecreateRunner(c echo.Context) error {
+	cfg, err := getConfig(c)
+	if err != nil {
+		return err
+	}
+	name := c.Param("name")
+	if name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
+	}
+	if !config.IsSafeRunnerNameOrPath(name) {
+		return echo.NewHTTPError(http.StatusBadRequest, "name 不可包含 / \\ .. 等非法字符")
+	}
+	if !cfg.Runners.ContainerMode {
+		return echo.NewHTTPError(http.StatusBadRequest, "仅容器模式下可重建容器")
+	}
+	info := runner.GetByName(cfg, name)
+	if info == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "未找到该 runner")
+	}
+	if info.Status != runner.StatusInstalled {
+		return echo.NewHTTPError(http.StatusBadRequest, "仅已注册的 runner 可重建容器，当前状态: "+string(info.Status))
+	}
+	ctx, cancel := lifecycleContext(c.Request().Context(), 90*time.Second)
+	defer cancel()
+	if err := runner.RecreateRunnerContainer(ctx, cfg, name, info.InstallDir); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "重建失败: "+err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]any{"message": "已按当前配置重建容器"})
 }
 
 // StopRunner 停止指定 runner（POST /api/runners/:name/stop）；容器模式下停止 Runner 容器

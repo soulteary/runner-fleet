@@ -118,5 +118,8 @@
   "precheck.dir_exists": "{{dir}} already exists and is not empty; the runner already extracted there will be reused",
   "precheck.container_exists": "A container named {{detail}} already exists on the host and is not part of this config; starting would reuse it, mounted on the directory it was created with",
   "precheck.use_suggested": "Use suggested name {{name}}",
-  "precheck.blocked": "Conflicts found — rename or clean up first, then submit again"
+  "precheck.blocked": "Conflicts found — rename or clean up first, then submit again",
+  "badge.drift": "config changed",
+  "btn.recreate": "Recreate",
+  "confirm_recreate": "Recreate the container for {{name}} with the current config?\n\nThe old container is removed and a new one is created. A job running on it right now will be interrupted."
 }

@@ -137,6 +137,7 @@ func main() {
 	e.DELETE("/api/runners/:name", handler.RemoveRunnerByName)
 	e.POST("/api/runners/:name/start", handler.StartRunner)
 	e.POST("/api/runners/:name/stop", handler.StopRunner)
+	e.POST("/api/runners/:name/recreate", handler.RecreateRunner)
 
 	addr := ":8080"
 	if cfg.Server.Port > 0 {

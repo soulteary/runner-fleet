@@ -90,6 +90,8 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 **Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 네 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 비밀번호 없는 sudo 상속, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
 
+**설정 변경과 컨테이너 재생성**: 이미지, 네트워크, 마운트 경로, Job 내 Docker 백엔드는 모두 `docker create` 시점에 정해지며 기존 컨테이너는 생성 당시 값을 그대로 유지합니다. 설정만 바꿔서는 닿지 않습니다. Manager는 각 컨테이너의 실제 생성 파라미터를 현재 설정과 비교합니다. **정지된** 컨테이너가 맞지 않으면 "시작"할 때 삭제 후 다시 만들고, 목록에는 해당 Runner에 "설정 변경됨"이 표시되며 툴팁에 차이(예: `job_docker_backend: → dind`)가 나옵니다. **실행 중인** 컨테이너는 자동으로 재생성하지 않습니다 — Job이 돌고 있을 수 있기 때문입니다. 바로 적용하려면 행의 "컨테이너 재생성"(`POST /api/runners/:name/recreate`, 실행 중인 Job이 중단됨)을 쓰거나, 한가할 때 정지 후 다시 시작하세요. 같은 tag로 이미지를 다시 빌드한 경우도 감지합니다(이미지 ID로 비교).
+
 **바로 쓸 수 있는 배포 예제**: [`examples/deploy/`](../../examples/deploy/)에 복사해서 그대로 쓰는 구성 두 가지가 있습니다. `standalone/`(Manager 컨테이너 하나, Runner 프로세스도 그 안에서 실행. `docker run` 또는 Compose)와 `fleet/`(컨테이너 모드: Runner마다 컨테이너 하나, 이미지 캐시는 호스트 daemon 공유로 자연히 공유되고, 툴체인·Action 캐시는 Runner 이미지 레이어에 미리 넣으며, 빌드 캐시는 Runner별로 분리). README에 두 방식의 비교, 어떤 캐시가 공유되고 어떤 것이 분리되는지, 그리고 자주 겪는 배포 함정(디렉터리 소유자, `VOLUME_HOST_PATH`, host-socket에서의 디스크 증가)을 정리했습니다.
 
 ### 문제 해결

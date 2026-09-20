@@ -27,7 +27,8 @@
 #
 # === 日常 ===
 #   启动自检：docker compose logs runner-manager | grep 自检
-#   换了缓存内容：重新 build → docker rm -f github-runner-<名称> → 在界面点「启动」重建容器
+#   换了缓存内容：重新 build 后在界面点「启动」即可——Manager 会发现镜像已变并自动重建容器；
+#             正在运行的 Runner 不会被自动重建，界面上点「重建容器」或等它空闲后停止再启动
 #   宿主机磁盘：Job 的镜像与构建产物都堆在宿主机 daemon 上，定期
 #             docker image prune -f && docker builder prune -f
 services:
@@ -88,11 +89,11 @@ services:
   # host-socket 时用不到 DinD。保留是为了随时切回：
   # .env 改 JOB_DOCKER_BACKEND=dind，再 docker compose --profile dind up -d。
   #
-  # 切换后必须逐个重建已有的 Runner 容器：
-  #   docker rm -f github-runner-<名称>   # 然后在界面点「启动」重建
   # 后端只在 docker create 时决定（DOCKER_HOST 与 docker.sock 挂载都写在创建参数里），
-  # 已存在的容器只会被 docker start 起来、沿用创建时的后端。不重建的话，先前以
-  # host-socket 创建的 Runner 仍然挂着宿主机 socket，等于没换——想要的隔离并没有生效。
+  # 已存在的容器沿用创建时的后端。Manager 会比对并处理这种不一致：
+  #   已停止的容器 —— 点「启动」时自动删除重建
+  #   正在运行的容器 —— 不自动动它（可能正跑着 Job），界面标出「配置已变更」，
+  #                     点「重建容器」立刻生效，或等它空闲后停止再启动
   #
   # DinD 下镜像缓存同样共享（所有 Runner 容器共用这一个 daemon 与 dind-storage 卷），
   # 代价是 privileged，以及单个 daemon 承担全部并发。

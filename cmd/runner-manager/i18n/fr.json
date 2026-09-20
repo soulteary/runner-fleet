@@ -118,5 +118,8 @@
   "precheck.dir_exists": "{{dir}} existe déjà et n'est pas vide ; le runner déjà extrait sera réutilisé",
   "precheck.container_exists": "Un conteneur nommé {{detail}} existe déjà sur l'hôte et n'appartient pas à cette configuration ; le démarrage le réutiliserait, monté sur le répertoire de sa création",
   "precheck.use_suggested": "Utiliser le nom proposé {{name}}",
-  "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre"
+  "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre",
+  "badge.drift": "config modifiée",
+  "btn.recreate": "Recréer",
+  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu."
 }

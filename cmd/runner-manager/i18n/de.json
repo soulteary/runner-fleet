@@ -118,5 +118,8 @@
   "precheck.dir_exists": "{{dir}} existiert bereits und ist nicht leer; der dort entpackte Runner wird weiterverwendet",
   "precheck.container_exists": "Auf dem Host existiert bereits ein Container {{detail}}, der nicht zu dieser Konfiguration gehört; beim Start würde er weiterverwendet — mit dem Verzeichnis, mit dem er erstellt wurde",
   "precheck.use_suggested": "Vorgeschlagenen Namen {{name}} übernehmen",
-  "precheck.blocked": "Konflikte gefunden — bitte erst umbenennen oder aufräumen, dann erneut senden"
+  "precheck.blocked": "Konflikte gefunden — bitte erst umbenennen oder aufräumen, dann erneut senden",
+  "badge.drift": "Konfig geändert",
+  "btn.recreate": "Neu erstellen",
+  "confirm_recreate": "Container von {{name}} mit der aktuellen Konfiguration neu erstellen?\n\nDer alte Container wird entfernt und ein neuer erstellt. Ein darauf laufender Job wird abgebrochen."
 }

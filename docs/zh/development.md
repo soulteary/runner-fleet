@@ -51,10 +51,11 @@ go run ./cmd/runner-manager
 | `/health` | GET | 返回 `{"status":"ok"}`，可用于 Ingress/K8s 探针；始终免鉴权。 |
 | `/version` | GET | 返回 `{"version":"..."}`。 |
 | `/api/runners` | GET | 返回 Runner 列表。容器模式下若状态探测失败，会返回 `status=unknown` 且带结构化 `probe`（含 `error/type/suggestion/check_command/fix_command`）。 |
-| `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回结构化 `probe`。 |
+| `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回结构化 `probe`。 容器模式下若容器的创建参数与配置不一致，响应会额外带 `container_drift`。 |
 | `/api/runners/:name/start` | POST | 启动指定 Runner。容器模式下若状态探测失败，仍会尝试启动，并在响应中返回结构化 `probe`。 |
 | `/api/runners/:name/stop` | POST | 停止指定 Runner。容器模式下若状态探测失败，仍会尝试停止，并在响应中返回结构化 `probe`。 |
 | `/api/runners` | POST | 添加 Runner（可选安装并注册）。名称冲突时返回 **409**，带 `conflicts` 与 `suggested_name`，不再静默改名；需要旧的自动加后缀行为可传 `auto_rename: true`。 |
+| `/api/runners/:name/recreate` | POST | 按当前配置删除并重建 Runner 容器（仅容器模式）。会中断正在跑的 Job——已停止的容器在「启动」时若发现创建参数不一致，本就会自动重建。 |
 | `/api/runner-precheck` | GET | 添加前的名称预检：`?name=&path=`。返回 `available`、`suggested_name` 与冲突列表 `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`），每条含 `level`（`error`/`warn`）、`message`、`detail` 与可选的 `fix_command`。只读，界面在输入时会实时调用。 |
 
 ### 升级注意（破坏性变更）
