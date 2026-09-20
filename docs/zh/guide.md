@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config/config.yaml，见 `.env.example`。
 
-**校验**：不得同名；容器模式会校验名称映射后容器名冲突。`job_docker_backend` 仅允许 `dind`/`host-socket`/`none`；容器模式且 `base_path` 为容器内路径时必填 `volume_host_path`。未配 `job_docker_backend` 视为 `dind`；改后端后需在界面重新启动 Runner。
+**校验**：不得同名；容器模式会校验名称映射后容器名冲突。`job_docker_backend` 仅允许 `dind`/`host-socket`/`none`；容器模式且 `base_path` 为容器内路径时必填 `volume_host_path`。未配 `job_docker_backend` 视为 `dind`。改后端后：**已停止**的容器在下次启动时自动重建，**正在运行**的会标出「配置已变更」，点该行「重建容器」立即生效——详见上文「改了配置与容器重建」。
 
 示例：
 

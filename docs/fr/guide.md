@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 Certains champs peuvent être surchargés par des variables d'environnement (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`, etc.) pour un déploiement full-container en ne modifiant que `.env` ; voir `.env.example`.
 
-**Validation** : Pas de noms dupliqués ; le mode conteneur vérifie les conflits de noms de conteneurs. `job_docker_backend` n'accepte que `dind`/`host-socket`/`none` ; en mode conteneur avec `base_path` conteneur, `volume_host_path` est requis. L'absence de `job_docker_backend` donne `dind` ; après changement de backend, redémarrez les runners depuis l'interface.
+**Validation** : Pas de noms dupliqués ; le mode conteneur vérifie les conflits de noms de conteneurs. `job_docker_backend` n'accepte que `dind`/`host-socket`/`none` ; en mode conteneur avec `base_path` conteneur, `volume_host_path` est requis. L'absence de `job_docker_backend` donne `dind`. Après un changement de backend, un conteneur **arrêté** est reconstruit à son prochain démarrage, tandis qu'un conteneur **en cours d'exécution** est marqué « configuration modifiée » et le bouton « Recréer » de la ligne l'applique immédiatement — voir « Changements de configuration et reconstruction des conteneurs » ci-dessus.
 
 Exemple :
 

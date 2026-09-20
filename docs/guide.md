@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 Some fields above can be overridden by environment variables (e.g. `MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`), so you can run full-container with only `.env` changes; see `.env.example`.
 
-**Validation**: No duplicate names; container mode checks for container name conflicts. `job_docker_backend` only allows `dind`/`host-socket`/`none`; in container mode with container `base_path`, `volume_host_path` is required. Omitted `job_docker_backend` defaults to `dind`; after changing backend, restart runners from the UI.
+**Validation**: No duplicate names; container mode checks for container name conflicts. `job_docker_backend` only allows `dind`/`host-socket`/`none`; in container mode with container `base_path`, `volume_host_path` is required. Omitted `job_docker_backend` defaults to `dind`. After changing the backend, a **stopped** container is rebuilt on its next start, while a **running** one is marked "config changed" and the row's "Recreate" button applies it immediately — see "Config changes and container rebuilds" above.
 
 Example:
 

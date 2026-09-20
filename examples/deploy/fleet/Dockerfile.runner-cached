@@ -6,7 +6,9 @@
 # Job 往里写走 copy-on-write —— 正好是「物理上共享一份、写入互不污染」。
 #
 # 构建：docker compose --profile build build runner-image
-# 更新缓存内容后：docker rm -f github-runner-<名称>，再到界面点「启动」重建容器。
+# 更新缓存内容后重新 build 即可，不需要手动删容器：同名 tag 重建出来的镜像 ID 会变，
+# 而 Manager 比对的正是镜像 ID。已停止的 Runner 在下次启动时自动重建；正在运行的会标出
+# 「配置已变更」，点该行「重建容器」立即生效（会中断正在跑的 Job）。
 #
 # 语言与平台 SDK（Android、Flutter 等）的扩展方式见 ../../runner-images/。
 

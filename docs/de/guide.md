@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 Einige Felder können per Umgebungsvariable überschrieben werden (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` usw.), sodass Full-Container nur über `.env` läuft; siehe `.env.example`.
 
-**Validierung**: Keine doppelten Namen; Containermodus prüft auf Container-Namenskonflikte. `job_docker_backend` erlaubt nur `dind`/`host-socket`/`none`; im Containermodus mit Container-`base_path` ist `volume_host_path` erforderlich. Fehlendes `job_docker_backend` bedeutet `dind`; nach Backend-Änderung Runner in der UI neu starten.
+**Validierung**: Keine doppelten Namen; Containermodus prüft auf Container-Namenskonflikte. `job_docker_backend` erlaubt nur `dind`/`host-socket`/`none`; im Containermodus mit Container-`base_path` ist `volume_host_path` erforderlich. Fehlendes `job_docker_backend` bedeutet `dind`. Nach einer Backend-Änderung wird ein **gestoppter** Container beim nächsten Start neu aufgebaut, ein **laufender** wird als "Konfiguration geändert" markiert und die Schaltfläche "Neu erstellen" in der Zeile wendet die Änderung sofort an — siehe oben "Konfigurationsänderungen und Neuaufbau von Containern".
 
 Beispiel:
 

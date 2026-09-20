@@ -140,7 +140,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 
 上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
 
-**検証**: 名前の重複不可。コンテナモードではコンテナ名の衝突をチェック。`job_docker_backend` は `dind`/`host-socket`/`none` のみ。コンテナモードでコンテナの `base_path` を使う場合は `volume_host_path` 必須。`job_docker_backend` を省略すると `dind`。バックエンド変更後は UI から Runner を再起動してください。
+**検証**: 名前の重複不可。コンテナモードではコンテナ名の衝突をチェック。`job_docker_backend` は `dind`/`host-socket`/`none` のみ。コンテナモードでコンテナの `base_path` を使う場合は `volume_host_path` 必須。`job_docker_backend` を省略すると `dind`。バックエンド変更後、**停止中**のコンテナは次回起動時に自動で作り直され、**実行中**のものは「設定変更あり」と表示され、その行の「コンテナを再作成」で即座に反映されます——上記「設定変更とコンテナの再作成」を参照。
 
 例:
 
