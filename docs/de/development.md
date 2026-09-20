@@ -17,7 +17,7 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 go build -o runner-manager ./cmd/runner-manager
 
 # Mit Version (für /version und Debug)
-go build -ldflags "-X main.Version=1.4.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.5.0" -o runner-manager ./cmd/runner-manager
 
 # Nur Runner Agent bauen (Containermodus)
 go build -o runner-agent ./cmd/runner-agent

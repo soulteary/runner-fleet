@@ -33,7 +33,7 @@
 #             docker image prune -f && docker builder prune -f
 services:
   runner-manager:
-    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.4.0}
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.5.0}
     container_name: runner-manager
     environment:
       # 容器模式必须用宿主机 socket 创建 Runner 容器，不能指向 DinD
@@ -78,12 +78,12 @@ services:
   runner-image:
     profiles:
       - build
-    image: ${RUNNER_IMAGE:-local/runner-fleet-cached:v1.4.0-runner}
+    image: ${RUNNER_IMAGE:-local/runner-fleet-cached:v1.5.0-runner}
     build:
       context: .
       dockerfile: Dockerfile.runner-cached
       args:
-        RUNNER_BASE_IMAGE: ${RUNNER_BASE_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.4.0-runner}
+        RUNNER_BASE_IMAGE: ${RUNNER_BASE_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.5.0-runner}
         NODE_VERSION: ${NODE_VERSION:-22.14.0}
 
   # host-socket 时用不到 DinD。保留是为了随时切回：
