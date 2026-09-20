@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The image publish workflows no longer fail over a build-cache export. All four build workflows (`Publish image (Manager)` / `(Runner)`, `Release (Manager)` / `(Runner)`) fire at once on a tag push and every one of them exported to `type=gha` without a `scope`, so all four landed in BuildKit's default `buildkit` scope and overwrote each other — one job's index replacing layers another was still writing, which surfaces as `error writing layer blob: not_found`. It took down `Publish image (Manager)` on the v1.5.0 tag *after* the image itself had been built and pushed, marking a completed release red. Each workflow now exports to its own scope, and `cache-to` carries `ignore-error=true`: a cache export is an accelerator, and losing it must never fail a job whose image already shipped.
+
 ## [1.5.0] - 2026-09-20
 
 ### Fixed
