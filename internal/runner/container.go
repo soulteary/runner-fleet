@@ -31,13 +31,19 @@ type AgentStatus struct {
 	Running bool   `json:"running"`
 }
 
+// agentBaseURL 拼出容器内 Agent 的基址。做成变量是为了让测试把它指向本地
+// httptest 服务——容器名在测试进程里解析不了，否则只能验到「连不上」那条路径。
+var agentBaseURL = func(containerName string, port int) string {
+	return fmt.Sprintf("http://%s:%d", containerName, port)
+}
+
 // GetAgentStatus 请求 Runner 容器内 Agent 的 /status，超时 5 秒。
 // token 为空时不带鉴权头，兼容本特性之前创建的容器。
 func GetAgentStatus(ctx context.Context, containerName string, port int, token string) (*AgentStatus, error) {
 	if port <= 0 {
 		port = 8081
 	}
-	url := fmt.Sprintf("http://%s:%d/status", containerName, port)
+	url := agentBaseURL(containerName, port) + "/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func CallAgentStart(ctx context.Context, containerName string, port int, token s
 	if port <= 0 {
 		port = 8081
 	}
-	url := fmt.Sprintf("http://%s:%d/start", containerName, port)
+	url := agentBaseURL(containerName, port) + "/start"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return err

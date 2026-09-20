@@ -5,6 +5,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,10 +13,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
 )
 
 const defaultInstallDir = "/runner"
@@ -35,33 +37,6 @@ func runScriptName() string {
 	return "run.sh"
 }
 
-func readRunnerPid(installDir string) (int, error) {
-	for _, name := range []string{"Runner.Listener.pid", ".path"} {
-		b, err := os.ReadFile(filepath.Join(installDir, name))
-		if err != nil {
-			continue
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-		if err != nil || pid <= 0 {
-			continue
-		}
-		return pid, nil
-	}
-	return 0, os.ErrNotExist
-}
-
-func processExists(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	if runtime.GOOS != "windows" {
-		err := process.Signal(syscall.Signal(0))
-		return err == nil
-	}
-	return true
-}
-
 func getStatus(installDir string) (status string, running bool) {
 	if installDir == "" {
 		return "missing", false
@@ -74,15 +49,13 @@ func getStatus(installDir string) (status string, running bool) {
 	if _, err := os.Stat(runnerFile); err != nil {
 		return "new", false
 	}
-	pid, err := readRunnerPid(installDir)
-	if err != nil || pid <= 0 {
-		return "installed", false
-	}
-	if runtime.GOOS == "windows" {
-		return "installed", true
-	}
-	return "installed", processExists(pid)
+	// 不看 pid 文件：actions/runner 不写这种文件（见 internal/runnerproc 的包注释），
+	// 照着找必然找不到，于是每个 runner 都报「未运行」，Manager 每 5 分钟就再拉起一次。
+	return "installed", runnerproc.Running(installDir)
 }
+
+// startMu 串行化 /start 的「查-起」两步，见 handleStart
+var startMu sync.Mutex
 
 func startRunner(installDir string) error {
 	script := filepath.Join(installDir, runScriptName())
@@ -102,19 +75,31 @@ func startRunner(installDir string) error {
 	return nil
 }
 
+// stopRunner 向该安装目录下的所有 Runner 进程发 SIGTERM。
+// runnerproc.Find 把 run.sh 排在 Runner.Listener 之前，先停监护脚本，
+// 它的 while 循环才不会在监听器退出后又拉起一个新的。
 func stopRunner(installDir string) error {
-	pid, err := readRunnerPid(installDir)
-	if err != nil || pid <= 0 {
-		return fmt.Errorf("未找到 runner pid: %w", err)
+	pids := runnerproc.Find(installDir)
+	if len(pids) == 0 {
+		return fmt.Errorf("未找到 %s 下正在运行的 Runner 进程", installDir)
 	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return err
+	var firstErr error
+	for _, pid := range pids {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		// 扫描与发信号之间进程可能自己退了，这不算失败
+		if err := process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 	}
-	if runtime.GOOS == "windows" {
-		return process.Kill()
-	}
-	return process.Signal(syscall.SIGTERM)
+	return firstErr
 }
 
 type statusResponse struct {
@@ -138,6 +123,10 @@ func handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := installDir()
+	// 「检查是否在跑」与「拉起」必须是一个原子段：Manager 的定时巡检、注册完成后的
+	// 启动和界面点击都可能同时打到这里，各自都看到「没在跑」就会各拉起一个 run.sh。
+	startMu.Lock()
+	defer startMu.Unlock()
 	if _, run := getStatus(dir); run {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"message":"already running"}`))

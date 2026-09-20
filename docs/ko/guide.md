@@ -102,6 +102,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 - **Job에서 docker.sock `permission denied`**: `job_docker_backend: host-socket`에서는 컨테이너 사용자(UID 1001)가 socket 소유 그룹에 속해야 합니다. Manager가 컨테이너 생성 시 감지한 호스트 docker GID로 `--group-add`를 추가합니다. GID가 맞지 않는 컨테이너는 "설정 변경됨"으로 표시되어 다음 시작 때 자동으로 재생성됩니다(실행 중이면 배지가 뜨므로 "컨테이너 재생성"을 사용하세요). 감지에 실패하면 `runners.docker_gid`(또는 `.env`의 `DOCKER_GID`)를 `getent group docker | cut -d: -f3` 값으로 설정합니다.
 - **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep 自检`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
 - **이전 Runner 이미지**: pull하거나 다시 빌드한 뒤 Runner를 시작하면 Manager가 이미지 변경(참조와 이미지 ID를 모두 비교하므로 같은 tag 재빌드도 포함)을 감지해 컨테이너를 다시 만듭니다. 실행 중인 컨테이너는 건드리지 않으니 중단해도 될 때 행의 "컨테이너 재생성"을 쓰세요.
+- **로그에 5분마다 `已定时拉起 runner: <이름>` 이 반복되고, UI에서도 실행 중으로 표시되지 않음**: 이번 버전에서 수정되었습니다. 업그레이드만 하면 되며 Runner를 다시 등록할 필요는 없습니다. 실행 상태를 그동안 pid 파일(`Runner.Listener.pid`, 없으면 `.path`)에서 읽었지만 actions/runner는 둘 다 쓰지 않습니다. 시작 스크립트 어디에도 pid 파일을 쓰는 곳이 없고 `.path`에는 PATH 문자열이 들어 있습니다. 그래서 모든 Runner가 "등록됨, 실행 중 아님"으로 읽혔고 5분마다 도는 점검이 매번 전부를 다시 시작시켰습니다. 이제는 프로세스 테이블에서 판단하며, 컨테이너 모드에서는 각 컨테이너 안의 Agent에게 물어봅니다 — Manager는 다른 컨테이너의 프로세스를 볼 수 없습니다. 같은 원인으로 기본(비컨테이너) 모드의 "정지"는 항상 `未找到 runner pid 文件或 pid 无效` 로 실패했습니다.
 - **status=unknown**: 상세 팝업에서 probe 확인; "Start/Stop"으로 자가 복구 시도.
 
 ### 이미지 로컬 빌드

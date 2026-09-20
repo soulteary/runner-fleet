@@ -102,6 +102,7 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 - **Job 内で docker.sock が `permission denied`**: `job_docker_backend: host-socket` ではコンテナのユーザー（UID 1001）が socket の所有グループに属している必要があります。Manager はコンテナ作成時に検出したホストの docker GID で `--group-add` を付与します。GID が合っていないコンテナは「設定変更あり」と判定され、次回起動時に自動で作り直されます（実行中ならバッジが出るので「コンテナ再作成」を使ってください）。検出できない場合は `runners.docker_gid`（または `.env` の `DOCKER_GID`）に `getent group docker | cut -d: -f3` の値を設定します。
 - **Job 内で `command not found` や SDK 不足**: セルフホスト runner には GitHub ホストのようなツールチェーンは同梱されていません。まず起動時セルフチェック（`docker compose logs runner-manager | grep 自检`）を確認してください。設定中の各 Runner イメージに `git`/`unzip`/`tar`/`curl` のどれが欠けているかを示します。言語・プラットフォーム SDK はイメージを拡張してください（[`examples/runner-images/`](../../examples/runner-images/)）。
 - **古い Runner イメージ**: pull または再ビルドしてから Runner を起動すれば、Manager がイメージの変化（参照とイメージ ID の両方を見るので同じ tag の再ビルドも対象）を検出してコンテナを作り直します。実行中のコンテナには触れないので、中断してよいタイミングで行の「コンテナ再作成」を使ってください。
+- **ログに 5 分ごとに `已定时拉起 runner: <名前>` が繰り返し出力され、UI でも「実行中」にならない**: 本バージョンで修正済みです。アップグレードするだけでよく、Runner の再登録は不要です。実行状態はこれまで pid ファイル（`Runner.Listener.pid`、なければ `.path`）から読んでいましたが、actions/runner はそのどちらも書きません。起動スクリプトのどこにも pid ファイルの書き出しはなく、`.path` の中身は PATH 文字列です。そのためすべての Runner が「登録済みだが未実行」と判定され、5 分ごとの巡回が毎回すべてを起動し直していました。現在はプロセステーブルを見て判定し、コンテナモードでは各コンテナ内の Agent に問い合わせます（Manager から他コンテナのプロセスは見えないため）。同じ原因で、デフォルト（非コンテナ）モードの「停止」は必ず `未找到 runner pid 文件或 pid 无效` で失敗していました。
 - **status=unknown**: 詳細ポップアップの probe を確認。「Start/Stop」で自己修復を試す。
 
 ### イメージのローカルビルド

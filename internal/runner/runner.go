@@ -3,17 +3,18 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
 )
 
 // 与 handler 写入的文件名一致，供 cron 与 API 读取
@@ -92,10 +93,14 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 	return nil
 }
 
-// List 根据配置与磁盘状态列出所有 runner
+// List 根据配置与磁盘状态列出所有 runner。
+//
+// 注意：容器模式下每项的 Running 不可信——Runner 进程在各自的容器里，
+// 本进程扫 /proc 看不到它们。需要真实运行状态的调用方请用 ListWithLiveStatus。
 func List(cfg *config.Config) []RunnerInfo {
 	base := cfg.Runners.BasePath
 	list := make([]RunnerInfo, 0, len(cfg.Runners.Items))
+	dirs := make([]string, 0, len(cfg.Runners.Items))
 	for _, item := range cfg.Runners.Items {
 		installDir := item.InstallPath(base)
 		info := RunnerInfo{
@@ -112,29 +117,70 @@ func List(cfg *config.Config) []RunnerInfo {
 		if item.Path == "" {
 			info.Path = item.Name
 		}
-		info.Status, info.Running = getStatus(installDir)
+		info.Status = diskStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
 		info.RegisteredOnGitHub, info.GitHubCheckAt = readGitHubStatus(installDir)
 		list = append(list, info)
+		dirs = append(dirs, installDir)
+	}
+	// 一次扫描认领所有安装目录：逐个判定等于把整张进程表读 len(list) 遍
+	procs := runnerproc.FindMany(dirs)
+	for i := range list {
+		list[i].Running = list[i].Status == StatusInstalled && len(procs[list[i].InstallDir]) > 0
 	}
 	return list
 }
 
-func getStatus(installDir string) (Status, bool) {
+// ListWithLiveStatus 在 List 之上补齐真实运行状态：容器模式下逐个问容器内的 Agent，
+// 默认模式下 List 已经是本机进程的真实状态，直接返回。
+//
+// 后台的「已注册未运行则拉起」两个循环必须用这个，不能用 List：容器模式下
+// List 的 Running 恒为 false（Manager 与 Runner 不在同一个 PID namespace），
+// 于是每一轮巡检都会把每个 runner 再拉起一遍。
+//
+// 探测失败时把该项置为 StatusUnknown 而不是保留 installed：拉起的前提是
+// 「确知它没在跑」，Docker 不可达时并不确知，此时什么都不做比反复重启稳妥。
+func ListWithLiveStatus(ctx context.Context, cfg *config.Config) []RunnerInfo {
+	list := List(cfg)
+	if cfg == nil || !cfg.Runners.ContainerMode {
+		return list
+	}
+	for i := range list {
+		running, status, _, err := ContainerRunnerStatus(ctx, cfg, list[i].Name, list[i].InstallDir)
+		if err != nil {
+			list[i].Status = StatusUnknown
+			list[i].Running = false
+			continue
+		}
+		list[i].Running = running
+		list[i].Status = status
+	}
+	return list
+}
+
+// diskStatus 只看目录本身：不存在为 missing，有 .runner 为 installed，否则 new。
+// 与进程探测分开，好让 List 用一次 /proc 扫描判定一整批 runner。
+func diskStatus(installDir string) Status {
 	if installDir == "" {
-		return StatusMissing, false
+		return StatusMissing
 	}
 	fi, err := os.Stat(installDir)
 	if err != nil || !fi.IsDir() {
-		return StatusMissing, false
+		return StatusMissing
 	}
 	// 已注册的 runner 会有 .runner 文件
-	runnerFile := filepath.Join(installDir, ".runner")
-	if _, err := os.Stat(runnerFile); err == nil {
-		running := isProcessRunning(installDir)
-		return StatusInstalled, running
+	if _, err := os.Stat(filepath.Join(installDir, ".runner")); err == nil {
+		return StatusInstalled
 	}
-	return StatusNew, false
+	return StatusNew
+}
+
+func getStatus(installDir string) (Status, bool) {
+	status := diskStatus(installDir)
+	if status != StatusInstalled {
+		return status, false
+	}
+	return status, isProcessRunning(installDir)
 }
 
 // readRegistrationResult 读取 handler 写入的注册结果，返回 message 与 at
@@ -185,18 +231,13 @@ func WriteGitHubStatus(installDir string, registered bool) error {
 	return os.WriteFile(p, b, 0644)
 }
 
-// isProcessRunning 检测 Runner 进程是否存活：读取 pid 文件并校验进程存在（非 Windows）；
-// Windows 上仍为简化实现（仅看 pid 文件是否存在），注释中已说明。
+// isProcessRunning 检测本机是否有属于该安装目录的 Runner 进程存活。
+//
+// 只对「Runner 进程与 Manager 同在一个 PID namespace」的默认模式有意义。
+// 容器模式下 Runner 跑在各自的容器里，Manager 扫自己的 /proc 必然找不到，
+// 判定要走 ContainerRunnerStatus 问容器内的 Agent——见 ListWithLiveStatus。
 func isProcessRunning(installDir string) bool {
-	pid, err := readRunnerPid(installDir)
-	if err != nil || pid <= 0 {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		// Windows 上不查进程表，仅依据 pid 文件存在视为可能运行中
-		return true
-	}
-	return processExists(pid)
+	return runnerproc.Running(installDir)
 }
 
 // EnsureRunnerDir 确保 runner 目录存在并返回路径，且必须在 base_path 之下（防路径穿越）
@@ -242,39 +283,6 @@ func RunScriptName() string {
 	return "run.sh"
 }
 
-// readRunnerPid 读取 runner 的 pid 文件，返回 pid，无效则 0 与 error。
-// Runner.Listener.pid 为官方 runner 使用；.path 为部分版本或兼容用途。
-func readRunnerPid(installDir string) (int, error) {
-	for _, name := range []string{"Runner.Listener.pid", ".path"} {
-		f := filepath.Join(installDir, name)
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-		if err != nil || pid <= 0 {
-			continue
-		}
-		return pid, nil
-	}
-	return 0, os.ErrNotExist
-}
-
-// processExists 检查进程是否存在（Unix 下用 Kill(pid, 0)）
-func processExists(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	// Unix: signal 0 不发送信号，仅检查进程是否存在
-	if runtime.GOOS != "windows" {
-		err := process.Signal(syscall.Signal(0))
-		return err == nil
-	}
-	// Windows: FindProcess 不保证进程存活，保守返回 true 由上层仅用 pid 文件判断
-	return true
-}
-
 var execCommand = exec.Command
 
 // Start 在 installDir 下后台启动 runner（执行 run.sh/run.cmd）
@@ -317,24 +325,36 @@ func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir 
 	return Start(installDir)
 }
 
-// Stop 向 runner 进程发送停止信号（读取 pid 后 SIGTERM；Windows 用 taskkill）
-// 将 installDir 转为绝对路径，确保能正确找到该 runner 的 pid 文件
+// Stop 向该安装目录下的 Runner 进程发送 SIGTERM。
+//
+// runnerproc.Find 把监护脚本排在监听器之前，这里按序发信号：先让 run.sh 退出，
+// 它的 while 循环才不会在监听器被终止后又拉起一个新的。
+// 一个都没找到时返回错误——调用方（界面上的「停止」）需要知道没停成。
 func Stop(installDir string) error {
 	absDir, err := filepath.Abs(installDir)
 	if err != nil {
 		return fmt.Errorf("解析 runner 路径失败: %w", err)
 	}
 	installDir = absDir
-	pid, err := readRunnerPid(installDir)
-	if err != nil || pid <= 0 {
-		return fmt.Errorf("未找到 runner pid 文件或 pid 无效: %w", err)
+	pids := runnerproc.Find(installDir)
+	if len(pids) == 0 {
+		return fmt.Errorf("未找到 %s 下正在运行的 Runner 进程", installDir)
 	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return err
+	var firstErr error
+	for _, pid := range pids {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		// 进程可能在扫描与发信号之间自己退了，ESRCH 不算失败
+		if err := process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 	}
-	if runtime.GOOS == "windows" {
-		return process.Kill()
-	}
-	return process.Signal(syscall.SIGTERM)
+	return firstErr
 }

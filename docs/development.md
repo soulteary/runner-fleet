@@ -78,6 +78,31 @@ Example (probe failure):
 }
 ```
 
+### How running state is determined
+
+`internal/runnerproc` answers "is this runner's process alive?" by scanning `/proc` for a
+process whose argv claims that install directory — `<dir>/bin/Runner.Listener`, or a shell
+running `<dir>/run.sh` or `<dir>/run-helper.sh`.
+
+It deliberately does **not** read a pid file, because actions/runner does not write one.
+None of `run.sh`, `run-helper.sh.template` or `runsvc.sh` writes a pid anywhere; the pid
+only ever lives in a shell variable. The `.path` file in an install directory holds a PATH
+string, not a pid (`runsvc.sh` does `export PATH=$(cat .path)`). Reading either of those
+names always failed, which made every runner report "registered but not running" forever.
+
+The supervising shell counts as running even when `Runner.Listener` is momentarily gone:
+`run-helper.sh` sleeps 5 seconds on exit code 2 and `run.sh` then relaunches the listener,
+so a listener-only test would report the runner dead during every restart.
+
+Two consequences for callers:
+
+- `runner.List` is a disk-level view. In container mode its `Running` is always false —
+  the Manager and the runners are in different PID namespaces. Use
+  `runner.ListWithLiveStatus`, which asks each container's Agent, whenever the answer
+  drives an action. It maps a probe failure to `status=unknown` rather than `installed`,
+  so "registered but not running, so start it" cannot fire on a runner it could not reach.
+- Detection needs `/proc`, so it is Linux-only; elsewhere it reports "not running".
+
 ## Makefile targets
 
 - `make help`: List all targets.
