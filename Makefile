@@ -2,8 +2,8 @@
 BINARY  := runner-manager
 VERSION ?= dev
 
-# 本地构建 Runner 镜像的默认 tag；使用 CI 推送的镜像时为同仓库名、tag 带 -runner，如 ghcr.io/<owner>/<repo>:v1.4.0-runner
-RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet:v1.4.0-runner
+# 本地构建 Runner 镜像的默认 tag；使用 CI 推送的镜像时为同仓库名、tag 带 -runner，如 ghcr.io/<owner>/<repo>:v1.5.0-runner
+RUNNER_IMAGE ?= ghcr.io/soulteary/runner-fleet:v1.5.0-runner
 
 # 镜像内 app 用户加入的 docker 组 GID，需与宿主机一致才能访问 docker.sock（getent group docker | cut -d: -f3）
 DOCKER_GID ?= 999
