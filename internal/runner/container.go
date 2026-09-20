@@ -307,7 +307,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	}
 	if facts != nil {
 		// 启停路径不用缓存：刚 build 完就点「启动」是常见操作，读到旧镜像 ID 会让重建不发生
-		drift := driftFromFacts(ctx, cfg, runnerName, installDir, facts, resolveImageID)
+		drift := driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, resolveImageID)
 		switch {
 		case forceRecreate:
 			log.Printf("按要求重建容器 %s%s", cn, driftSuffix(drift))
@@ -423,11 +423,16 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	if facts == nil {
 		return false, StatusInstalled, "", nil
 	}
-	drift = driftFromFacts(ctx, cfg, runnerName, installDir, facts, cachedImageID)
+	// 这里也要 Ensure 而不是 Read：升级时那些正在运行的旧容器目录里还没有令牌文件，
+	// 而自动拉起只管没在跑的，它们永远等不到有人替它生成——不生成就报不出 agent_token 漂移，
+	// 界面上不提示，人也就不知道该点「重建容器」。生成失败时返回空串，
+	// 退化为原先「没有令牌就不谈漂移」的行为，不会把容器反复删了重建。
+	token, _ := EnsureAgentToken(installDir)
+	drift = driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, cachedImageID)
 	if !facts.Running {
 		return false, StatusInstalled, drift, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown
 	}
-	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, ReadAgentToken(installDir))
+	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, token)
 	if err != nil {
 		agentErrType := ProbeErrorTypeAgentConnect
 		if strings.Contains(err.Error(), "agent 返回") {

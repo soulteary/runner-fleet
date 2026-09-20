@@ -272,3 +272,58 @@ func TestStartRunnerContainer_RecreatesContainerWithoutAgentToken(t *testing.T) 
 		t.Fatalf("重建时应注入 AGENT_TOKEN，实际调用:\n%s", calls)
 	}
 }
+
+// TestContainerRunnerStatus_RunningPreTokenContainerReportsDrift
+// 升级时最要命的一类容器：本特性之前建的，而且**正在运行**。
+// 它的目录里没有 .agent_token，而两处自动拉起都只管没在跑的（info.Running 为假才拉），
+// 所以谁也不会去生成令牌。早先状态路径直接 ReadAgentToken，读到空就把整条检查跳过——
+// 界面上不出「配置已变更」，人不知道该点「重建容器」，容器就一直不鉴权地跑下去。
+// 状态路径必须自己把令牌 Ensure 出来，才谈得上发现这件事。
+func TestContainerRunnerStatus_RunningPreTokenContainerReportsDrift(t *testing.T) {
+	cfg, installDir := driftTestConfig(t, "host-socket")
+	cfg.Runners.DockerGID = 999
+
+	// 前提：目录里没有令牌文件，正如升级前的样子
+	tokenPath := filepath.Join(installDir, AgentTokenFile)
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Fatal("用例前提不成立：不该已有令牌文件")
+	}
+
+	running := strings.Replace(stoppedHostSocketInspect(installDir),
+		`"State": {"Status": "exited", "Running": false}`,
+		`"State": {"Status": "running", "Running": true}`, 1)
+	// 旧容器没有被注入过 AGENT_TOKEN
+	running = strings.Replace(running, `, "AGENT_TOKEN=already-injected"`, "", 1)
+	fakeDocker(t, running)
+
+	// Agent 探测必然失败（容器名解析不了），这里只关心 drift 与令牌文件
+	_, _, drift, _ := ContainerRunnerStatus(context.Background(), cfg, "a", installDir)
+
+	if !strings.Contains(drift, "agent_token") {
+		t.Fatalf("运行中的旧容器缺少 AGENT_TOKEN 未被检出，drift=%q", drift)
+	}
+	if _, err := os.Stat(tokenPath); err != nil {
+		t.Fatalf("状态查询应顺带把令牌生成出来，否则下次还是读到空: %v", err)
+	}
+}
+
+// TestContainerRunnerStatus_TokenlessDirStaysQuiet
+// 反面：令牌实在生成不出来（这里用一个不存在的目录模拟不可写）时要保持沉默。
+// 否则「报漂移 → 重建 → 仍然没有令牌可注入 → 再报漂移」会变成每次启动都删容器重建。
+func TestContainerRunnerStatus_TokenlessDirStaysQuiet(t *testing.T) {
+	cfg, installDir := driftTestConfig(t, "host-socket")
+	cfg.Runners.DockerGID = 999
+	missingDir := filepath.Join(installDir, "does-not-exist")
+
+	running := strings.Replace(stoppedHostSocketInspect(missingDir),
+		`"State": {"Status": "exited", "Running": false}`,
+		`"State": {"Status": "running", "Running": true}`, 1)
+	running = strings.Replace(running, `, "AGENT_TOKEN=already-injected"`, "", 1)
+	fakeDocker(t, running)
+
+	_, _, drift, _ := ContainerRunnerStatus(context.Background(), cfg, "a", missingDir)
+
+	if strings.Contains(drift, "agent_token") {
+		t.Fatalf("生成不出令牌时不该报 agent_token 漂移（会变成反复重建），drift=%q", drift)
+	}
+}

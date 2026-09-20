@@ -246,10 +246,10 @@ func TestDesiredContainerSpec_UsesVolumeHostPath(t *testing.T) {
 func TestDriftFromFacts_SkipsNonContainerMode(t *testing.T) {
 	cfg := &config.Config{Runners: config.RunnersConfig{BasePath: "/app/runners"}}
 	spec := hostSocketSpec()
-	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", factsFor(spec), resolveImageID); got != "" {
+	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", "tok", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("非容器模式不该报漂移: %q", got)
 	}
-	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", factsFor(spec), resolveImageID); got != "" {
+	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", "tok", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("配置为空不该报漂移: %q", got)
 	}
 }

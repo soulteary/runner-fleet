@@ -407,13 +407,19 @@ func containsString(list []string, want string) bool {
 // imageIDResolver 查询镜像 ID 的方式：状态展示用带缓存的，启停用实时的
 type imageIDResolver func(context.Context, string) string
 
-// driftFromFacts 已经拿到 inspect 结果时的比对入口，省掉重复的 docker inspect
-func driftFromFacts(ctx context.Context, cfg *config.Config, runnerName, installDir string, facts *containerFacts, imageID imageIDResolver) string {
+// driftFromFacts 已经拿到 inspect 结果时的比对入口，省掉重复的 docker inspect。
+//
+// agentToken 由调用方用 EnsureAgentToken 取得并传入，这里不自己去读：
+// 令牌「有没有」决定着要不要报 agent_token 漂移，而它是否存在取决于调用方有没有先生成。
+// 早先这里直接 ReadAgentToken，于是升级时那些**正在运行**的旧容器成了死角——
+// 它们的目录里还没有令牌文件，而自动拉起只管没在跑的，没人会去生成，
+// 读出来永远是空，检查被跳过，界面上不提示，容器就一直不鉴权。
+func driftFromFacts(ctx context.Context, cfg *config.Config, runnerName, installDir, agentToken string, facts *containerFacts, imageID imageIDResolver) string {
 	if cfg == nil || !cfg.Runners.ContainerMode || facts == nil {
 		return ""
 	}
-	// 传入真实令牌：比对只看容器有没有被注入过 AGENT_TOKEN，不比对取值
-	spec := desiredContainerSpec(cfg, runnerName, installDir, ReadAgentToken(installDir))
+	// 比对只看容器有没有被注入过 AGENT_TOKEN，不比对取值
+	spec := desiredContainerSpec(cfg, runnerName, installDir, agentToken)
 	if _, err := spec.createArgs(); err != nil {
 		// 后端配置本身非法时不谈漂移，启动时会报明确错误
 		return ""
