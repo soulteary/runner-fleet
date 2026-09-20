@@ -285,8 +285,24 @@ func EnsureRunnerDir(cfg *config.Config, name, subPath string) (string, error) {
 	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
 		return "", os.ErrInvalid
 	}
-	return abs, os.MkdirAll(abs, 0755)
+	// base_path 本身沿用 0755 创建，只把 Runner 自己的安装目录收到 0700。
+	//
+	// config.sh 会往这个目录里写 .credentials_rsaparams——Runner 向 GitHub 表明身份用的
+	// RSA 私钥。actions/runner 不给这些文件设权限（ConfigurationStore 只在 Windows 上打
+	// Hidden 属性，Unix 侧完全跟 umask 走，通常是 0644），所以目录若可被他人进入，
+	// 宿主机上任何本地用户都能读走它，进而冒充这个 Runner 领 Job、看到传给 Job 的 secrets。
+	//
+	// MkdirAll 对已存在的目录不改权限：老部署里的目录仍是 0755，由启动自检点名并给出
+	// chmod 命令，而不是在这里替用户改——UID 不匹配的部署下收紧权限会把本来能跑的弄坏。
+	if err := os.MkdirAll(baseAbs, 0755); err != nil {
+		return "", err
+	}
+	return abs, os.MkdirAll(abs, RunnerDirMode)
 }
+
+// RunnerDirMode 是 Runner 安装目录的权限：只有属主可进入。
+// 目录里有 GitHub 凭据，见 EnsureRunnerDir 的说明。
+const RunnerDirMode = 0o700
 
 // ConfigScriptName 返回当前系统的配置脚本名
 func ConfigScriptName() string {

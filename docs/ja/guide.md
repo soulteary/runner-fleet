@@ -184,4 +184,6 @@ runners:
 
 **機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 
+**Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。
+
 [← プロジェクトホームへ](../../README.md)

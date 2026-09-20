@@ -156,6 +156,17 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   **正在运行的容器不会被自动重建**——上面可能正跑着 Job；要立刻生效就点该行的「重建容器」
   （会中断正在跑的 Job），或等它空闲时停止再启动。
   重新 build 同名 tag 的镜像同样会被识别（比对的是镜像 ID），不必改 tag。
+- **自检报「N 个 Runner 目录可被宿主机上的其他用户进入」**
+  Runner 的安装目录里有 `config.sh` 写下的 `.credentials_rsaparams`——它向 GitHub 表明身份的
+  RSA 私钥。actions/runner 不给这些文件设 Unix 权限（只在 Windows 上打 Hidden 属性，Linux 上
+  跟着 umask 落成 0644），所以目录的权限位就是最后一道门；读到那个文件就能冒充该 Runner
+  领取 Job，并看到传给 Job 的 secrets。
+  本版本起新建的目录是 0700，但已存在的目录不会被改动。自检会把它们逐个列出并给出
+  可直接执行的 `chmod 700 <目录...>`。**先看再执行**：Manager 以 root 跑、容器内是 app(1001)
+  这种 UID 不匹配的部署下，收紧权限会让容器读不到自己的目录；那种情况应当先
+  `sudo chown -R 1001:1001 runners` 把属主理顺。
+  这条防的是宿主机上的其他本地用户。`host-socket` 后端下 Job 本来就能挂任意宿主机路径，
+  那层暴露不受影响（见上文关于 `host-socket` 的说明）。
 - **宿主机磁盘越用越满**
   `host-socket` 下所有 Job 的镜像与构建产物都堆在宿主机 daemon 上：
   `docker image prune -f && docker builder prune -f`。Runner 自己的目录（`_work` 与 HOME 缓存）也会长大。

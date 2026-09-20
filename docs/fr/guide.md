@@ -184,4 +184,6 @@ Plusieurs runners par machine : utilisez des sous-répertoires distincts.
 
 **Fichiers sensibles** : config/config.yaml et .env sont dans `.gitignore`. Pour `.github_check_token` de chaque runner, utilisez `chmod 600` ; ajoutez `**/.github_check_token` à `.gitignore` si sous contrôle de version.
 
+**Permissions des répertoires runner** : le répertoire d'installation de chaque runner est créé en 0700. `config.sh` y écrit `.credentials_rsaparams` — la clé privée RSA avec laquelle le runner s'authentifie auprès de GitHub — et actions/runner ne pose aucune permission Unix sur ces fichiers ; le mode du répertoire est donc la seule chose qui empêche les autres utilisateurs locaux de la machine de la lire et d'usurper ce runner. **Les répertoires créés par les versions antérieures restent en 0755.** L'auto-test de démarrage (`docker compose logs runner-manager | grep 自检`) les nomme et fournit le `chmod 700` à exécuter. Il ne les modifie pas lui-même : en cas d'UID divergents (Manager en root, conteneur en app(1001)), resserrer les permissions casserait un déploiement qui fonctionne — vérifiez avant d'exécuter.
+
 [← Retour à l'accueil du projet](../../README.md)
