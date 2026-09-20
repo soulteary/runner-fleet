@@ -20,15 +20,26 @@ func hostSocketSpec() containerSpec {
 	}
 }
 
-// factsFor 按 spec 造出「一致」的 inspect 结果，测试再逐项改动它
+// factsFor 按 spec 造出「一致」的 inspect 结果（带创建标签，即新版本建的容器）
 func factsFor(s containerSpec) *containerFacts {
+	f := legacyFactsFor(s)
+	f.Labels = map[string]string{
+		labelJobBackend: s.JobBackend,
+		labelNetwork:    s.Network,
+	}
+	return f
+}
+
+// legacyFactsFor 不带标签，模拟旧版本建出来的容器
+func legacyFactsFor(s containerSpec) *containerFacts {
 	f := &containerFacts{
-		Running:  true,
-		Status:   "running",
-		ImageRef: s.Image,
-		ImageID:  "sha256:aaa",
-		Binds:    []string{s.runnerBind()},
-		Networks: []string{s.Network},
+		Running:     true,
+		Status:      "running",
+		ImageRef:    s.Image,
+		ImageID:     "sha256:aaa",
+		Binds:       []string{s.runnerBind()},
+		Networks:    []string{s.Network},
+		NetworkMode: s.Network,
 	}
 	if host := s.dockerHostEnv(); host != "" {
 		f.Env = append(f.Env, "DOCKER_HOST="+host)
@@ -138,6 +149,62 @@ func TestDriftReason_NetworkAndMount(t *testing.T) {
 	}
 }
 
+// TestDriftReason_NetworkUsesCreationNotAttachment
+// docker create --network 只设一个网络，但容器可以事后被 docker network connect
+// 接进别的网络。所以「它连着目标网络吗」回答不了「它是按哪个网络建的」：
+// 配置从 runner-net 改到 net-b、而容器两个都连着时，按「连着就算数」会放行，
+// 于是它继续连着 runner-net——恰恰是这次改配置想断掉的那条。
+func TestDriftReason_NetworkUsesCreationNotAttachment(t *testing.T) {
+	spec := hostSocketSpec() // Network = runner-net
+
+	// 新版本建的容器：以创建标签为准
+	labeled := factsFor(spec)
+	labeled.Networks = []string{"runner-net", "net-b"} // 手工 connect 了 net-b
+
+	// 配置仍是 runner-net：多连一个网络是运维自己接的，不该因此重建
+	if got := spec.driftReason(labeled, "sha256:aaa"); got != "" {
+		t.Fatalf("多连一个网络不该触发重建: %q", got)
+	}
+
+	// 配置改成 net-b：标签记的还是 runner-net，必须报
+	moved := spec
+	moved.Network = "net-b"
+	if got := moved.driftReason(labeled, "sha256:aaa"); got != "container_network: runner-net → net-b" {
+		t.Fatalf("配置改网络后仍连着旧网络，未被检出: %q", got)
+	}
+
+	// 旧版本建的容器没有标签，退回 NetworkMode 推断（它才是 create 时那个参数）
+	legacy := legacyFactsFor(spec)
+	legacy.Networks = []string{"runner-net", "net-b"}
+	if got := moved.driftReason(legacy, "sha256:aaa"); got != "container_network: runner-net → net-b" {
+		t.Fatalf("旧容器按 NetworkMode 推断未被检出: %q", got)
+	}
+	if got := spec.driftReason(legacy, "sha256:aaa"); got != "" {
+		t.Fatalf("旧容器 NetworkMode 与配置一致时不该报: %q", got)
+	}
+
+	// 连 NetworkMode 都拿不到时保持原先的「连着就算数」，宁可漏报也不凭空重建
+	blind := legacyFactsFor(spec)
+	blind.NetworkMode = ""
+	blind.Networks = []string{"runner-net", "net-b"}
+	if got := moved.driftReason(blind, "sha256:aaa"); got != "" {
+		t.Fatalf("信息不全时不该报漂移: %q", got)
+	}
+}
+
+// TestCreateArgs_RecordsNetworkLabel 创建时必须把网络记进标签，否则后续只能靠推断
+func TestCreateArgs_RecordsNetworkLabel(t *testing.T) {
+	spec := hostSocketSpec()
+	args, err := spec.createArgs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, labelNetwork+"=runner-net") {
+		t.Fatalf("create 参数缺少网络标签: %s", joined)
+	}
+}
+
 func TestDriftReason_DockerGID(t *testing.T) {
 	spec := hostSocketSpec()
 	facts := factsFor(spec)
@@ -239,10 +306,154 @@ func TestDesiredContainerSpec_UsesVolumeHostPath(t *testing.T) {
 func TestDriftFromFacts_SkipsNonContainerMode(t *testing.T) {
 	cfg := &config.Config{Runners: config.RunnersConfig{BasePath: "/app/runners"}}
 	spec := hostSocketSpec()
-	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", factsFor(spec)); got != "" {
+	if got := driftFromFacts(t.Context(), cfg, "a", "/app/runners/a", "tok", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("非容器模式不该报漂移: %q", got)
 	}
-	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", factsFor(spec)); got != "" {
+	if got := driftFromFacts(t.Context(), nil, "a", "/app/runners/a", "tok", factsFor(spec), resolveImageID); got != "" {
 		t.Fatalf("配置为空不该报漂移: %q", got)
+	}
+}
+
+// TestDriftReason_ImageProvidedDockerHostIsNotOurs
+// 自定义 Runner 镜像在 Dockerfile 里写了 ENV DOCKER_HOST 时，docker inspect 的 Config.Env
+// 里也会有它。若把它当成我们注入的，backend=none 会被反复判成漂移，每次启动都删容器重建。
+// 标签是正解：带标签的容器一律按标签判，镜像自带的 ENV 再也干扰不到。
+func TestDriftReason_ImageProvidedDockerHostIsNotOurs(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.JobBackend = "none"
+
+	withLabel := factsFor(spec)
+	withLabel.Env = append(withLabel.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(withLabel, "sha256:aaa"); got != "" {
+		t.Fatalf("有标签时不该被镜像自带的 DOCKER_HOST 干扰: %q", got)
+	}
+
+	// 真正由我们注入的值要认出来：之前是 host-socket，现在配置成 none
+	wasHostSocket := legacyFactsFor(hostSocketSpec())
+	if got := spec.driftReason(wasHostSocket, "sha256:aaa"); got == "" {
+		t.Fatal("host-socket → none 漏报")
+	}
+}
+
+// TestDriftReason_LegacyImageDockerHostSettlesAfterOneRebuild
+// 没有标签的旧容器分不出 DOCKER_HOST 是我们注入的还是镜像自带的（见 looksInjectedDockerHost），
+// 这里选择宁可多重建一次也不漏报。这一次的代价必须是有界的：重建后容器带上标签，
+// 从此走标签比对，不能变成每次启动都重建。
+func TestDriftReason_LegacyImageDockerHostSettlesAfterOneRebuild(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.JobBackend = "none"
+
+	legacy := legacyFactsFor(spec)
+	legacy.Env = append(legacy.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(legacy, "sha256:aaa"); got == "" {
+		t.Fatal("旧容器上的 tcp://…:2375 一律当作可能是我们注入的，应报漂移")
+	}
+
+	// 重建之后：同样的 ENV 还在（none 不会去掉镜像自带的变量），但标签在了
+	rebuilt := factsFor(spec)
+	rebuilt.Env = append(rebuilt.Env, "DOCKER_HOST=tcp://my-own-dind:2375")
+	if got := spec.driftReason(rebuilt, "sha256:aaa"); got != "" {
+		t.Fatalf("重建一次后应当安静下来，否则就是反复重建: %q", got)
+	}
+}
+
+// TestDriftReason_LegacyDindHostChangedThenNone
+// 旧容器按 dind + dind_host=old-dind 建出来，之后配置改成 none 并且把 dind_host 也换了
+// （不用 dind 了顺手改掉，很自然）。若只认当前的 dind_host，tcp://old-dind:2375 会被当成
+// 与我们无关而漏报，容器于是带着通往旧 DinD 的 DOCKER_HOST 继续跑——none 想断的正是这个。
+func TestDriftReason_LegacyDindHostChangedThenNone(t *testing.T) {
+	old := hostSocketSpec()
+	old.JobBackend = "dind"
+	old.DindHost = "old-dind"
+	legacy := legacyFactsFor(old) // DOCKER_HOST=tcp://old-dind:2375，无 socket 挂载
+
+	for _, nowHost := range []string{"new-dind", "runner-dind"} {
+		now := hostSocketSpec()
+		now.JobBackend = "none"
+		now.DindHost = nowHost // 改成别的地址 / 删掉后回落默认值
+		if got := now.driftReason(legacy, "sha256:aaa"); got == "" {
+			t.Fatalf("dind_host=%s 时漏报：容器仍可达 old-dind，配置却是 none", nowHost)
+		}
+	}
+}
+
+// TestDriftReason_LabelWins 标签与配置不一致即漂移，不必再看 DOCKER_HOST
+func TestDriftReason_LabelWins(t *testing.T) {
+	spec := hostSocketSpec()
+	facts := factsFor(spec) // 标签记的是 host-socket
+
+	want := spec
+	want.JobBackend = "dind"
+	got := want.driftReason(facts, "sha256:aaa")
+	if got != "job_docker_backend: host-socket → dind" {
+		t.Fatalf("标签比对结果不对: %q", got)
+	}
+}
+
+// TestCreateArgs_RecordsBackendLabel 创建时必须打上标签，否则后续只能靠推断
+func TestCreateArgs_RecordsBackendLabel(t *testing.T) {
+	for _, backend := range []string{"dind", "host-socket", "none"} {
+		spec := hostSocketSpec()
+		spec.JobBackend = backend
+		args, err := spec.createArgs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := labelJobBackend + "=" + backend
+		if !containsString(args, want) {
+			t.Fatalf("backend=%s 的 create 参数缺少标签 %s: %v", backend, want, args)
+		}
+	}
+}
+
+// TestDriftReason_MissingAgentToken
+// 本特性之前建的容器没有 AGENT_TOKEN，Agent 退化为不鉴权——同网络里的其它容器就能控制它。
+// 这种容器应当被判为漂移，下次启动时自动补上。
+func TestDriftReason_MissingAgentToken(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.AgentToken = "tok-abc"
+	facts := factsFor(spec) // factsFor 不注入 AGENT_TOKEN，正是旧容器的样子
+
+	if got := spec.driftReason(facts, "sha256:aaa"); got != "agent_token: (none) → set" {
+		t.Fatalf("缺少 AGENT_TOKEN 未被检出: %q", got)
+	}
+
+	// 已注入过就不管取值是否相同：令牌轮换属于运行期故障，由探测暴露，不该删容器
+	withToken := factsFor(spec)
+	withToken.Env = append(withToken.Env, "AGENT_TOKEN=tok-old")
+	if got := spec.driftReason(withToken, "sha256:aaa"); got != "" {
+		t.Fatalf("已注入令牌的容器不该报漂移: %q", got)
+	}
+
+	// 手头没有令牌时（读不到文件）不做判断
+	noToken := spec
+	noToken.AgentToken = ""
+	if got := noToken.driftReason(facts, "sha256:aaa"); got != "" {
+		t.Fatalf("没有令牌可注入时不该报漂移: %q", got)
+	}
+}
+
+// TestDriftReason_EmptyAgentTokenCountsAsMissing
+// 「有这个变量」不等于「有令牌」。镜像里一句 ENV AGENT_TOKEN= 就会让变量存在而取值为空，
+// Agent 侧 TrimSpace 后当作未配置，转去读挂载的 .agent_token；读不到（root 拥有的 0600，
+// 正是本项要修的迁移场景）就完全不鉴权，而且没有任何 401 能暴露它。
+// 只看键在不在的话，这种容器会永远绕过重建，本项的修复对它等于没做。
+func TestDriftReason_EmptyAgentTokenCountsAsMissing(t *testing.T) {
+	spec := hostSocketSpec()
+	spec.AgentToken = "tok-abc"
+
+	for _, v := range []string{"", "   ", "\t"} {
+		facts := factsFor(spec)
+		facts.Env = append(facts.Env, "AGENT_TOKEN="+v)
+		if got := spec.driftReason(facts, "sha256:aaa"); got != "agent_token: (none) → set" {
+			t.Fatalf("AGENT_TOKEN=%q（Agent 判定为未配置）未被检出: %q", v, got)
+		}
+	}
+
+	// 对照：非空取值仍然只看「有」，不比对是否与当前令牌相同
+	ok := factsFor(spec)
+	ok.Env = append(ok.Env, "AGENT_TOKEN=tok-old")
+	if got := spec.driftReason(ok, "sha256:aaa"); got != "" {
+		t.Fatalf("非空令牌不该因取值不同而报漂移: %q", got)
 	}
 }
