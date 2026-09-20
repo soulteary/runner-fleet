@@ -5,6 +5,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/runner-agent ./cmd/runner-agent
+# internal 必须一并带上：Agent 自 #25 起 import internal/runnerproc（按进程表判定运行状态），
+# 而 builder 阶段只 COPY 了 cmd/runner-agent，构建当场报 no required module provides package。
+# 完整工作区里 go build ./cmd/runner-agent 照样能过，所以这个洞一直到 main/tag 推送
+# 才在 Publish image (Runner) 里炸开，连炸三次（#25 之后每一次）。
+# 这里整个 internal 一起拷，而不是只点名 runnerproc：下次 Agent 再 import 别的包时
+# 不必记得回来改这一行，代价只是 internal 里任何改动都会让 builder 层失效。
+COPY internal ./internal
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o runner-agent ./cmd/runner-agent

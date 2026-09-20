@@ -342,7 +342,7 @@ runners:
 }
 
 func TestLoad_ContainerImageWhitespaceUsesDefault(t *testing.T) {
-	// 未设置 FLEET_IMAGE_TAG 时默认使用 v1.5.0-runner
+	// 未设置 FLEET_IMAGE_TAG 时默认使用 v1.6.0-runner
 	restore := setEnvAndRestore(t, "FLEET_IMAGE_TAG", "")
 	defer restore()
 
@@ -363,7 +363,7 @@ runners:
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "ghcr.io/soulteary/runner-fleet:v1.5.0-runner"
+	want := "ghcr.io/soulteary/runner-fleet:v1.6.0-runner"
 	if cfg.Runners.ContainerImage != want {
 		t.Fatalf("expected default container image %q, got %q", want, cfg.Runners.ContainerImage)
 	}
@@ -617,7 +617,7 @@ func TestLoad_EnvOverrides_SERVER_PORT(t *testing.T) {
 
 func TestLoad_ContainerImageFromManagerImage(t *testing.T) {
 	restore := setEnvsAndRestore(t, map[string]string{
-		"MANAGER_IMAGE":   "ghcr.io/soulteary/runner-fleet:v1.0.1",
+		"MANAGER_IMAGE":   "ghcr.io/soulteary/runner-fleet:v1.0.1", // version-check-ignore：这里的 v1.0.1 是 MANAGER_IMAGE 的输入样本，不是当前版本
 		"CONTAINER_MODE":  "true",
 		"FLEET_IMAGE_TAG": "",
 		"RUNNER_IMAGE":    "",
@@ -642,7 +642,7 @@ runners:
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "ghcr.io/soulteary/runner-fleet:v1.0.1-runner"
+	want := "ghcr.io/soulteary/runner-fleet:v1.0.1-runner" // version-check-ignore：同上，断言的是上面那个输入推导出的结果
 	if cfg.Runners.ContainerImage != want {
 		t.Fatalf("expected container_image %q from MANAGER_IMAGE, got %q", want, cfg.Runners.ContainerImage)
 	}

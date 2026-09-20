@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 버전 포함 (/version 및 디버깅용)
-go build -ldflags "-X main.Version=1.5.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent만 빌드 (컨테이너 모드)
 go build -o runner-agent ./cmd/runner-agent
