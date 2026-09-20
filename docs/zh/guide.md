@@ -182,4 +182,6 @@ runners:
 
 **敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
 
+**Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep 自检`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
+
 [← 返回项目首页](../../README.md)

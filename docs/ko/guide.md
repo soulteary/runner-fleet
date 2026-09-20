@@ -182,4 +182,6 @@ runners:
 
 **민감한 파일**: config/config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
 
+**Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep 自检`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
+
 [← 프로젝트 홈으로](../../README.md)

@@ -187,9 +187,20 @@ func TestFind_RealProcesses(t *testing.T) {
 	dir := t.TempDir()
 
 	// 监护脚本：照搬 actions/runner 的 shebang 形态，不要 exec，
-	// 否则 bash 会被替换掉、argv 就不再是 `/bin/bash <dir>/run.sh`
+	// 否则 bash 会被替换掉、argv 就不再是 `/bin/bash <dir>/run.sh`。
+	//
+	// 也不能用 `sleep 120` 让它挂住：bash 会 fork 一个子进程去 exec sleep，
+	// 而在 fork 与 execve 之间，子进程的 cmdline 仍是 bash 的 argv，会被认成
+	// 第二个监护脚本，于是下面按序比对 pid 的断言随机失败。窗口只有几微秒，
+	// 本机几乎碰不到，CI 上机器一忙就中招。
+	// read 是 builtin，重定向由当前 shell 完成，打开一个没有写端的 FIFO 就地阻塞，
+	// 全程不 fork。
 	script := filepath.Join(dir, "run.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/bash\nsleep 120\n"), 0755); err != nil {
+	fifo := filepath.Join(dir, ".test-block")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatalf("创建 FIFO 失败: %v", err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/bash\nread -r -t 120 < \""+fifo+"\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// 监听器：要一个真正的可执行文件，argv[0] 才会是它自己的绝对路径；

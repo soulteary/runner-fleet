@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 		return []CheckResult{fail("config", "配置为空", "")}
 	}
 	results := []CheckResult{checkBasePath(cfg)}
+	results = append(results, checkRunnerDirPermissions(cfg))
 	if !cfg.Runners.ContainerMode {
 		return append(results, checkDefaultModeDocker(ctx))
 	}
@@ -84,6 +86,41 @@ func checkBasePath(cfg *config.Config) CheckResult {
 			fmt.Sprintf("检查目录权限与挂载选项，确认 UID %d 对该目录有完整读写权限", os.Getuid()))
 	}
 	return ok(name, fmt.Sprintf("%s 可写（UID %d）", base, os.Getuid()))
+}
+
+// checkRunnerDirPermissions 点名可被他人进入的 Runner 安装目录。
+//
+// 目录里有 config.sh 写下的 .credentials_rsaparams——Runner 向 GitHub 表明身份的 RSA 私钥。
+// actions/runner 不给这些文件设权限（Unix 侧完全跟 umask 走，通常 0644），所以目录的
+// 权限位就是最后一道门。本版本起新建的目录是 0700，但 MkdirAll 不会改动已存在的目录，
+// 老部署里的仍是 0755。
+//
+// 这里只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下擅自收紧
+// 权限会把本来能跑的弄坏，该由人看过再决定。
+func checkRunnerDirPermissions(cfg *config.Config) CheckResult {
+	const name = "Runner 目录权限"
+	base := cfg.Runners.BasePath
+	var loose []string
+	for _, item := range cfg.Runners.Items {
+		dir := item.InstallPath(base)
+		info, err := os.Stat(dir)
+		if err != nil || !info.IsDir() {
+			continue // 还没建出来的目录不在本项管辖内，checkBasePath 已覆盖根目录
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			loose = append(loose, dir)
+		}
+	}
+	if len(loose) == 0 {
+		return ok(name, "各 Runner 目录均不可被其他用户进入")
+	}
+	sort.Strings(loose)
+	return warn(name,
+		fmt.Sprintf("%d 个 Runner 目录可被宿主机上的其他用户进入：%s。"+
+			"目录里有 config.sh 写下的 .credentials_rsaparams（Runner 的 GitHub 身份私钥），"+
+			"读到它就能冒充该 Runner 领取 Job 并看到传给 Job 的 secrets",
+			len(loose), strings.Join(loose, "、")),
+		"chmod 700 "+strings.Join(loose, " "))
 }
 
 // checkDefaultModeDocker 默认模式下 Job 在 Manager 容器内执行，这里说明 Job 内 docker 会连到哪
