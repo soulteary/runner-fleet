@@ -427,7 +427,10 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	// 而自动拉起只管没在跑的，它们永远等不到有人替它生成——不生成就报不出 agent_token 漂移，
 	// 界面上不提示，人也就不知道该点「重建容器」。生成失败时返回空串，
 	// 退化为原先「没有令牌就不谈漂移」的行为，不会把容器反复删了重建。
-	token, _ := EnsureAgentToken(installDir)
+	token, tokenErr := EnsureAgentToken(installDir)
+	// 拿不到令牌意味着这个 Runner 的 Agent 不鉴权，而且 agent_token 漂移检查会因为
+	// 「手头没有令牌」而跳过自己，界面上什么都看不到——至少要在日志里说一次
+	WarnAgentTokenUnavailable(installDir, tokenErr)
 	drift = driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, cachedImageID)
 	if !facts.Running {
 		return false, StatusInstalled, drift, nil // 容器未跑时保留「已注册」状态，不覆盖为 unknown

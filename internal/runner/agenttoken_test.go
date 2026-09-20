@@ -67,44 +67,75 @@ func TestEnsureAgentToken_ReusesExistingToken(t *testing.T) {
 	}
 }
 
-// TestEnsureAgentToken_RecoversFromEmptyLeftover
-// O_EXCL 是先建文件再写内容。若 Manager 恰在这两步之间被杀，会留下一个零字节的令牌文件。
-// 它会永远挡住后续的 O_EXCL，于是谁也拿不到令牌——而拿不到令牌就不谈 agent_token 漂移，
-// 鉴权就此永久静默失效，正是本 PR 要消灭的那种状态。所以必须能自愈。
-func TestEnsureAgentToken_RecoversFromEmptyLeftover(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, AgentTokenFile)
-	if err := os.WriteFile(path, nil, 0600); err != nil {
-		t.Fatal(err)
+// TestEnsureAgentToken_NeverUnlinksExistingFile
+// 回收空文件必然要 unlink，而「等若干毫秒还是空就判定写入者已死」是不成立的：
+// 写入者可能只是被调度走了，或者文件系统写入卡了一下。此时 unlink 会把一个还活着的
+// 写入者的 inode 摘掉，它照样把 A 写进那个没有名字的 inode 并返回 A，
+// 而盘上留下的是回收者发布的 B —— 容器注入 A、Manager 读到 B，从此永远 401。
+// 所以这里的硬性要求是：EnsureAgentToken 绝不删除已经占着正式名字的文件。
+func TestEnsureAgentToken_NeverUnlinksExistingFile(t *testing.T) {
+	cases := map[string]string{
+		"零字节（早先版本写入失败的残留）": "",
+		"只有空白（读出来也是空串）":    "   \n",
 	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, AgentTokenFile)
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
 
-	token, err := EnsureAgentToken(dir)
-	if err != nil {
-		t.Fatalf("零字节残留应当能自愈，却失败了: %v", err)
-	}
-	if token == "" {
-		t.Fatal("自愈后仍未拿到令牌")
-	}
-	if got := ReadAgentToken(dir); got != token {
-		t.Fatalf("磁盘上的令牌与返回值不一致: %q vs %q", got, token)
+			if _, err := EnsureAgentToken(dir); err == nil {
+				t.Fatal("占着名字但读不出内容时应当报错，而不是默默接管")
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("原文件不该被删除: %v", err)
+			}
+			if string(got) != content {
+				t.Fatalf("原文件内容被改动了: %q → %q", content, string(got))
+			}
+		})
 	}
 }
 
-// TestEnsureAgentToken_KeepsUnreadableFileWithContent
-// 反面：ReadAgentToken 读不动文件时也返回空串（权限被改过等）。那种情况下文件里是有内容的，
-// 删掉就等于把正在运行的容器的令牌作废、换一个它不认识的。只有确认是零字节才允许清理。
-func TestEnsureAgentToken_KeepsUnreadableFileWithContent(t *testing.T) {
+// TestEnsureAgentToken_LeavesNoTempFileBehind
+// 临时文件是实现细节，正常与失败路径都不该把它留在 Runner 目录里。
+func TestEnsureAgentToken_LeavesNoTempFileBehind(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, AgentTokenFile)
-	// 只有空白字符：ReadAgentToken 会 TrimSpace 成空串，但文件是有内容的
-	if err := os.WriteFile(path, []byte("   \n"), 0600); err != nil {
+	if _, err := EnsureAgentToken(dir); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := EnsureAgentToken(dir); err == nil {
-		t.Fatal("读不到内容的非空文件不该被当作残留处理")
+	// 再走一次「名字已被占」的分支
+	if _, err := EnsureAgentToken(dir); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("有内容的令牌文件不该被删除: %v", err)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != AgentTokenFile {
+			t.Fatalf("目录里残留了临时文件: %s", e.Name())
+		}
+	}
+}
+
+// TestEnsureAgentToken_PublishedFileIsNeverEmpty
+// 原子发布的意义就在这里：.agent_token 这个名字要么不存在，要么内容完整。
+// 没有「已创建、还没写完」的中间态，也就没有需要回收的空文件。
+func TestEnsureAgentToken_PublishedFileIsNeverEmpty(t *testing.T) {
+	dir := t.TempDir()
+	token, err := EnsureAgentToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, AgentTokenFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) == 0 || string(b) != token {
+		t.Fatalf("发布出来的文件内容不完整: %q（返回值 %q）", string(b), token)
 	}
 }
