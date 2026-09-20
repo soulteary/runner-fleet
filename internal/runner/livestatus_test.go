@@ -163,3 +163,89 @@ func TestListWithLiveStatus_DefaultModePassesThrough(t *testing.T) {
 		t.Fatalf("默认模式不应调用 docker，实际调用了:\n%s", calls)
 	}
 }
+
+// liveStatusConfigUnregistered 与 liveStatusConfig 相同，只是不写 .runner：
+// 配置里有这个 runner，但它从没被注册过
+func liveStatusConfigUnregistered(t *testing.T) *config.Config {
+	t.Helper()
+	cfg := liveStatusConfig(t)
+	installDir := cfg.Runners.Items[0].InstallPath(cfg.Runners.BasePath)
+	if err := os.Remove(filepath.Join(installDir, ".runner")); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+// 没注册过的 runner 不能被探测结果说成「已注册未运行」。
+// 容器不存在时 ContainerRunnerStatus 一律返回 installed，若拿它覆盖磁盘状态，
+// startIdleRunners 就会给一个从没配置过的 runner 建容器并发 /start。
+func TestListWithLiveStatus_UnregisteredRunnerStaysNew(t *testing.T) {
+	cfg := liveStatusConfigUnregistered(t)
+	fakeDocker(t, `[]`) // 容器不存在
+
+	live := ListWithLiveStatus(context.Background(), cfg)
+	if live[0].Status != StatusNew {
+		t.Fatalf("没有 .runner、容器也不存在时应为 %q，得到 %q —— 巡检会据此给它建容器", StatusNew, live[0].Status)
+	}
+	if live[0].Running {
+		t.Fatal("不应判定为运行中")
+	}
+}
+
+// 容器存在但已停止，目录仍未注册：同样不能说成 installed
+func TestListWithLiveStatus_UnregisteredRunnerWithStoppedContainerStaysNew(t *testing.T) {
+	cfg := liveStatusConfigUnregistered(t)
+	installDir := cfg.Runners.Items[0].InstallPath(cfg.Runners.BasePath)
+	fakeDocker(t, stoppedHostSocketInspect(installDir))
+
+	live := ListWithLiveStatus(context.Background(), cfg)
+	if live[0].Status != StatusNew {
+		t.Fatalf("目录未注册时应为 %q，得到 %q", StatusNew, live[0].Status)
+	}
+}
+
+// 安装目录整个不存在时更不能说成 installed：
+// 巡检据此去建容器，bind mount 的源路径会被 Docker 以 root 属主创建出来，
+// 之后 Manager（UID 1001）就写不进去了
+func TestListWithLiveStatus_MissingInstallDirStaysMissing(t *testing.T) {
+	cfg := liveStatusConfig(t)
+	installDir := cfg.Runners.Items[0].InstallPath(cfg.Runners.BasePath)
+	if err := os.RemoveAll(installDir); err != nil {
+		t.Fatal(err)
+	}
+	fakeDocker(t, `[]`)
+
+	live := ListWithLiveStatus(context.Background(), cfg)
+	if live[0].Status != StatusMissing {
+		t.Fatalf("安装目录不存在时应为 %q，得到 %q", StatusMissing, live[0].Status)
+	}
+}
+
+// 直接钉住 ContainerRunnerStatus 的契约：没有容器可问时回落到磁盘状态，
+// 而不是一律说 installed。界面与后台巡检都建立在这个返回值上。
+func TestContainerRunnerStatus_FallsBackToDiskStatus(t *testing.T) {
+	cfg := liveStatusConfig(t)
+	installDir := cfg.Runners.Items[0].InstallPath(cfg.Runners.BasePath)
+	fakeDocker(t, `[]`)
+
+	// 有 .runner：容器不存在也仍是「已注册未运行」
+	_, status, _, err := ContainerRunnerStatus(context.Background(), cfg, "droiddesk-2", installDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != StatusInstalled {
+		t.Fatalf("已注册的目录应为 %q，得到 %q", StatusInstalled, status)
+	}
+
+	// 删掉 .runner：不能再说 installed
+	if err := os.Remove(filepath.Join(installDir, ".runner")); err != nil {
+		t.Fatal(err)
+	}
+	_, status, _, err = ContainerRunnerStatus(context.Background(), cfg, "droiddesk-2", installDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != StatusNew {
+		t.Fatalf("未注册的目录应为 %q，得到 %q", StatusNew, status)
+	}
+}
