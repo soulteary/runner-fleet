@@ -51,6 +51,8 @@
     .badge.unknown { background: rgba(139, 148, 158, 0.2); color: var(--muted); }
     .badge.running { background: rgba(63, 185, 80, 0.3); color: var(--success); margin-left: 4px; }
     .badge.drift { background: rgba(210, 153, 34, 0.2); color: var(--warn); margin-left: 4px; cursor: help; }
+    /* 忙碌来自 GitHub，与 running（本机/容器进程）不是一回事，用另一种颜色区分 */
+    .badge.busy { background: rgba(47, 129, 247, 0.25); color: var(--accent); margin-left: 4px; cursor: help; }
     form label { display: block; margin-top: 12px; color: var(--muted); font-size: 13px; }
     form input, form select { width: 100%; max-width: 400px; padding: 8px 12px; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
     form button {
@@ -111,7 +113,7 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 8px;
-      max-width: 480px;
+      max-width: 960px;
       width: 100%;
       max-height: 90vh;
       overflow: auto;
@@ -131,6 +133,23 @@
     .modal-close:hover { color: var(--text); border-color: var(--text); opacity: 0.9; }
     .modal-body { padding: 20px; }
     .modal-body .row { margin-bottom: 12px; }
+    /* 查看态三栏：字段多而每个都短，竖着排要滚很久才能看全一台 Runner 的配置。
+       minmax(0, 1fr) 而不是 1fr——安装目录那种不可断的长路径在 1fr 下会把自己
+       那一栏顶宽，三栏随之失衡；配合 .row 的 min-width: 0 才真正按三等分走。 */
+    #modalView { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; }
+    #modalView .row { margin-bottom: 0; min-width: 0; }
+    /* 诊断类字段（命令、报错、注册结果）是整句整段，挤在三分之一栏里只会折成一条细柱 */
+    #modalView .row.span-all { grid-column: 1 / -1; }
+    /* 编辑态两栏：输入框在 960px 宽度下单栏会拉成一条难以对准的长条 */
+    #modalEditForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+    #modalEditForm .row { margin-bottom: 0; min-width: 0; }
+    @media (max-width: 900px) { #modalView { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 620px) {
+      #modalView, #modalEditForm { grid-template-columns: minmax(0, 1fr); }
+    }
+    /* 列表与弹窗里指向 GitHub Runners 设置页的链接：沿用原来的三态颜色，只在悬停时显出可点 */
+    .github-link { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
+    .github-link:hover { text-decoration: none; opacity: 0.85; }
     .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
     .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
     .btn-reveal-fix {
@@ -255,20 +274,29 @@
           <td>
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
+            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
+                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
+            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
             {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
             {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
           </td>
           {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
             {{if .RegistrationMessage}}
-              <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+              {{if and (eq .Status "installed") .GitHubURL}}
+                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
+                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+              {{else}}
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+              {{end}}
             {{else}}
               <span class="github-unknown">—</span>
             {{end}}
             {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
                  指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
             {{if .GitHubYes}}
-              <br><span class="github-yes">{{index $.T "github.yes"}}</span>
+              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
             {{else if .GitHubNo}}
               <br><span class="github-no">{{index $.T "github.no"}}</span>
             {{else if .GitHubCheckAt}}
@@ -355,15 +383,16 @@
           <div class="row"><label>{{index .T "modal.label_labels"}}</label><div class="val" id="vLabels"></div></div>
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
-          <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span></div></div>
+          <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
           <div class="row"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
-          <div class="row"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
-          <div class="row"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
-          <div class="row"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
-          <div class="row"><label>{{index .T "modal.label_probe_error"}}</label><div class="val" id="vProbeError"></div></div>
-          <div class="row"><label>{{index .T "modal.label_reg_result"}}</label><div class="val" id="vRegistrationMessage"></div></div>
+          <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
+          <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
+          <div class="row" id="vProbeFixCmdRow"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
+          <div class="row" id="vProbeErrorRow"><label>{{index .T "modal.label_probe_error"}}</label><div class="val" id="vProbeError"></div></div>
+          <div class="row" id="vRegistrationMessageRow"><label>{{index .T "modal.label_reg_result"}}</label><div class="val" id="vRegistrationMessage"></div></div>
           <div class="row"><label>{{index .T "modal.label_reg_checked_at"}}</label><div class="val" id="vRegistrationCheckedAt"></div></div>
-          <div class="row"><label>{{index .T "modal.label_github_display"}}</label><div class="val" id="vRegisteredOnGitHub"></div></div>
+          <div class="row"><label>{{index .T "modal.label_github_display"}}</label><div class="val"><a id="vGitHubLink" class="github-yes github-link" target="_blank" rel="noopener noreferrer" title="{{index .T "github.open_title"}}" style="display:none"></a><span id="vRegisteredOnGitHub"></span></div></div>
+          <div class="row"><label>{{index .T "modal.label_github_busy"}}</label><div class="val" id="vGitHubBusy"></div></div>
           <div class="row"><label>{{index .T "modal.label_github_check_at"}}</label><div class="val" id="vGitHubCheckAt"></div></div>
         </div>
         <form id="modalEditForm" style="display:none">
@@ -659,6 +688,13 @@
       document.getElementById('addMsgWrap').style.display = 'none';
       location.reload();
     });
+    // 超过这个长度的值挤在三分之一栏里会折成一条细柱，不如铺满一行
+    const WIDE_ROW_CHARS = 40;
+    function setRowWide(rowId, text) {
+      const row = document.getElementById(rowId);
+      if (row) row.classList.toggle('span-all', (text || '').length > WIDE_ROW_CHARS);
+    }
+
     function escapeHtml(s) {
       const d = document.createElement('div');
       d.textContent = s;
@@ -732,7 +768,9 @@
       modalMsg.style.display = 'none';
       if (mode === 'view') {
         modalTitle.textContent = t('modal.view_title');
-        modalView.style.display = 'block';
+        // 不写 'block'：行内样式会盖过样式表里的 display:grid，三栏布局就没了。
+        // 置空即回落到样式表，栏数以后只在 CSS 里改一处。
+        modalView.style.display = '';
         modalEditForm.style.display = 'none';
         modalEditBtn.style.display = 'inline-block';
         modalSaveBtn.style.display = 'none';
@@ -756,6 +794,7 @@
             }
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
+            document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
             const probeError = resolveProbeError(data);
             document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
             document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
@@ -769,14 +808,36 @@
             copyFixBtn.style.display = 'none';
             document.getElementById('vProbeError').textContent = probeError || '—';
             document.getElementById('vRegistrationMessage').textContent = data.registration_message || '—';
+            setRowWide('vProbeSuggestionRow', probeError ? resolveProbeSuggestion(data) : '');
+            setRowWide('vProbeCheckCmdRow', currentProbeCheckCommand);
+            setRowWide('vProbeFixCmdRow', probeError ? resolveProbeFixCommand(data) : '');
+            setRowWide('vProbeErrorRow', probeError);
+            setRowWide('vRegistrationMessageRow', data.registration_message);
             document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
             var gh = data.registered_on_github;
             var ghEl = document.getElementById('vRegisteredOnGitHub');
-            if (gh === true) ghEl.innerHTML = '<span class="github-yes">' + t('modal.gh_yes') + '</span>';
+            var ghLink = document.getElementById('vGitHubLink');
+            // 地址走 .href 属性而不是拼进 innerHTML：escapeHtml 管的是 HTML 上下文，
+            // 挡不住 href 里的 javascript: 协议。地址本身也由 Go 侧按写死的
+            // https://github.com 前缀拼出，两头都不给 target 改写协议的机会。
+            ghLink.style.display = 'none';
+            ghLink.removeAttribute('href');
+            if (gh === true && data.github_url) {
+              ghLink.href = data.github_url;
+              ghLink.textContent = t('modal.gh_yes');
+              ghLink.style.display = '';
+              ghEl.textContent = '';
+            }
+            else if (gh === true) ghEl.innerHTML = '<span class="github-yes">' + t('modal.gh_yes') + '</span>';
             else if (gh === false) ghEl.innerHTML = '<span class="github-no">' + t('modal.gh_no') + '</span>';
             // gh 为 null：查过但没查出答案，和「从未查过」要分开说，否则过期的令牌看着像没配过
             else if (data.github_check_error) ghEl.textContent = t('modal.gh_failed') + '：' + data.github_check_error;
             else ghEl.textContent = t('modal.gh_unchecked');
+            // 忙碌同样是三态：接口里没有这个字段就是「不知道」，不能说成「空闲」
+            var busyEl = document.getElementById('vGitHubBusy');
+            if (data.github_busy === true) busyEl.textContent = t('modal.gh_busy');
+            else if (data.github_busy === false) busyEl.textContent = t('modal.gh_idle');
+            else busyEl.textContent = t('modal.gh_busy_unknown');
             document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');
@@ -802,7 +863,7 @@
         document.getElementById('modalStartStopSpan').style.display = 'none';
         modalTitle.textContent = t('modal.edit_title');
         modalView.style.display = 'none';
-        modalEditForm.style.display = 'block';
+        modalEditForm.style.display = '';   // 同上，两栏由样式表决定
         modalEditBtn.style.display = 'none';
         modalSaveBtn.style.display = 'inline-block';
         fetch('/api/runners/' + encodeURIComponent(name))

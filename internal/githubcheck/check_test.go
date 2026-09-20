@@ -67,6 +67,32 @@ func statusOf(t *testing.T, dir string) (registered *bool, checkAt, checkErr str
 	return v.Registered, v.LastCheck, v.Error
 }
 
+// busyOf 单独读 busy，免得改动 statusOf 的签名牵动上面一长串用例
+func busyOf(t *testing.T, dir string) *bool {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, runner.GitHubStatusFile))
+	if err != nil {
+		return nil
+	}
+	var v struct {
+		Busy *bool `json:"busy"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("状态文件不是合法 JSON: %v", err)
+	}
+	return v.Busy
+}
+
+// busyRunnersJSON 与 runnersJSON 相同，但把第一个 runner 标成正在跑 Job
+func busyRunnersJSON(busy bool, names ...string) string {
+	var rs []ghRunner
+	for i, n := range names {
+		rs = append(rs, ghRunner{ID: int64(100 + i), Name: n, OS: "linux", Status: "online", Busy: busy && i == 0})
+	}
+	b, _ := json.Marshal(ghRunnersResponse{TotalCount: len(names), Runners: rs})
+	return string(b)
+}
+
 func cfgFor(base, name, path, targetType, target string) *config.Config {
 	return &config.Config{Runners: config.RunnersConfig{
 		BasePath: base,
@@ -326,5 +352,57 @@ func TestDeregister_DeleteReturning404IsDone(t *testing.T) {
 	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
 	if !res.Done {
 		t.Fatalf("DELETE 返回 404 说明已不存在，应视为完成，得到 %+v", res)
+	}
+}
+
+// GitHub 的 busy 字段就是「这个 Runner 正在跑 Job」，要能落到状态文件里
+func TestRun_BusyRunnerIsRecorded(t *testing.T) {
+	dir := withToken(t, "pat")
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, busyRunnersJSON(true, "alpha"))
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+
+	if busy := busyOf(t, dir); busy == nil || !*busy {
+		t.Fatalf("GitHub 说它忙，应记为忙碌，得到 %v", busy)
+	}
+}
+
+func TestRun_IdleRunnerIsRecordedAsNotBusy(t *testing.T) {
+	dir := withToken(t, "pat")
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, busyRunnersJSON(false, "alpha"))
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+
+	if busy := busyOf(t, dir); busy == nil || *busy {
+		t.Fatalf("GitHub 说它不忙，应记为空闲，得到 %v", busy)
+	}
+}
+
+// 「没查到这个 Runner」不等于「它不忙」。写成 false 会让界面对一个
+// GitHub 上根本不存在的 Runner 打包票说它空闲——和 registered 那个三态同一个错。
+func TestRun_BusyIsUnknownWhenRunnerAbsent(t *testing.T) {
+	dir := withToken(t, "pat")
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, runnersJSON(1, "别的 runner"))
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+
+	if busy := busyOf(t, dir); busy != nil {
+		t.Fatalf("GitHub 上没有这个 Runner，忙碌状态应为未知，得到 %v", *busy)
+	}
+}
+
+// 查询本身失败时同理：不知道就是不知道
+func TestRun_BusyIsUnknownWhenCheckFails(t *testing.T) {
+	dir := withToken(t, "pat")
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+
+	if busy := busyOf(t, dir); busy != nil {
+		t.Fatalf("查询失败时忙碌状态应为未知，得到 %v", *busy)
 	}
 }

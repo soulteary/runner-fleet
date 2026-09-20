@@ -166,7 +166,7 @@ runners:
 
 **Runner가 설치되지 않은 경우**: [GitHub Actions Runner](https://github.com/actions/runner/releases)에서 다운로드 후 `runners/<name>/`에 풀고, UI에 토큰 입력 또는 해당 디렉터리에서 `./config.sh` 실행. 컨테이너 배포 시 UI에서 토큰 제출 시 먼저 설치 후 등록. 컨테이너 모드는 먼저 Runner 이미지와 `volume_host_path` 설정 필요(위 컨테이너 모드 참조).
 
-**등록 결과**: 해당 Runner 디렉터리의 `.registration_result.json`에 기록. **GitHub 표시 확인**(선택): Runner 디렉터리에 `.github_check_token`(PAT; 조직은 `admin:org`, 저장소는 `repo` 필요)을 두면 약 5분마다 확인하며 결과는 `.github_status.json`에 기록.
+**등록 결과**: 해당 Runner 디렉터리의 `.registration_result.json`에 기록. **GitHub 표시 확인**(선택): Runner 디렉터리에 `.github_check_token`(PAT; 조직은 `admin:org`, 저장소는 `repo` 필요)을 두면 약 5분마다 확인하며 결과는 `.github_status.json`에 기록. 같은 검사에서 GitHub 상의 해당 Runner가 **작업을 실행 중인지**도 기록하며, 목록에는 '작업 중' 배지로, 설정 대화상자에는 별도 행으로 표시됩니다. 약 5분 주기를 공유하므로 최대 5분까지 지연될 수 있고, PAT가 없으면 '유휴'가 아니라 '알 수 없음'으로 남습니다. 목록의 '등록됨'과 'GitHub ✓'는 모두 해당 대상의 Runners 설정 페이지로 연결됩니다.
 
 **이름 충돌 검사**: 이름을 입력하는 동안 폼이 `/api/runner-precheck`를 호출해 제출 전에 문제를 보여 줍니다 — 설정에 같은 이름의 Runner가 있음, 정규화하면 다른 Runner와 컨테이너 이름이 같아짐, 설치 디렉터리가 이미 사용 중, 등록된 Runner가 남아 있는 디렉터리(`.runner` 존재), 호스트에 같은 이름의 컨테이너가 남아 있음. 차단성 항목은 빨간색으로 표시되고 한 번의 클릭으로 쓸 수 있는 추천 이름을 제공합니다. 경고(비어 있지 않은 디렉터리를 재사용)는 계속 진행할 수 있습니다. 그대로 제출해도 서버가 **409**와 동일한 충돌 정보로 거부합니다 — 예전의 '조용히 임의 접미사를 붙이는' 동작은 없어졌습니다(원하면 `auto_rename: true`).
 
