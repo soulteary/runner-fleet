@@ -55,6 +55,7 @@ With Basic Auth, all requests except `/health` must include `Authorization: Basi
 | `/api/runners/:name/start` | POST | Start runner. On probe failure still attempts start, returns structured `probe` in response. |
 | `/api/runners/:name/stop` | POST | Stop runner. On probe failure still attempts stop, returns structured `probe` in response. |
 | `/api/runners` | POST | Add a runner (optionally install and register). On a name conflict returns **409** with `conflicts` and `suggested_name` instead of silently renaming; send `auto_rename: true` for the old auto-suffix behaviour. |
+| `/api/runners/:name` | DELETE | Remove a runner: stop it, deregister it from GitHub when a PAT is available, delete its install directory, drop it from the config. The response carries `github_deregistered` and a `message` that states what happened on the GitHub side. |
 | `/api/runners/:name/recreate` | POST | Remove and recreate the runner container with the current config (container mode only). Interrupts a job running on it — starting a stopped container already recreates it automatically when its create parameters drifted. |
 | `/api/runner-precheck` | GET | Pre-flight a name before adding: `?name=&path=`. Returns `available`, a `suggested_name` and the `conflicts` found (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), each with `level` (`error`/`warn`), `message`, `detail` and an optional `fix_command`. Read-only; the Web UI calls it while you type. |
 
@@ -102,6 +103,25 @@ Two consequences for callers:
   drives an action. It maps a probe failure to `status=unknown` rather than `installed`,
   so "registered but not running, so start it" cannot fire on a runner it could not reach.
 - Detection needs `/proc`, so it is Linux-only; elsewhere it reports "not running".
+
+### Runner removal and GitHub
+
+`DELETE /api/runners/:name` removes a runner from this tool **and** from GitHub. The GitHub
+side needs a credential, and the only one this tool ever has is the optional per-runner PAT
+at `<runner dir>/.github_check_token` — the same file the visibility check uses. So
+deregistration runs *before* the install directory is deleted, because that is where the
+token lives, and skipping that order silently loses the ability to do it at all.
+
+With no PAT the runner cannot be deregistered: GitHub wants a PAT or a fresh removal token,
+and `config.sh remove` wants the latter. The response then says so and names where to delete
+it by hand. It is worth saying rather than swallowing — a leftover runner makes the next
+`config.sh --name <same name>` fail with `A runner exists with the same name`.
+
+`registered_on_github` is a **nullable** bool: `true` / `false` are answers, `null` means no
+answer was reached, and `github_check_error` carries why. Templates must not test it with
+`{{if .RegisteredOnGitHub}}` — `html/template` judges a pointer by nil-ness alone, so a
+pointer to `false` is true. Use the `GitHubYes` / `GitHubNo` / `GitHubUnknown` helpers on
+`RunnerInfo`.
 
 ## Makefile targets
 

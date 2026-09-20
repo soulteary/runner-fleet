@@ -103,6 +103,8 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 - **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep 自检`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
 - **이전 Runner 이미지**: pull하거나 다시 빌드한 뒤 Runner를 시작하면 Manager가 이미지 변경(참조와 이미지 ID를 모두 비교하므로 같은 tag 재빌드도 포함)을 감지해 컨테이너를 다시 만듭니다. 실행 중인 컨테이너는 건드리지 않으니 중단해도 될 때 행의 "컨테이너 재생성"을 쓰세요.
 - **로그에 5분마다 `已定时拉起 runner: <이름>` 이 반복되고, UI에서도 실행 중으로 표시되지 않음**: 이번 버전에서 수정되었습니다. 업그레이드만 하면 되며 Runner를 다시 등록할 필요는 없습니다. 실행 상태를 그동안 pid 파일(`Runner.Listener.pid`, 없으면 `.path`)에서 읽었지만 actions/runner는 둘 다 쓰지 않습니다. 시작 스크립트 어디에도 pid 파일을 쓰는 곳이 없고 `.path`에는 PATH 문자열이 들어 있습니다. 그래서 모든 Runner가 "등록됨, 실행 중 아님"으로 읽혔고 5분마다 도는 점검이 매번 전부를 다시 시작시켰습니다. 이제는 프로세스 테이블에서 판단하며, 컨테이너 모드에서는 각 컨테이너 안의 Agent에게 물어봅니다 — Manager는 다른 컨테이너의 프로세스를 볼 수 없습니다. 같은 원인으로 기본(비컨테이너) 모드의 "정지"는 항상 `未找到 runner pid 文件或 pid 无效` 로 실패했습니다.
+- **UI에서 삭제한 Runner가 GitHub에 남아 있고, 같은 이름으로 다시 추가하면 등록이 실패함**: 이제 삭제 시 GitHub 등록 해제도 함께 수행합니다. 단 해당 Runner 디렉터리에 `.github_check_token`(선택 PAT, 조직은 `admin:org`, 저장소는 `repo`)이 있어야 합니다. 없으면 해제할 자격 증명이 없으므로 삭제 응답에 그 사실과 Settings → Actions → Runners 경로를 안내합니다. 이전 버전에서 삭제한 Runner는 해제된 적이 없으니 직접 정리하세요.
+- **어떤 Runner가 "GitHub 조회 실패"로 표시됨**: 조회는 했지만 답을 얻지 못한 상태입니다(토큰 만료, 권한 부족, 레이트 리밋, 대상이 보이지 않음 — 마우스를 올리면 원인 표시). "GitHub 미표시"(GitHub가 응답했고 목록에 없음)와는 다릅니다. 이전 버전은 전자도 후자로 보고했습니다.
 - **status=unknown**: 상세 팝업에서 probe 확인; "Start/Stop"으로 자가 복구 시도.
 
 ### 이미지 로컬 빌드
