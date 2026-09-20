@@ -4,7 +4,7 @@
 # 以 internal/config/config.go 中默认 Runner 镜像的兜底 tag 为准——那是唯一真正
 # 影响运行行为的版本号，其余都是文档与示例，必须跟它一致。
 #
-# 背景：v1.0.1 / v1.1.0 / v1.1.1 三次发布都漏了同步文档，导致照 README 执行
+# 背景：v1.0.1 / v1.1.0 / v1.1.1 三次发布都漏了同步文档，导致照 README 执行  version-check-ignore
 # docker compose up -d 默认拉到的是落后三个版本的镜像。只改数值不建机制的话，
 # 下次还会漏。
 #
@@ -27,7 +27,14 @@ echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 # CHANGELOG 天然包含所有历史版本号，不参与校验
 # '*Dockerfile*' 而非 'Dockerfile*'：后者只匹配仓库根目录，会漏掉
 # examples/runner-images/ 下引用了本仓库镜像 tag 的示例
-FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' |
+#
+# '*.sh' 与 '*.go' 是 v1.6.0 补上的两类漏网文件：
+#   - examples/deploy/standalone/run.sh 把 Manager 镜像 tag 写死成 IMAGE 的默认值，
+#     照它跑起来的就是那个版本，却从来不在扫描范围内，于是上一个版本起它就没跟上过。
+#   - internal/config/config.go 里基准值旁边的字段注释可以悄悄说另一个版本——
+#     基准就在这个文件里，注释反而没人核对。
+# 测试里拿某个版本当输入数据用（而非引用当前版本）时，照例加 version-check-ignore 跳过。
+FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' '*.sh' '*.go' |
     grep -v '^CHANGELOG\.md$' || true)
 
 tmp=$(mktemp)

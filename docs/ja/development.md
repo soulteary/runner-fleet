@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # バージョン付き（/version とデバッグ用）
-go build -ldflags "-X main.Version=1.5.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent のみビルド（コンテナモード用）
 go build -o runner-agent ./cmd/runner-agent

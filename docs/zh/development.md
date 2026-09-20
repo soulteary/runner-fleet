@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.5.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
