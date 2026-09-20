@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -62,5 +64,47 @@ func TestEnsureAgentToken_ReusesExistingToken(t *testing.T) {
 	}
 	if got := ReadAgentToken(dir); got != first {
 		t.Fatalf("磁盘上的令牌与返回值不一致: %q vs %q", got, first)
+	}
+}
+
+// TestEnsureAgentToken_RecoversFromEmptyLeftover
+// O_EXCL 是先建文件再写内容。若 Manager 恰在这两步之间被杀，会留下一个零字节的令牌文件。
+// 它会永远挡住后续的 O_EXCL，于是谁也拿不到令牌——而拿不到令牌就不谈 agent_token 漂移，
+// 鉴权就此永久静默失效，正是本 PR 要消灭的那种状态。所以必须能自愈。
+func TestEnsureAgentToken_RecoversFromEmptyLeftover(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, AgentTokenFile)
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := EnsureAgentToken(dir)
+	if err != nil {
+		t.Fatalf("零字节残留应当能自愈，却失败了: %v", err)
+	}
+	if token == "" {
+		t.Fatal("自愈后仍未拿到令牌")
+	}
+	if got := ReadAgentToken(dir); got != token {
+		t.Fatalf("磁盘上的令牌与返回值不一致: %q vs %q", got, token)
+	}
+}
+
+// TestEnsureAgentToken_KeepsUnreadableFileWithContent
+// 反面：ReadAgentToken 读不动文件时也返回空串（权限被改过等）。那种情况下文件里是有内容的，
+// 删掉就等于把正在运行的容器的令牌作废、换一个它不认识的。只有确认是零字节才允许清理。
+func TestEnsureAgentToken_KeepsUnreadableFileWithContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, AgentTokenFile)
+	// 只有空白字符：ReadAgentToken 会 TrimSpace 成空串，但文件是有内容的
+	if err := os.WriteFile(path, []byte("   \n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := EnsureAgentToken(dir); err == nil {
+		t.Fatal("读不到内容的非空文件不该被当作残留处理")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("有内容的令牌文件不该被删除: %v", err)
 	}
 }
