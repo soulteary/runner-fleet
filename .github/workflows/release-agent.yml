@@ -95,6 +95,11 @@ jobs:
           push: true
           tags: ${{ steps.runner-tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # scope 按 workflow 分开：tag push 会同时触发四个构建 workflow，
+          # 而 type=gha 不指定 scope 时都落在 BuildKit 默认的 scope=buildkit 上，
+          # 互相覆盖，一方正在写的层被另一方的索引替换后就是 layer blob not_found。
+          cache-from: type=gha,scope=release-runner
+          # ignore-error：缓存导出只是加速手段。镜像此时已经推送完成，
+          # 不能因为写缓存失败就把一次已经成功的发布标成红的。
+          cache-to: type=gha,mode=max,scope=release-runner,ignore-error=true
           platforms: linux/amd64,linux/arm64
