@@ -176,7 +176,7 @@ runners:
 
 ## 四、安全与校验
 
-**鉴权**：默认无登录鉴权，建议仅内网或本机使用。环境变量 `BASIC_AUTH_PASSWORD` 设置后启用 Basic Auth，`BASIC_AUTH_USER` 可选（默认 `admin`）。除 `GET /health` 外均需鉴权；敏感信息勿提交仓库，可放 `.env`。容器中加 `-e BASIC_AUTH_PASSWORD=...` 或 compose 的 `env_file`。
+**鉴权**：默认无登录鉴权，建议仅内网或本机使用。环境变量 `BASIC_AUTH_PASSWORD` 设置后启用 Basic Auth，`BASIC_AUTH_USER` 可选（默认 `admin`）。除 `GET /health`、`GET /ready` 外均需鉴权；敏感信息勿提交仓库，可放 `.env`。容器中加 `-e BASIC_AUTH_PASSWORD=...` 或 compose 的 `env_file`。
 
 **跨站请求**：写接口会拒绝浏览器判定为跨站的请求，因此其它来源的页面无法拿你缓存的 Basic Auth 凭据来驱动这套 API。无需任何配置。若反向代理改写了 `Host`、导致你自己的请求也被拒，把浏览器地址栏里看到的来源填进 `TRUSTED_ORIGINS`（逗号分隔）。非浏览器调用方（curl、CI 脚本）不受影响——它们不带缓存凭据，构不成这里的攻击者。判定规则详见[开发文档](development.md)。
 

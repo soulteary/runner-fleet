@@ -48,8 +48,10 @@ Basic Auth 有効時、`/health` 以外のリクエストには Header に `Auth
 
 | パス | メソッド | 説明 |
 |------|----------|------|
-| `/health` | GET | `{"status":"ok"}` を返す。Ingress/K8s プローブ用。常に認証不要。 |
+| `/health` | GET | 存活（liveness）。`{"status":"ok","service":"runner-fleet"}` を返す。依存チェックはなく、プロセスが生きている限り常に 200。常に認証不要。 |
+| `/ready` | GET | 就緒（readiness）。ボディ形状は同じ。設定が読めない、または runner のベースディレクトリが無い・書き込めない場合は 503。K8s の `readinessProbe` 用。同じく認証不要で、どの項目が失敗したかは返さない。 |
 | `/version` | GET | `{"version":"..."}` を返す。 |
+| `/metrics` | GET | Prometheus メトリクス（リクエスト数とレイテンシ）。`path` ラベルはリクエスト URL ではなく Echo のルートテンプレート（`/api/runners/:name`）。Basic Auth 有効時は**認証が必要**——スクレイプ設定に `basic_auth` を指定。 |
 | `/api/runners` | GET | Runner 一覧。コンテナモードで probe 失敗時は `status=unknown` と構造化された `probe`（`error/type/suggestion/check_command/fix_command`）を返す。 |
 | `/api/runners/:name` | GET | 単一 Runner の詳細。コンテナモードで probe 失敗時も同様に `probe`。 |
 | `/api/runners/:name/start` | POST | Runner を起動。probe 失敗時も起動を試み、レスポンスに構造化された `probe` を返す。 |

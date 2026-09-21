@@ -259,11 +259,6 @@ func writeRegistrationResult(installDir string, success bool, message string) {
 	_ = os.WriteFile(p, b, 0644)
 }
 
-// Health 健康检查，供负载均衡或 K8s 探针使用
-func Health(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
 // ListRunners 列出所有 runner；容器模式下用容器内 Agent 状态覆盖 Running/Status
 func ListRunners(c echo.Context) error {
 	cfg, err := getConfig(c)
