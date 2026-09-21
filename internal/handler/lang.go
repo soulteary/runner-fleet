@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	i18n "github.com/soulteary/i18n-kit/v3"
+	i18n "github.com/soulteary/i18n-kit/v4"
 )
 
 // langDetector 负责选界面语言，次序 ?lang= > cookie > X-Language > Accept-Language。
@@ -15,8 +15,9 @@ import (
 // 设过偏好的人都失效，而那恰恰是它唯一有用的场合。
 //
 // 它同样刻意不写回 cookie：一次性的链接参数不该悄悄改掉对方的长期偏好，去掉参数再刷新
-// 就该回到自己选的那个语言。所以这里只用 i18n-kit 的 Detector，不用它的 StdMiddleware
-// （那个会按 SetCookie 配置写 cookie，且把语言塞进 context，我们两样都不需要）。
+// 就该回到自己选的那个语言。所以这里只用 i18n-kit 的 Detector，不用它的
+// httpadapter.Middleware（那个会按 SetCookie 配置写 cookie，且把语言塞进 context，
+// 我们两样都不需要）。v4 之前它是根包里的 StdMiddleware。
 var langDetector = i18n.NewDetector(i18n.DetectorConfig{
 	QueryParam: "lang",
 	CookieName: "lang",
@@ -38,8 +39,11 @@ func init() {
 }
 
 // echoLangSource 把 echo.Context 适配成 i18n.RequestSource（三个取值方法）。
-// i18n-kit v3 把 Fiber 适配拆进了 fiberadapter 子包，根包只认 net/http，
-// Echo 要自己接这层——好在接口只有三个方法。
+//
+// v3 把 Fiber 拆进 fiberadapter 时，根包仍然只认 net/http，Echo 得自己接这层；
+// v4 连 net/http 也拆进了 httpadapter，根包如今一个框架都不认，只认 RequestSource
+// 这个接口。同样的三个方法于是从「绕开 kit 的既定用法」变成了 kit 给第三种框架
+// 留的正门：代码一行没动，理由变了。
 type echoLangSource struct{ c echo.Context }
 
 func (s echoLangSource) Query(name string) string { return s.c.QueryParam(name) }

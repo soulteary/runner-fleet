@@ -54,8 +54,8 @@ github.com/soulteary/docker-kit v1.0.0 h1:RNTNMZ7WVtOuL39IbRXLao9m0fPn6tAD6CiFIy
 github.com/soulteary/docker-kit v1.0.0/go.mod h1:bXae77eB9TN7+3knTsrSpqZjVrJuehnjL8tpAjlOdhA=
 github.com/soulteary/health-kit/v4 v4.0.0 h1:z9naNR+5ratOOk7Rhv0x7qf2lhwkqA1BKmZXX3BYpLc=
 github.com/soulteary/health-kit/v4 v4.0.0/go.mod h1:FICSTbB1ZaKpRsn+16u1b2w6TaCxV3E2H2KAYHlQxKQ=
-github.com/soulteary/i18n-kit/v3 v3.0.0 h1:dEXGnF47X5lGQbuH+PGjqVioDoc4tq4liELwoa6ViTU=
-github.com/soulteary/i18n-kit/v3 v3.0.0/go.mod h1:kdY9FY9gPw/r1sNYnS99xDOMwtPzH3IrMNpgoFxdUaU=
+github.com/soulteary/i18n-kit/v4 v4.0.0 h1:jMSgjsYN2WEpsuwfdiVdMmwdWNEV5ZffA/bAkNH6Qy0=
+github.com/soulteary/i18n-kit/v4 v4.0.0/go.mod h1:MWviEUbM0wovrhlhcLxHx6eF0MlLTGCzLCyOw28vDGo=
 github.com/soulteary/logger-kit/v3 v3.0.0 h1:oCsNss5cRgMJD5Ub5mjWjgFmtvExlqilSPuz/cIu8AE=
 github.com/soulteary/logger-kit/v3 v3.0.0/go.mod h1:zAV0BXZ42KFp5yXL6MMFtXg6O0xzxENx5VEW3/BKwEQ=
 github.com/soulteary/metrics-kit/v3 v3.0.0 h1:1KBslddLh5Qv9+pi06Py/SoM59Cbm2FiRDDsioGOJU8=
@@ -64,10 +64,10 @@ github.com/soulteary/preflight-kit v1.0.0 h1:abXeDyKwdLYemOUNOqrjrGX5wj3ETLer6eZ
 github.com/soulteary/preflight-kit v1.0.0/go.mod h1:O3wu9sNDj1iL5vRdE5pvONF0Q4AfydWe2g2L7HsOVKw=
 github.com/soulteary/procfind-kit v1.0.0 h1:Q2lc/MZAkstpcKkoRKOrigqn2e4tdwqKkpttoYVGdOU=
 github.com/soulteary/procfind-kit v1.0.0/go.mod h1:PhIceat1ly1j8KX/zLlWz+kTQKtolvH0eLAMeY4u74Y=
-github.com/soulteary/secure-kit v1.6.0 h1:QvvLkOhHq1lBWRkjWvELqeUiFPnKiuqBEqNSDVKE+p8=
-github.com/soulteary/secure-kit v1.6.0/go.mod h1:vNpwew8IBGYaxWnJMlTTSyRBVxHWmfhe3XXGs+Crby4=
-github.com/soulteary/version-kit/v3 v3.0.0 h1:dRlleqy7uupj3+kW1KJW8tRVX+CUFfFHDeNJElfkCBc=
-github.com/soulteary/version-kit/v3 v3.0.0/go.mod h1:AQFIRqGcEPrNk5xpcLHYXQ1xE3/f+PJPT5poR5tWJZ0=
+github.com/soulteary/secure-kit/v2 v2.0.0 h1:uxvRqZFtrgJUiixbVwh3M1O8Z6U5h+kFl7nD7CjAjqU=
+github.com/soulteary/secure-kit/v2 v2.0.0/go.mod h1:QBB7rfrAZBhj8971qfm6oGU322MZfcpzib/urYZ/Lzc=
+github.com/soulteary/version-kit/v4 v4.0.0 h1:4gEes54h/iymUhPdY/LhKG1mSuMMpNmzd3fx4glcreU=
+github.com/soulteary/version-kit/v4 v4.0.0/go.mod h1:TUA+9E+g5kjaT2ilfaIszoYtqgnCV0XiUzhT4RDrL9Q=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=

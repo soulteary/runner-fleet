@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	i18n "github.com/soulteary/i18n-kit/v3"
+	i18n "github.com/soulteary/i18n-kit/v4"
 )
 
 func langCtx(t *testing.T, query, cookie, acceptLang, xLang string) echo.Context {
@@ -147,7 +147,8 @@ func TestResolveLang_XLanguageSitsBetweenCookieAndAcceptLanguage(t *testing.T) {
 }
 
 // resolveLang 只读不写：一次性的 ?lang= 不该改掉浏览器上的长期偏好。
-// i18n-kit 的 StdMiddleware 是会按配置写 cookie 的，这条用例守住「我们没用它」。
+// i18n-kit 的 httpadapter.Middleware（v4 之前是根包的 StdMiddleware）是会按配置写
+// cookie 的，这条用例守住「我们没用它」。
 func TestResolveLang_DoesNotWriteCookie(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/?lang=ja", nil)
