@@ -36,16 +36,16 @@ const DefaultJobDockerBackend = "dind"
 var JobDockerBackends = []string{"dind", "host-socket", "none"}
 
 // DefaultRunnerContainerImage 返回默认 Runner 容器镜像（未配置 container_image 时使用）。
-// Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.6.0；镜像名为 {repo}:{tag}-runner。
+// Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.7.0；镜像名为 {repo}:{tag}-runner。
 func DefaultRunnerContainerImage() string {
-	// 这里刻意不改写成 env.GetTrimmed("FLEET_IMAGE_TAG", "v1.6.0")：
+	// 这里刻意不改写成 env.GetTrimmed("FLEET_IMAGE_TAG", "v1.7.0")：
 	// 版本号一致性检查（ci-recipes runner-fleet check-version-consistency，正则写在
 	// scripts/ci-recipes.conf 的 version_baseline_regex）用 `tag = "vX.Y.Z"` 从本文件里
 	// 取全仓库的基准版本号，换成函数调用后那条正则匹配不到，检查会直接以
 	// 「无法解析默认镜像 tag」失败。保持这个字面形状。
 	tag := strings.TrimSpace(os.Getenv("FLEET_IMAGE_TAG"))
 	if tag == "" {
-		tag = "v1.6.0"
+		tag = "v1.7.0"
 	}
 	return DefaultRunnerImageRepo + ":" + tag + "-runner"
 }
@@ -139,7 +139,7 @@ type RunnersConfig struct {
 
 	// 容器模式：Runner 运行在独立容器中，Manager 通过 Docker API 启停并透过 Agent 获取状态
 	ContainerMode    bool   `yaml:"container_mode"`    // 为 true 时启停与状态均走容器
-	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，未填时由 DefaultRunnerContainerImage() 决定（FLEET_IMAGE_TAG 或 v1.6.0）
+	ContainerImage   string `yaml:"container_image"`   // Runner 容器镜像，未填时由 DefaultRunnerContainerImage() 决定（FLEET_IMAGE_TAG 或 v1.7.0）
 	ContainerNetwork string `yaml:"container_network"` // 容器所在网络，与 Manager 同网以便访问 Agent，默认 runner-net
 	AgentPort        int    `yaml:"agent_port"`        // 容器内 Agent 端口，默认 8081
 	// Job Docker 后端：Runner 容器内 Job 执行 docker 命令时的后端。dind=DinD 服务；host-socket=挂载宿主机 socket；none=不提供 Docker

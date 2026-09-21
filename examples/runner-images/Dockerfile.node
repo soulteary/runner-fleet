@@ -9,7 +9,7 @@
 # setup-node 会自行下载并缓存到 _work/_tool。预装的价值在于省掉每次下载，
 # 以及让不带 setup-node 的 workflow 也能直接跑。
 
-ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.6.0-runner
+ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.7.0-runner
 FROM ${RUNNER_IMAGE}
 
 ARG NODE_MAJOR=22

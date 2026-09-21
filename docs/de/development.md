@@ -17,7 +17,7 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 go build -o runner-manager ./cmd/runner-manager
 
 # Mit Version (für /version und Debug)
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # Nur Runner Agent bauen (Containermodus)
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ Lauscht auf `:8080`, http://localhost:8080. Basic Auth zum Debuggen: `BASIC_AUTH
 
 ## HTTP-API
 
-Mit Basic Auth müssen alle Anfragen außer `/health` den Header `Authorization: Basic <base64(user:password)>` enthalten.
+Mit Basic Auth müssen alle Anfragen außer `/health` und `/ready` den Header `Authorization: Basic <base64(user:password)>` enthalten.
 
 | Pfad | Methode | Beschreibung |
 |------|---------|--------------|
@@ -59,6 +59,8 @@ Mit Basic Auth müssen alle Anfragen außer `/health` den Header `Authorization:
 | `/api/runners` | POST | Runner hinzufügen (optional installieren und registrieren). Bei einem Namenskonflikt kommt **409** mit `conflicts` und `suggested_name`, statt still umzubenennen; für das alte Verhalten `auto_rename: true` senden. |
 | `/api/runners/:name/recreate` | POST | Entfernt den Runner-Container und erstellt ihn mit der aktuellen Konfiguration neu (nur Container-Modus). Ein laufender Job wird abgebrochen; ein gestoppter Container wird beim Start ohnehin automatisch neu erstellt, wenn seine Erstellungsparameter abweichen. |
 | `/api/runner-precheck` | GET | Namensprüfung vor dem Hinzufügen: `?name=&path=`. Liefert `available`, einen `suggested_name` und die gefundenen `conflicts` (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`) mit je `level` (`error`/`warn`), `message`, `detail` und optionalem `fix_command`. Nur lesend; die Web-UI ruft sie während der Eingabe auf. |
+| `/api/runner-rows` | GET | Rendert nur den `<tbody>` der Liste, aus demselben Template-Fragment wie der erste Seitenaufbau. Die Web-UI fragt ihn ab, um die Liste an Ort und Stelle zu aktualisieren. |
+| `/static/*` | GET, HEAD | Eingebettetes Stylesheet und Skript (`//go:embed`). Die URLs tragen einen Inhalts-Fingerabdruck (`?v=<hash>`): Anfragen mit Fingerabdruck werden lange gecacht, solche ohne revalidieren. `HEAD` ist neben `GET` registriert, damit eine Probe oder ein Proxy keinen 405 bekommt. |
 
 ### Site-übergreifende Anfragen (CSRF)
 

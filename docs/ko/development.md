@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 버전 포함 (/version 및 디버깅용)
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent만 빌드 (컨테이너 모드)
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ go run ./cmd/runner-manager
 
 ## HTTP API
 
-Basic Auth 사용 시 `/health`를 제외한 모든 요청에 Header `Authorization: Basic <base64(user:password)>`가 필요합니다.
+Basic Auth 사용 시 `/health`와 `/ready`를 제외한 모든 요청에 Header `Authorization: Basic <base64(user:password)>`가 필요합니다.
 
 | 경로 | 메서드 | 설명 |
 |------|--------|------|
@@ -59,6 +59,8 @@ Basic Auth 사용 시 `/health`를 제외한 모든 요청에 Header `Authorizat
 | `/api/runners` | POST | Runner 추가(선택적으로 설치 및 등록). 이름이 충돌하면 조용히 이름을 바꾸지 않고 **409**와 함께 `conflicts`, `suggested_name`을 반환합니다. 예전의 자동 개명 동작이 필요하면 `auto_rename: true`를 보내세요. |
 | `/api/runners/:name/recreate` | POST | 현재 설정으로 Runner 컨테이너를 삭제 후 다시 만듭니다(컨테이너 모드 전용). 실행 중인 Job은 중단됩니다. 정지된 컨테이너는 "시작"할 때 생성 파라미터 불일치를 감지해 자동으로 재생성됩니다. |
 | `/api/runner-precheck` | GET | 추가 전 이름 사전 점검: `?name=&path=`. `available`, `suggested_name`과 발견된 `conflicts`(`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`)를 반환하며, 각 항목에는 `level`(`error`/`warn`), `message`, `detail`과 선택적 `fix_command`가 있습니다. 읽기 전용이며 웹 UI가 입력 중에 호출합니다. |
+| `/api/runner-rows` | GET | 목록의 `<tbody>`만 렌더링하며, 첫 화면과 같은 템플릿 조각을 사용합니다. 웹 UI가 이를 폴링해 목록을 제자리에서 갱신합니다. |
+| `/static/*` | GET, HEAD | 내장된 스타일시트와 스크립트(`//go:embed`). 주소에 콘텐츠 지문(`?v=<hash>`)이 붙으며, 지문이 있는 요청은 오래 캐시되고 없는 요청은 재검증합니다. 탐사 스크립트나 프록시가 405를 받지 않도록 `HEAD`도 `GET`과 함께 등록합니다. |
 
 ### 교차 사이트 요청(CSRF)
 
