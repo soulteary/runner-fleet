@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run tests
-        run: go test -v ./cmd/runner-agent/... ./internal/...
+        run: go test -race -v ./cmd/runner-agent/... ./internal/...
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

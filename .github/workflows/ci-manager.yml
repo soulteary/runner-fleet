@@ -55,9 +55,12 @@ jobs:
           args: --max-same-issues=100000 ./cmd/runner-manager/... ./internal/...
           working-directory: ${{ steps.modroot.outputs.root }}
 
+      # -race：这个项目的并发面不小——单 worker 的注册队列、runnerOps 锁、
+      # EnsureAgentToken 的「单一胜者」创建，都是靠约定而非类型系统保证的。
+      # 竞态退化在普通 go test 下是静默的，只会表现为线上偶发的怪状态。
       - name: Run tests
         if: steps.modroot.outputs.found == 'true'
-        run: go test -v ./cmd/runner-manager/... ./internal/...
+        run: go test -race -v ./cmd/runner-manager/... ./internal/...
         working-directory: ${{ steps.modroot.outputs.root }}
 
       - name: Skip (no project structure)

@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
 
 // 与 handler 写入的文件名一致，供 cron 与 API 读取

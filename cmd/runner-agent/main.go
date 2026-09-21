@@ -17,7 +17,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
 
 const defaultInstallDir = "/runner"

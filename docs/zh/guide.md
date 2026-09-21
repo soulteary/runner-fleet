@@ -178,6 +178,8 @@ runners:
 
 **鉴权**：默认无登录鉴权，建议仅内网或本机使用。环境变量 `BASIC_AUTH_PASSWORD` 设置后启用 Basic Auth，`BASIC_AUTH_USER` 可选（默认 `admin`）。除 `GET /health` 外均需鉴权；敏感信息勿提交仓库，可放 `.env`。容器中加 `-e BASIC_AUTH_PASSWORD=...` 或 compose 的 `env_file`。
 
+**跨站请求**：写接口会拒绝浏览器判定为跨站的请求，因此其它来源的页面无法拿你缓存的 Basic Auth 凭据来驱动这套 API。无需任何配置。若反向代理改写了 `Host`、导致你自己的请求也被拒，把浏览器地址栏里看到的来源填进 `TRUSTED_ORIGINS`（逗号分隔）。非浏览器调用方（curl、CI 脚本）不受影响——它们不带缓存凭据，构不成这里的攻击者。判定规则详见[开发文档](development.md)。
+
 **路径与唯一性**：name/path 禁止 `..`、`/`、`\`；目录强制落在 `runners.base_path` 下。禁止同名；编辑时名称不可改。容器模式下名称规范为容器名，映射后重名会报错。
 
 **Agent 鉴权**（容器模式）：Manager 会为每个 Runner 在 `<runner 目录>/.agent_token` 写入随机令牌（权限 0600），创建容器时以 `AGENT_TOKEN` 环境变量注入，调用 Agent 时以 `Authorization: Bearer` 带上。Agent 读的是环境变量，因此不依赖 Manager 与 Agent 的 UID 一致；文件是 Manager 侧的持久副本，Manager 重启后无需重建容器。Agent 对 `/status`、`/start`、`/stop` 强制校验，同一网络内的其它容器无法再控制 Runner；`/health` 保持开放供容器 HEALTHCHECK 使用。本特性之前创建的容器没有注入令牌、仍按不鉴权运行；现在这种容器会被判为「配置已变更」，下次启动时自动重建补上（正在运行的可点「重建容器」）。

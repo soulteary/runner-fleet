@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // runnerMountDest Runner 目录在容器内的挂载点

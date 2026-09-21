@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/githubcheck"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/githubcheck"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 // Supported UI languages, same as docs (en, zh, fr, ja, ko, de).
@@ -28,8 +28,10 @@ var supportedLangs = []string{"en", "zh", "fr", "ja", "ko", "de"}
 // I18nLoader loads translations for a language code (e.g. "en", "zh"). Set by main from embed.
 var I18nLoader func(lang string) (map[string]string, error)
 
-// installRunnerScriptPath 容器内自动安装 runner 的脚本路径（Docker 镜像中有）
-const installRunnerScriptPath = "/app/scripts/install-runner.sh"
+// installRunnerScriptPath 容器内自动安装 runner 的脚本路径（Docker 镜像中有）。
+// 是 var 而非 const，只为让测试把它指向一个假脚本——注册流程里「要不要先安装」
+// 这个分支，不改这一处就只能靠真去下载一份 actions/runner 才走得到。
+var installRunnerScriptPath = "/app/scripts/install-runner.sh"
 
 // ConfigPath 配置文件路径，由 main 注入
 var ConfigPath string
@@ -345,17 +347,22 @@ func Index(c echo.Context) error {
 	})
 }
 
-// AddRunnerRequest 添加 runner 请求
+// AddRunnerRequest 添加 runner 请求。
+//
+// 刻意只有 json tag，没有 form tag：跨站 form 提交是 CORS 意义上的「简单请求」，
+// 不触发预检就能带着已缓存的 Basic Auth 凭据发出去。少了 form tag，这种请求即便
+// 绕过了 csrfGuardMiddleware 也只能绑出一个空结构体，随即被必填校验挡掉。
+// 界面本来就用 JSON 提交（FormData 只用于就地读取表单字段），不受影响。
 type AddRunnerRequest struct {
-	Name              string   `json:"name" form:"name"`
-	Path              string   `json:"path" form:"path"`
-	TargetType        string   `json:"target_type" form:"target_type"`
-	Target            string   `json:"target" form:"target"`
-	Labels            []string `json:"labels" form:"labels"`
-	RegistrationToken string   `json:"registration_token" form:"registration_token"`
+	Name              string   `json:"name"`
+	Path              string   `json:"path"`
+	TargetType        string   `json:"target_type"`
+	Target            string   `json:"target"`
+	Labels            []string `json:"labels"`
+	RegistrationToken string   `json:"registration_token"`
 	// AutoRename 为 true 时沿用旧行为：名称冲突自动改名。默认改为返回 409 并给出建议名，
 	// 免得界面上填了 foo 却静默建出 foo-ab12cd，用户以为自己在操作 foo。
-	AutoRename bool `json:"auto_rename" form:"auto_rename"`
+	AutoRename bool `json:"auto_rename"`
 }
 
 // AddRunner 添加并可选注册新 runner
@@ -668,13 +675,14 @@ func StopRunner(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"message": "已发送停止信号"})
 }
 
-// UpdateRunnerRequest 更新 runner 请求（名称不可改，以 URL 路径参数为准）
+// UpdateRunnerRequest 更新 runner 请求（名称不可改，以 URL 路径参数为准）。
+// 与 AddRunnerRequest 同理，只接受 JSON。
 type UpdateRunnerRequest struct {
-	Name       string   `json:"name" form:"name"`
-	Path       string   `json:"path" form:"path"`
-	TargetType string   `json:"target_type" form:"target_type"`
-	Target     string   `json:"target" form:"target"`
-	Labels     []string `json:"labels" form:"labels"`
+	Name       string   `json:"name"`
+	Path       string   `json:"path"`
+	TargetType string   `json:"target_type"`
+	Target     string   `json:"target"`
+	Labels     []string `json:"labels"`
 }
 
 // UpdateRunner 更新 runner 配置（PUT /api/runners/:name）；名称不可改，与目录一致

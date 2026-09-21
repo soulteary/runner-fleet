@@ -12,10 +12,10 @@ DOCKER_GID ?= 999
 EXAMPLE ?= android
 IMAGE   ?= runner-fleet-$(EXAMPLE)-runner:dev
 
-.PHONY: build build-agent build-all test run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
+.PHONY: build build-agent build-all test test-race run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
 
 help:
-	@echo "targets: build build-agent build-all test run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
+	@echo "targets: build build-agent build-all test test-race run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
 	@echo "  docker-build-runner-example: 构建自定义 Runner 镜像示例，如"
 	@echo "    make docker-build-runner-example EXAMPLE=android IMAGE=your-registry/android-runner:1"
 
@@ -29,6 +29,11 @@ build-all: build build-agent
 
 test:
 	go test ./...
+
+# CI 跑的是这个。并发面（注册队列、runnerOps 锁、Agent 令牌的单一胜者创建）
+# 出问题时普通 go test 是静默通过的，提交前至少跑一次。
+test-race:
+	go test -race ./...
 
 run: build
 	./$(BINARY)

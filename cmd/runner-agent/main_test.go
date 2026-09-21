@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
 
 func requireLinux(t *testing.T) {

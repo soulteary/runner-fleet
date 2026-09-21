@@ -1,4 +1,4 @@
-module github.com/lab-dev/github-actions-runner-manager
+module github.com/soulteary/runner-fleet
 
 go 1.26.0
 

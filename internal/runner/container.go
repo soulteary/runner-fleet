@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // ContainerName 将 runner 名称转为合法容器名，与 config 包规则一致

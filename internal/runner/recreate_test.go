@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // fakeDocker 在 PATH 前面放一个假的 docker：记录每次调用，并对 inspect 返回指定 JSON。

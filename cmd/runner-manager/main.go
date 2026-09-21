@@ -11,18 +11,19 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/githubcheck"
-	"github.com/lab-dev/github-actions-runner-manager/internal/handler"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/githubcheck"
+	"github.com/soulteary/runner-fleet/internal/handler"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 //go:embed templates/*.html
@@ -79,19 +80,7 @@ func main() {
 	runner.LogPreflight(runner.Preflight(preflightCtx, cfg))
 	preflightCancel()
 
-	e := echo.New()
-	e.HideBanner = true
-	e.Use(middleware.Recover(), middleware.RequestLogger(), middleware.Secure())
-	e.HTTPErrorHandler = httpErrorHandler
-
-	if mw, user := basicAuthMiddleware(); mw != nil {
-		e.Use(mw)
-		log.Printf("Basic Auth 已启用（用户: %s）", user)
-	}
-
-	e.Renderer = newTemplateRenderer()
-	handler.I18nLoader = loadI18n
-	registerRoutes(e)
+	e := newEchoServer()
 
 	addr := listenAddr(cfg)
 	srv := &http.Server{Addr: addr, Handler: e}
@@ -180,6 +169,88 @@ func httpErrorHandler(err error, c echo.Context) {
 	_ = c.JSON(code, map[string]string{"message": msg})
 }
 
+// safeMethods 是不改变状态的方法，CSRF 与之无关
+var safeMethods = map[string]bool{
+	http.MethodGet:     true,
+	http.MethodHead:    true,
+	http.MethodOptions: true,
+}
+
+// trustedOrigins 读取 TRUSTED_ORIGINS（逗号分隔），供 csrfGuardMiddleware 放行额外来源
+func trustedOrigins() []string {
+	raw := strings.TrimSpace(os.Getenv("TRUSTED_ORIGINS"))
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if v := strings.TrimSpace(item); v != "" {
+			out = append(out, strings.TrimRight(v, "/"))
+		}
+	}
+	return out
+}
+
+// originMatchesHost 判断 Origin 与本次请求的 Host 是否同源（只比较 authority）
+func originMatchesHost(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return u.Host == host
+}
+
+// csrfGuardMiddleware 拒绝跨站发起的写请求。
+//
+// 写接口原先既收 JSON 也收 form 编码，而跨站 form 提交是 CORS 意义上的「简单请求」——
+// 不触发预检，浏览器照发，并自动带上该源已缓存的 Basic Auth 凭据。于是诱导管理员
+// 打开一个恶意页面就能添加或启停 Runner。PUT / DELETE 必定触发预检，本来就到不了这里，
+// 真正敞着的是 POST：/api/runners 与 /api/runners/:name/{start,stop,recreate}。
+//
+// 判据优先取 Sec-Fetch-Site：它由浏览器本地计算，不受反向代理改写 Host 影响
+// （Chrome 76+ / Firefox 90+ / Safari 16.4+）。取不到时回落到比较 Origin 与 Host——
+// 所有现代浏览器的跨站 POST 都会带 Origin，所以这一层够用。
+//
+// 两者都没有的请求不是浏览器发的（curl、CI 脚本）：它们不持有用户的 cookie 或
+// Basic Auth 缓存，不构成 CSRF，因此放行——否则这套 API 就没法脚本化了。
+// 反代改写 Host 导致误杀时，用 TRUSTED_ORIGINS 显式放行。
+func csrfGuardMiddleware(trusted []string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+			if safeMethods[req.Method] {
+				return next(c)
+			}
+			origin := strings.TrimRight(strings.TrimSpace(req.Header.Get("Origin")), "/")
+			if origin != "" {
+				for _, t := range trusted {
+					if strings.EqualFold(origin, t) {
+						return next(c)
+					}
+				}
+			}
+			// 浏览器自报的发起方，最可靠
+			if site := strings.TrimSpace(req.Header.Get("Sec-Fetch-Site")); site != "" {
+				if site == "same-origin" {
+					return next(c)
+				}
+				return echo.NewHTTPError(http.StatusForbidden,
+					"跨站请求被拒绝（Sec-Fetch-Site: "+site+"）。写接口只接受同源调用；如确需跨源访问，用 TRUSTED_ORIGINS 放行该来源")
+			}
+			// 老浏览器不发 Sec-Fetch-Site，但跨站 POST 一定带 Origin
+			if origin != "" {
+				if originMatchesHost(origin, req.Host) {
+					return next(c)
+				}
+				return echo.NewHTTPError(http.StatusForbidden,
+					"跨站请求被拒绝（Origin "+origin+" 与本服务 "+req.Host+" 不一致）。如确需跨源访问，用 TRUSTED_ORIGINS 放行该来源")
+			}
+			// 非浏览器请求：不会自动携带凭据，放行
+			return next(c)
+		}
+	}
+}
+
 // basicAuthMiddleware 按环境变量构造 Basic Auth 中间件，同时返回生效的用户名。
 //
 // 未设置 BASIC_AUTH_PASSWORD 时返回 nil —— 此时整个鉴权中间件不会挂载，
@@ -219,6 +290,32 @@ func loadI18n(lang string) (map[string]string, error) {
 		return nil, err
 	}
 	return t, nil
+}
+
+// newEchoServer 组装整个 HTTP 服务：中间件顺序、错误格式、模板、i18n 与路由表。
+//
+// 从 main 里拆出来是为了能整体测试。单独测 csrfGuardMiddleware 只能证明这个函数
+// 判得对，证明不了它真的挂在了写接口前面，而「中间件写好了但没挂上」恰恰是这类
+// 防护最典型的失效方式——v1.6.0 把鉴权、路由表、监听地址拆出来也是同一个理由。
+func newEchoServer() *echo.Echo {
+	e := echo.New()
+	e.HideBanner = true
+	e.Use(middleware.Recover(), middleware.RequestLogger(), middleware.Secure())
+	e.HTTPErrorHandler = httpErrorHandler
+	// 放在鉴权之前：跨站请求无论带不带凭据，都该在这里就结束
+	trusted := trustedOrigins()
+	e.Use(csrfGuardMiddleware(trusted))
+	if len(trusted) > 0 {
+		log.Printf("CSRF 白名单来源: %s", strings.Join(trusted, ", "))
+	}
+	if mw, user := basicAuthMiddleware(); mw != nil {
+		e.Use(mw)
+		log.Printf("Basic Auth 已启用（用户: %s）", user)
+	}
+	e.Renderer = newTemplateRenderer()
+	handler.I18nLoader = loadI18n
+	registerRoutes(e)
+	return e
 }
 
 // registerRoutes 挂载全部路由

@@ -58,6 +58,31 @@ go run ./cmd/runner-manager
 | `/api/runners/:name/recreate` | POST | 按当前配置删除并重建 Runner 容器（仅容器模式）。会中断正在跑的 Job——已停止的容器在「启动」时若发现创建参数不一致，本就会自动重建。 |
 | `/api/runner-precheck` | GET | 添加前的名称预检：`?name=&path=`。返回 `available`、`suggested_name` 与冲突列表 `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`），每条含 `level`（`error`/`warn`）、`message`、`detail` 与可选的 `fix_command`。只读，界面在输入时会实时调用。 |
 
+### 跨站请求（CSRF）
+
+写接口（`POST`、`PUT`、`DELETE`）会拒绝浏览器判定为跨站的请求。没有这一层时，任何其它来源的页面都能向
+`POST /api/runners` 提交一个表单——那是 CORS 意义上的「简单请求」，不触发预检就会发出去，而浏览器会自动带上
+它为本站缓存的 Basic Auth 凭据。也就是说，诱导管理员打开一个恶意页面，就足以添加或停掉一个 Runner。
+`PUT` 与 `DELETE` 必定触发预检，本来就不是敞着的那部分；敞着的是 `POST`，而
+`/api/runners/:name/{start,stop,recreate}` 全是 POST。
+
+判据优先读 `Sec-Fetch-Site`：它由浏览器本地计算，反向代理改写 `Host` 也影响不到
+（Chrome 76+、Firefox 90+、Safari 16.4+）。只有 `same-origin` 放行；`same-site` 不放行——
+子域或另一个端口就是另一个源，而这是一个管理界面。老到不发这个头的浏览器回落到比较 `Origin` 与请求的
+`Host`，跨站 POST 时当前所有浏览器都会带 `Origin`。
+
+两个头都没有的请求不是浏览器发的（curl、CI 脚本）：它既没有 cookie 也没有缓存的 Basic Auth，
+构不成 CSRF，因此放行——API 照样可脚本化，任何地方都不需要额外的令牌或请求头。
+
+两点后果：
+
+- **请求体只接受 JSON。** `AddRunnerRequest` 与 `UpdateRunnerRequest` 上没有 `form` tag，
+  所以 form 编码的请求即便绕过了中间件，也只能绑出一个空结构体，随即被必填校验挡掉。
+  界面本来就用 JSON 提交——它那处 `FormData` 只是用来就地读取表单元素里的字段值。
+- **`TRUSTED_ORIGINS` 是逃生舱。** 如果反向代理改写了 `Host`，以致你自己的请求也被拒，
+  就把浏览器地址栏里看到的来源填进去，逗号分隔（`https://ci.example.com`）。
+  名单内的来源无论 `Sec-Fetch-Site` 说什么都会放行，所以只填你自己控制的域名。
+
 ### 升级注意（破坏性变更）
 
 历史扁平字段 `probe_*` 已移除，请统一使用 `probe` 对象：`probe.error`、`probe.type`、`probe.suggestion`、`probe.check_command`、`probe.fix_command`。`probe.type` 可能值：`docker-access`、`agent-http`、`agent-connect`、`unknown`。WebUI 在 `status=unknown` 时仍可「启动/停止」自愈。
@@ -78,6 +103,59 @@ go run ./cmd/runner-manager
 }
 ```
 
+### 运行状态是怎么判定的
+
+`internal/runnerproc` 回答「这个 Runner 的进程还活着吗」的办法是扫 `/proc`，找 argv 里声称属于该安装目录的进程——
+`<dir>/bin/Runner.Listener`，或是正在跑 `<dir>/run.sh`、`<dir>/run-helper.sh` 的 shell。
+
+它刻意**不**读 pid 文件，因为 actions/runner 根本不写。`run.sh`、`run-helper.sh.template`、`runsvc.sh`
+都没有把 pid 写到任何地方，pid 只存在于一个 shell 变量里。安装目录下的 `.path` 装的是一串 PATH，不是 pid
+（`runsvc.sh` 自己就是 `export PATH=$(cat .path)` 这么用的）。照这两个名字去读必然失败，
+于是每个 Runner 永远报「已注册但未运行」。
+
+监护脚本也算在运行中，哪怕 `Runner.Listener` 这一刻不在：`run-helper.sh` 在退出码为 2 时会 sleep 5 秒，
+随后 `run.sh` 再把监听器拉起来——只认监听器的判据会在每次重启的间隙把 Runner 判成死的。
+
+对调用方有两个后果：
+
+- `runner.List` 是磁盘视角的。容器模式下它的 `Running` 恒为 false——Manager 与 Runner 不在同一个 PID
+  namespace。只要判定结果会触发动作，就该用 `runner.ListWithLiveStatus`，它去问每个容器里的 Agent，
+  并把探测失败映射成 `status=unknown` 而不是 `installed`，这样「已注册未运行就拉起」不会落到一个
+  根本够不着的 Runner 身上。
+- 探测依赖 `/proc`，因此仅限 Linux；其它平台一律报「未运行」。
+
+### Runner 目录权限
+
+Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsaparams` 写进去——那是 Runner
+用来向 GitHub 认证的 RSA 私钥，而 actions/runner 不给它设任何 Unix 权限（`ConfigurationStore`
+只设了 Windows 的 Hidden 属性，于是文件跟随 umask，通常是 0644）。也就是说，目录权限是这把私钥
+与宿主机上其他本地用户之间唯一的一道墙。
+
+`MkdirAll` 不会改动已存在的目录，所以旧版本建出来的目录仍是 0755。`Preflight` 选择把它们报出来，
+并附上一条可以直接执行的 `chmod 700`，而不是就地改掉：Manager 与容器以不同 UID 运行时，
+贸然收紧会把一套本来正常的部署弄坏，这个决定该由人来做。
+
+`base_path` 本身保持可穿越——它不存放任何凭据，而且在容器模式下它是宿主机的挂载点。
+
+这不改变 Job 能够到什么。`job_docker_backend: host-socket` 下 Job 可以挂载宿主机的任意路径，
+部署文档已经就此给过警告；这里的权限位防的是同机的其他本地用户，不是那个。
+
+### 删除 Runner 与 GitHub
+
+`DELETE /api/runners/:name` 会把 Runner 从本工具**以及** GitHub 上都删掉。GitHub 那一侧需要凭据，
+而本工具手上唯一可能有的，就是可选的、每个 Runner 各自的 PAT——`<runner 目录>/.github_check_token`，
+与可见性检查用的是同一个文件。所以注销必须发生在删除安装目录**之前**，因为令牌就住在那里；
+顺序错了就等于悄悄失去了注销的能力。
+
+没有 PAT 就注销不了：GitHub 要么要 PAT，要么要一个新鲜的 removal token，而 `config.sh remove`
+要的正是后者。此时响应会如实说明，并指出去哪里手动删除。这件事值得说出来而不是咽下去——
+残留的 Runner 会让下一次 `config.sh --name <同名>` 直接失败在 `A runner exists with the same name`。
+
+`registered_on_github` 是**可空**布尔：`true` / `false` 是答案，`null` 表示没能得到答案，
+原因放在 `github_check_error` 里。模板里不能用 `{{if .RegisteredOnGitHub}}` 去判断它——
+`html/template` 只看指针是否为 nil，于是一个指向 `false` 的指针也是真。请用 `RunnerInfo` 上的
+`GitHubYes` / `GitHubNo` / `GitHubUnknown` 三个辅助方法。
+
 ## Makefile 目标
 
 - `make help`：查看全部目标。
@@ -85,6 +163,7 @@ go run ./cmd/runner-manager
 - `make build-agent`：构建 Runner Agent（容器模式用）。
 - `make build-all`：同时构建 Manager 与 Agent。
 - `make test`：运行测试。
+- `make test-race`：带竞态检测跑测试（CI 跑的就是这个）。
 - `make run`：先 build 再运行 Manager。
 - `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [使用指南](guide.md)。
 - `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。
@@ -92,6 +171,32 @@ go run ./cmd/runner-manager
 - `make clean`：删除生成的二进制（runner-manager、runner-agent）。
 
 容器模式用的 Agent 为 `cmd/runner-agent`，Runner 镜像用 `Dockerfile.runner` 单独构建。
+
+
+## 测试
+
+`go test ./...`，或者直接 `make test-race`——那才是 CI 真正跑的。所有 CI 与发布 workflow 都跑
+`go test -race`，这样数据竞态会当场让构建失败，而不是日后表现为线上偶尔出现的错误状态：
+这个项目的并发面（单 worker 的注册队列、按 Runner 的 `runnerOps` 锁、`EnsureAgentToken`
+的「单一胜者」创建）都是靠约定维持的，类型系统管不到。仓库的 golangci-lint 在 CI 里跑；
+本地跑不了的话，用 `go run` 调 `errcheck` 与 `staticcheck` 能覆盖它标出的大部分问题。
+
+往测试里加东西之前，有几条约定值得先知道：
+
+- **进程探测是对着真进程测的**，不是造一个假的 `/proc`（`internal/runnerproc`、`internal/runner`、
+  `cmd/runner-agent`）。用一个会阻塞的临时 `run.sh` 冒充 Runner 即可，但它**不能** `exec`——
+  一 exec，shell 就被替换掉，argv 也就不再是 `internal/runnerproc` 要找的形态。
+- **`cmd/runner-manager` 的测试通过 `main()` 所调用的那些函数够到接线**（`basicAuthMiddleware`、
+  `httpErrorHandler`、`registerRoutes`、`listenAddr`、`loadI18n`）。加一条路由就要同步更新
+  `TestRegisterRoutes_AllEndpointsPresent`，它断言的是完整集合——这正好逼你想一想新路由要不要鉴权。
+- **中间件要通过 `newEchoServer()` 测，而不只是单独测它自己。** 写对了却没挂上，是这类防护
+  最典型的失效方式，所以 `TestCSRFGuardIsMountedOnWriteRoutes` 走的是真实路由表。
+  新增写接口时，记得把它加进那里的 `writeRoutes`。
+- **i18n 文件之间互相校验。** `en.json` 里有、别处没有的键会静默渲染成空白，所以测试断言六种语言的键集相同、
+  没有空值，并且模板引用到的每个键都存在。
+- **模板层面的缺陷配模板层面的测试。** 过去有两个 bug 出在 `index.html` 而不是 Go 里——一个是对 `*bool`
+  用 `{{if}}`，把指向 `false` 的指针读成了真；另一个是 `innerHTML` 赋值时漏了 `escapeHtml`。
+  两者都由「渲染真实模板」或「扫描模板」来覆盖，因为只测 Go 辅助函数的话，哪个都发现不了。
 
 
 ## 发布
@@ -103,5 +208,13 @@ sh scripts/check-version-consistency.sh
 ```
 
 某一行确需引用历史版本号（变更说明、升级指引等）时，在该行加上 `version-check-ignore` 标记即可跳过。
+
+译文同样有机制盯着。`scripts/check-docs-structure.sh` 会把每个 `docs/<lang>/*.md` 的标题层级序列
+与英文原版比对——标题文字本来就该不同，结构不该——于是「英文加了一节、五种译文没跟上」会当场让 PR 失败，
+而不是一直没人发现：
+
+```bash
+sh scripts/check-docs-structure.sh
+```
 
 [← 返回文档](README.md)

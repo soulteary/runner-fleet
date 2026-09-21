@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 func findCheck(t *testing.T, results []CheckResult, name string) CheckResult {

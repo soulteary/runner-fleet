@@ -8,8 +8,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 func TestNewTemplateRenderer_ParsesEmbeddedTemplates(t *testing.T) {
