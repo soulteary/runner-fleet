@@ -17,7 +17,7 @@ En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](g
 go build -o runner-manager ./cmd/runner-manager
 
 # Avec version (pour /version et débogage)
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # Construire uniquement le Runner Agent (mode conteneur)
 go build -o runner-agent ./cmd/runner-agent
@@ -57,6 +57,7 @@ Avec Basic Auth, toutes les requêtes sauf `/health` et `/ready` doivent inclure
 | `/api/runners/:name/start` | POST | Démarrer le runner. En cas d'échec de sonde tente quand même le démarrage, retourne `probe` structuré dans la réponse. |
 | `/api/runners/:name/stop` | POST | Arrêter le runner. En cas d'échec de sonde tente quand même l'arrêt, retourne `probe` structuré dans la réponse. |
 | `/api/runners` | POST | Ajoute un runner (installation et enregistrement optionnels). En cas de conflit de nom, renvoie **409** avec `conflicts` et `suggested_name` au lieu de renommer silencieusement ; envoyez `auto_rename: true` pour l'ancien comportement. |
+| `/api/runners/:name` | DELETE | Supprime un runner : l'arrête, le désenregistre de GitHub lorsqu'un PAT est disponible, supprime son répertoire d'installation, le retire de la configuration. La réponse porte `github_deregistered` et un `message` qui indique ce qui s'est passé côté GitHub. |
 | `/api/runners/:name/recreate` | POST | Supprime et recrée le conteneur du runner avec la configuration actuelle (mode conteneur uniquement). Interrompt un job en cours ; un conteneur arrêté est de toute façon recréé automatiquement au démarrage si ses paramètres de création ont divergé. |
 | `/api/runner-precheck` | GET | Pré-vérification d'un nom avant l'ajout : `?name=&path=`. Renvoie `available`, un `suggested_name` et les `conflicts` détectés (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), chacun avec `level` (`error`/`warn`), `message`, `detail` et un `fix_command` optionnel. En lecture seule ; l'interface l'appelle pendant la saisie. |
 | `/api/runner-rows` | GET | Rend uniquement le `<tbody>` de la liste, à partir du même fragment de template que le premier rendu. L'interface l'interroge pour rafraîchir la liste sur place. |
@@ -241,6 +242,14 @@ Quelques conventions à connaître avant d'enrichir la suite :
   couverts en rendant le vrai template ou en le parcourant, car un test du seul helper Go
   n'aurait rien remarqué.
 
+- **La documentation est testée comme du code.** `internal/docsconsistency` ne contient que
+  des tests, aucun code d'exécution. Ils comparent chaque traduction à l'original anglais
+  *en dessous* du niveau de titre vérifié par ci-recipes — lignes de tableau, blocs de code,
+  éléments de liste, cibles de lien résolues — car la dérive réellement survenue était une
+  ligne de tableau, pas un titre. Ils vérifient aussi que les chemins référencés depuis des
+  fichiers non-Markdown existent, que le marqueur que la doc de dépannage demande de `grep`
+  est bien celui que le code journalise, et que chaque README sous `examples/` déclare une
+  politique de langue.
 
 ## Publication
 
@@ -270,5 +279,16 @@ oubliée dans les cinq traductions fait échouer la PR au lieu de passer inaper�
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+Deux vérifications se déclenchent au moment de la publication plutôt qu'à chaque PR.
+`.github/actions/check-release-version` s'exécute sur un tag `v*.*.*` et le refuse si la version
+de référence dans `internal/config/config.go` ne vaut pas le tag, ou si `CHANGELOG.md` n'a pas la
+section `## [X.Y.Z]` correspondante avec sa définition de lien. `check-version-consistency` ne
+peut pas le voir : elle prend cette référence pour vérité, donc un dépôt cohérent en interne mais
+un correctif en retard sur la version publiée passe — c'est exactement ainsi qu'une publication
+est sortie sans que rien dans l'arbre ne pointe vers elle. Le job `Quick start runs` de
+`CI (Consistency)` exécute le bloc de démarrage rapide du guide sur une image construite
+localement puis demande `GET /ready` : une procédure documentée que personne n'exécute est une
+procédure dont personne ne sait qu'elle est cassée.
 
 [← Retour à la doc](README.md)

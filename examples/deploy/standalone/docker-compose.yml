@@ -20,7 +20,7 @@
 # config/config.yaml 不存在时会在首次启动自动生成，无需手工准备。
 services:
   runner-manager:
-    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.7.0}
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.7.1}
     container_name: runner-manager
     environment:
       # 不设 DOCKER_HOST 时走下面挂载的宿主机 socket；改用 DinD 见 .env.example

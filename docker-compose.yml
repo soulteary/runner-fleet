@@ -1,12 +1,11 @@
 # Runner Fleet - GitHub Actions Runner 管理 + DinD
-# 详见 docs/docker.md
+# 详见 docs/zh/guide.md 的「一、部署（Docker）」（English: docs/guide.md）
 #
 # === 首次使用 ===
-# 1. 复制配置：mkdir -p config && cp config.yaml.example config/config.yaml（若仅用 .env 可省略此步，首次启动将自动生成 config/config.yaml）
+# 1. 建目录并复制配置：mkdir -p config runners && cp config.yaml.example config/config.yaml（若仅用 .env 可省略复制，首次启动将自动生成 config/config.yaml）
 # 2. 确认 config/config.yaml 中 runners.base_path 为 /app/runners（与下方 volumes 一致）
-# 3. 宿主机目录权限（Manager 以 UID 1001 运行）：
-#      chown 1001:1001 config runners
-#      mkdir -p runners && chown 1001:1001 runners
+# 3. 宿主机目录权限（Manager 以 UID 1001 运行）——目录建完之后再改属主：
+#      sudo chown -R 1001:1001 config runners
 # 4. 可选：复制 .env.example 为 .env，设置 MANAGER_IMAGE 等（见下方 services.runner-manager.image）
 # 5. 若启用容器模式：可在 .env 中设 CONTAINER_MODE=true、VOLUME_HOST_PATH=<宿主机 runners 绝对路径>、JOB_DOCKER_BACKEND=host-socket 等，无需改 config/config.yaml；或按原方式在 config/config.yaml 中取消 container_mode 等注释并设置 volume_host_path。
 #      - Manager 需能访问宿主机 Docker（创建/启停 Runner 容器）：下方已配置 group_add，请将 999 改为宿主机 docker 组 GID（getent group docker | cut -d: -f3）；或改用 user: "0:0" 以 root 运行
@@ -37,8 +36,8 @@ services:
     restart: unless-stopped
 
   runner-manager:
-    # 默认使用稳定版 v1.7.0；开发/尝鲜可设 .env：MANAGER_IMAGE=ghcr.io/soulteary/runner-fleet:main
-    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.7.0}
+    # 默认使用稳定版 v1.7.1；开发/尝鲜可设 .env：MANAGER_IMAGE=ghcr.io/soulteary/runner-fleet:main
+    image: ${MANAGER_IMAGE:-ghcr.io/soulteary/runner-fleet:v1.7.1}
     container_name: runner-manager
     # 使用 job_docker_backend: dind 时请先启动 DinD：docker compose --profile dind up -d
     # 容器模式下必须用宿主机 socket，否则 Manager 无法创建 Runner 容器；默认 unix，勿改为 tcp://runner-dind:2375

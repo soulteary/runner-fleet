@@ -17,7 +17,7 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 go build -o runner-manager ./cmd/runner-manager
 
 # Mit Version (für /version und Debug)
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # Nur Runner Agent bauen (Containermodus)
 go build -o runner-agent ./cmd/runner-agent
@@ -57,6 +57,7 @@ Mit Basic Auth müssen alle Anfragen außer `/health` und `/ready` den Header `A
 | `/api/runners/:name/start` | POST | Runner starten. Bei Probe-Fehler startet trotzdem, gibt strukturiertes `probe` in der Antwort zurück. |
 | `/api/runners/:name/stop` | POST | Runner stoppen. Bei Probe-Fehler stoppt trotzdem, gibt strukturiertes `probe` in der Antwort zurück. |
 | `/api/runners` | POST | Runner hinzufügen (optional installieren und registrieren). Bei einem Namenskonflikt kommt **409** mit `conflicts` und `suggested_name`, statt still umzubenennen; für das alte Verhalten `auto_rename: true` senden. |
+| `/api/runners/:name` | DELETE | Entfernt einen Runner: stoppt ihn, meldet ihn bei vorhandenem PAT von GitHub ab, löscht sein Installationsverzeichnis, nimmt ihn aus der Konfiguration. Die Antwort enthält `github_deregistered` und eine `message`, die sagt, was auf der GitHub-Seite passiert ist. |
 | `/api/runners/:name/recreate` | POST | Entfernt den Runner-Container und erstellt ihn mit der aktuellen Konfiguration neu (nur Container-Modus). Ein laufender Job wird abgebrochen; ein gestoppter Container wird beim Start ohnehin automatisch neu erstellt, wenn seine Erstellungsparameter abweichen. |
 | `/api/runner-precheck` | GET | Namensprüfung vor dem Hinzufügen: `?name=&path=`. Liefert `available`, einen `suggested_name` und die gefundenen `conflicts` (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`) mit je `level` (`error`/`warn`), `message`, `detail` und optionalem `fix_command`. Nur lesend; die Web-UI ruft sie während der Eingabe auf. |
 | `/api/runner-rows` | GET | Rendert nur den `<tbody>` der Liste, aus demselben Template-Fragment wie der erste Seitenaufbau. Die Web-UI fragt ihn ab, um die Liste an Ort und Stelle zu aktualisieren. |
@@ -241,6 +242,14 @@ Ein paar Konventionen, die vor Erweiterungen der Suite hilfreich sind:
   Template gerendert oder durchsucht wird, denn ein Test des Go-Helfers allein hätte keinen von
   beiden bemerkt.
 
+- **Dokumentation wird wie Code getestet.** `internal/docsconsistency` enthält nur Tests und
+  keinen Laufzeitcode. Sie vergleichen jede Übersetzung mit dem englischen Original
+  *unterhalb* der von ci-recipes geprüften Überschriftenebene — Tabellenzeilen, Codeblöcke,
+  Listenpunkte, aufgelöste Linkziele — denn die tatsächlich aufgetretene Abweichung war eine
+  Tabellenzeile, keine Überschrift. Sie prüfen außerdem, dass aus Nicht-Markdown-Dateien
+  referenzierte Pfade existieren, dass die Marke, die die Fehlerbehebungs-Doku zu `grep`
+  empfiehlt, die vom Code geloggte ist, und dass jede README unter `examples/` eine
+  deklarierte Sprachpolitik hat.
 
 ## Release
 
@@ -271,5 +280,16 @@ unbemerkt zu bleiben:
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+Zwei Prüfungen laufen zum Release-Zeitpunkt statt bei jedem PR.
+`.github/actions/check-release-version` läuft auf einem `v*.*.*`-Tag und lehnt ihn ab, wenn die
+Basisversion in `internal/config/config.go` nicht dem Tag entspricht oder `CHANGELOG.md` keinen
+passenden `## [X.Y.Z]`-Abschnitt samt Linkdefinition hat. `check-version-consistency` kann das
+nicht sehen: Sie nimmt diese Basis als Wahrheit, also besteht ein Repository, das intern
+konsistent, aber einen Patch hinter dem veröffentlichten Release ist — genau so ging ein Release
+hinaus, auf das nichts im Baum zeigte. Der Job `Quick start runs` in `CI (Consistency)` führt den
+Schnellstart-Block des Handbuchs gegen ein lokal gebautes Image aus und fragt dann `GET /ready`
+ab, denn ein dokumentiertes Vorgehen, das niemand ausführt, ist ein Vorgehen, von dem niemand
+weiß, dass es kaputt ist.
 
 [← Zurück zur Dokumentation](README.md)

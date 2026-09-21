@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
@@ -57,6 +57,7 @@ go run ./cmd/runner-manager
 | `/api/runners/:name/start` | POST | 启动指定 Runner。容器模式下若状态探测失败，仍会尝试启动，并在响应中返回结构化 `probe`。 |
 | `/api/runners/:name/stop` | POST | 停止指定 Runner。容器模式下若状态探测失败，仍会尝试停止，并在响应中返回结构化 `probe`。 |
 | `/api/runners` | POST | 添加 Runner（可选安装并注册）。名称冲突时返回 **409**，带 `conflicts` 与 `suggested_name`，不再静默改名；需要旧的自动加后缀行为可传 `auto_rename: true`。 |
+| `/api/runners/:name` | DELETE | 删除 Runner：停止它、在有 PAT 时从 GitHub 注销、删除安装目录、从配置里移除。响应带 `github_deregistered`，以及一条说明 GitHub 那一侧实际发生了什么的 `message`。 |
 | `/api/runners/:name/recreate` | POST | 按当前配置删除并重建 Runner 容器（仅容器模式）。会中断正在跑的 Job——已停止的容器在「启动」时若发现创建参数不一致，本就会自动重建。 |
 | `/api/runner-precheck` | GET | 添加前的名称预检：`?name=&path=`。返回 `available`、`suggested_name` 与冲突列表 `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`），每条含 `level`（`error`/`warn`）、`message`、`detail` 与可选的 `fix_command`。只读，界面在输入时会实时调用。 |
 | `/api/runner-rows` | GET | 只渲染列表的 `<tbody>`，用的是首屏那份模板片段。界面轮询它来原地刷新列表。 |
@@ -204,6 +205,11 @@ Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsapara
   用 `{{if}}`，把指向 `false` 的指针读成了真；另一个是 `innerHTML` 赋值时漏了 `escapeHtml`。
   两者都由「渲染真实模板」或「扫描模板」来覆盖，因为只测 Go 辅助函数的话，哪个都发现不了。
 
+- **文档和代码一样被测试。** `internal/docsconsistency` 里只有测试，没有运行时代码。
+  它比对译文与英文原文在**标题之下**的内容——表格行、代码块、列表项、解析后的链接目标，
+  因为真正发生过的漂移是一行表格而不是一个标题。它还校验非 Markdown 文件里引用的路径确实存在、
+  排障文档让人 `grep` 的标记就是代码真正打出来的那个、以及 `examples/` 下每份 README
+  都登记过语言策略。
 
 ## 发布
 
@@ -231,5 +237,13 @@ make install-ci-recipes
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+有两项检查不在每个 PR 上跑，而是在发布时跑。`.github/actions/check-release-version` 由
+`v*.*.*` 的 tag 触发：`internal/config/config.go` 里的基准版本必须等于该 tag，且 `CHANGELOG.md`
+必须已有对应的 `## [X.Y.Z]` 小节与底部链接定义，否则发布当场失败。`check-version-consistency`
+看不见这件事——它把那个基准当作事实，所以一个「整体落后已发布版本一个补丁号但内部完全自洽」
+的仓库在它眼里是绿的，而那正是某次发布之后仓库里没有一处指向它的由来。`CI (Consistency)` 里的
+`Quick start runs` 则拿就地构建的镜像整段执行使用指南里的快速开始命令块，再去请求
+`GET /ready`——一段没人跑过的文档步骤，就是一段没人知道它坏了的步骤。
 
 [← 返回文档](README.md)

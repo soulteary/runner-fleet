@@ -381,15 +381,27 @@ func inGroup(gid int) bool {
 // preflightLogf 供测试替换，默认走标准库 log
 var preflightLogf = log.Printf
 
+// PreflightLogMarker 是每条自检日志的行首标记。
+//
+// 六种语言的文档都把「先看启动自检」写成排障第一步，给出的命令是
+// `docker compose logs runner-manager | grep '\[preflight'`。这个标记原本是
+// 「[自检 …]」——于是英/法/德/日/韩五份文档里躺着一个非中文用户既打不出、
+// 也看不懂的 grep 关键词。日志正文目前仍是中文（那是更大的一件事），
+// 但至少让「怎么把这些行捞出来」不依赖读者认识汉字。
+//
+// 提成常量是为了让 preflight_test.go 能守住它：文档里的命令依赖这个字面量，
+// 改了它而不改六份文档，排障第一步就会静默地什么都 grep 不到。
+const PreflightLogMarker = "[preflight"
+
 // LogPreflight 将自检结果按级别打到日志，error 项额外给出修复建议
 func LogPreflight(results []CheckResult) {
 	for _, r := range results {
-		prefix := "[自检 ✓]"
+		prefix := PreflightLogMarker + " ✓]"
 		switch r.Level {
 		case CheckWarn:
-			prefix = "[自检 !]"
+			prefix = PreflightLogMarker + " !]"
 		case CheckError:
-			prefix = "[自检 ✗]"
+			prefix = PreflightLogMarker + " ✗]"
 		}
 		line := fmt.Sprintf("%s %s: %s", prefix, r.Name, r.Message)
 		if r.Hint != "" && r.Level != CheckOK {

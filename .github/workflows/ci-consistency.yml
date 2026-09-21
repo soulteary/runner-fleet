@@ -1,4 +1,7 @@
-# 仓库一致性校验：与语言/构建无关的整体性检查，独立于 Go 的 CI
+# 仓库一致性校验：跨文件、跨语言的整体性检查，独立于 Go 的 CI。
+#
+# 前两个 job 与语言/构建无关，只读文件。第三个 quickstart 例外，它要构建镜像并把容器
+# 拉起来——因为它验的恰恰是「照文档做能不能成」，而这件事没有不执行就能验的办法。
 name: CI (Consistency)
 
 on:
@@ -78,3 +81,61 @@ jobs:
       # 六种语言的键集，文档这一半一直没有；这一步补上。
       - name: Check translated docs match the English section structure
         run: ci-recipes runner-fleet check-docs-structure
+
+  quickstart:
+    name: Quick start runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 照着文档抄的人不会先读一遍再判断哪条该跳过，他们整段贴进终端。所以这里也整段执行。
+      #
+      # 这一步守的是一类具体的事故：快速开始里的 chown 排在 mkdir -p runners 之前，
+      # 第一条命令必定 `cannot access 'runners'`，而且那段还把 runners chown 了两遍——
+      # 典型的两次修改叠出来、整段没人跑过。六份译文行号完全一致地错着，
+      # 标题结构检查与版本号检查都看不见这种事，因为两者都不执行任何东西。
+      - name: Extract the quick start block from the guide
+        run: |
+          set -euo pipefail
+          awk '
+            /^### .*docker-compose/ { insec=1; next }
+            insec && /^```bash$/    { inblk=1; next }
+            inblk && /^```/         { exit }
+            inblk                   { print }
+          ' docs/guide.md > quickstart.sh
+          if [ ! -s quickstart.sh ]; then
+            echo "::error file=docs/guide.md::没能抽出 docker-compose 快速开始的 bash 块。"
+            echo "::error::改过那一节的标题或围栏语言标记的话，这里的 awk 也要跟着改"
+            exit 1
+          fi
+          echo "抽到的命令块："
+          cat quickstart.sh
+
+      # 不拉已发布镜像，就地构建：升版本的那个 PR 里，新 tag 的镜像还不存在
+      # （镜像由 tag 触发的 release workflow 推），拉取必然失败，而那正是最需要这一步的 PR。
+      - name: Build the Manager image locally
+        run: docker build -t runner-fleet:quickstart-ci .
+
+      - name: Run it
+        env:
+          MANAGER_IMAGE: runner-fleet:quickstart-ci
+        run: bash -euxo pipefail quickstart.sh
+
+      # 查 /ready 而不是 /health：/health 只要进程活着就恒为 200，挂载目录不可写它照样绿，
+      # 等于只证明了「容器起来了」。/ready 在配置读不了、runner 根目录缺失或不可写时返回 503,
+      # 正好是这段命令真正要产生的结果。
+      - name: The deployment is actually ready
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 30 --retry-delay 2 --retry-connrefused \
+            http://127.0.0.1:8080/ready
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true

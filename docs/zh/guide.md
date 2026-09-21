@@ -15,10 +15,10 @@
 
 ### 使用已发布镜像（推荐）
 
-生产环境建议使用具体版本号（如 v1.7.0）；开发可用 `main` tag。
+生产环境建议使用具体版本号（如 v1.7.1）；开发可用 `main` tag。
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 ### docker-compose 快速开始
@@ -26,11 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
 仓库根目录有 `docker-compose.yml`。仅当容器模式且 Job 需要 Docker 并配置 `job_docker_backend: dind` 时再启用 DinD。
 
 ```bash
-mkdir -p config && cp config.yaml.example config/config.yaml
+mkdir -p config runners && cp config.yaml.example config/config.yaml
 # 编辑 config/config.yaml：runners.base_path 改为 /app/runners
 
-chown 1001:1001 config runners
-mkdir -p runners && chown 1001:1001 runners
+sudo chown -R 1001:1001 config runners
 
 docker network create runner-net 2>/dev/null || true
 docker compose up -d
@@ -48,7 +47,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.7.0
+  ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`；镜像内已预置 GID 999 的 `docker` 组（构建参数 `DOCKER_GID` 可改），宿主机 docker GID 不是 999 时还需加 `--group-add $(getent group docker | cut -d: -f3)`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。两个镜像除 Docker CLI 外，还带有一层与 GitHub 托管 runner 对齐的命令行基础层：`scripts/apt-packages.txt` 取自 `actions/runner-images` 的 `toolset-2404.json`，`git`、`unzip`、`jq`、`rsync`、`sudo`、`xvfb` 等都在其中。语言与平台 SDK 有意不含——用 `setup-*` action 安装，或自行扩展镜像。与托管 runner 一致，两个镜像都为 Job 用户配置了免密 `sudo`，因此 `sudo apt-get install -y …` 可直接使用；需要更严格的边界时以 `--build-arg ALLOW_SUDO=false` 构建。
@@ -70,7 +69,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker 启停，经 HTTP 访问容器内 Agent 获取状态。
 
 **方式一：仅用 .env（推荐全容器时使用）**
-无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。若未准备 `config/config.yaml`，只要在 `.env` 中配置了上述变量，首次启动时会自动生成该文件。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.7.0` → `v1.7.0-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
+无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。若未准备 `config/config.yaml`，只要在 `.env` 中配置了上述变量，首次启动时会自动生成该文件。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.7.1` → `v1.7.1-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
 
 **方式二：在 config/config.yaml 中启用**（见 `config.yaml.example`）：
 
@@ -78,7 +77,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -86,7 +85,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.7.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
+Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.7.1-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
 
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
@@ -96,11 +95,11 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 ### 排障
 
-- **哪里不对先看启动自检**：`docker compose logs runner-manager | grep 自检`。Manager 启动时会检查 runners 目录、Docker 可达性、容器网络、Runner 镜像与 Job 内 Docker 后端，失败项会直接给出可照做的修复命令。
+- **哪里不对先看启动自检**：`docker compose logs runner-manager | grep '\[preflight'`。Manager 启动时会检查 runners 目录、Docker 可达性、容器网络、Runner 镜像与 Job 内 Docker 后端，失败项会直接给出可照做的修复命令。
 - **compose down 后 Runner 无法启动**：首次执行 `docker network create runner-net`。已出问题时界面点该 Runner「启动」重建，或 `docker rm -f github-runner-<名称>` 后再点「启动」。
 - **root 运行**：挂载目录对运行用户可写；若用 root，需设 `RUNNER_ALLOW_RUNASROOT=1`。
 - **Job 中访问 docker.sock 报 `permission denied`**：`job_docker_backend: host-socket` 时，容器内用户（UID 1001）需在 socket 所属组内。Manager 创建容器时会按探测到的宿主机 docker GID 追加 `--group-add`；GID 对不上的容器会被判为「配置已变更」，下次启动时自动重建（正在运行的则标出徽标，点「重建容器」立即生效）。探测不到时可设置 `runners.docker_gid`（或 `.env` 中 `DOCKER_GID`）为 `getent group docker | cut -d: -f3` 的值。
-- **Job 中 `command not found` 或缺少某个 SDK**：自托管 runner 不像 GitHub 托管的那样预装工具链。先看启动自检（`docker compose logs runner-manager | grep 自检`），它会指出配置中每个 Runner 镜像缺少 `git`/`unzip`/`tar`/`curl` 中的哪些。语言与平台 SDK 需自行扩展镜像，见 [`examples/runner-images/`](../../examples/runner-images/)。
+- **Job 中 `command not found` 或缺少某个 SDK**：自托管 runner 不像 GitHub 托管的那样预装工具链。先看启动自检（`docker compose logs runner-manager | grep '\[preflight'`），它会指出配置中每个 Runner 镜像缺少 `git`/`unzip`/`tar`/`curl` 中的哪些。语言与平台 SDK 需自行扩展镜像，见 [`examples/runner-images/`](../../examples/runner-images/)。
 - **旧 Runner 镜像**：拉取或重新构建后直接启动该 Runner 即可——Manager 会发现镜像变了（比对引用与镜像 ID，同名 tag 重新构建同样算）并重建容器。正在运行的容器不会被动，可在该行点「重建容器」选择何时中断。
 - **日志里每 5 分钟刷一遍 `已定时拉起 runner: <名称>`，界面上也从来不显示「运行中」**：本版本已修复，升级即可，不需要重新注册任何 Runner。运行状态此前取自 pid 文件（`Runner.Listener.pid`，回退到 `.path`），而 actions/runner 这两个都不写：它的启动脚本没有一处落 pid 文件，`.path` 里装的是 PATH 字符串。于是每个 Runner 都被读成「已注册但没在跑」，5 分钟一次的巡检每轮都把它们再拉起一遍。现在改为查进程表；容器模式下则由各容器内的 Agent 作答——Manager 看不到别的容器里的进程。同一个根因还有一处：默认（非容器）模式下点「停止」必然报 `未找到 runner pid 文件或 pid 无效`。
 - **在界面上删掉的 Runner，GitHub 上还在；用同一个名字加回来还会注册失败**：删除现在会一并从 GitHub 注销，但前提是该 Runner 目录下放了 `.github_check_token`（可选 PAT，组织需 `admin:org`，仓库需 `repo`）。没有这个凭据就注销不了，删除响应会直接说明并指向 Settings → Actions → Runners。旧版本删掉的 Runner 从未被注销过，需要手动清理。
@@ -111,7 +110,7 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .
 ```
 
 Make：`make docker-build`、`make docker-run`、`make docker-stop`。
@@ -131,7 +130,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Runner 安装目录根路径；**容器部署时设为 `/app/runners`** | `./runners` |
 | `runners.items` | 预置 Runner 列表 | 也可通过 Web 界面添加 |
 | `runners.container_mode` | 是否启用容器模式 | `false` |
-| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet:v1.7.0-runner` |
+| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet:v1.7.1-runner` |
 | `runners.container_network` | 容器模式下 Runner 所在网络 | `runner-net` |
 | `runners.agent_port` | 容器内 Agent 端口 | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
@@ -186,6 +185,6 @@ runners:
 
 **敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
 
-**Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep 自检`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
+**Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep '\[preflight'`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
 
 [← 返回项目首页](../../README.md)

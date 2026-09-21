@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The quick start could not be copy-pasted. `chown 1001:1001 config runners` ran *before* `mkdir -p runners`, so the first command always exited 1 with `cannot access 'runners'`, `runners` was then chowned a second time, and `sudo` was missing throughout — the form in `examples/deploy/README.md` was right all along and the other three places were not. Fixed in all six guides, the root README and `docker-compose.yml`.
+- `docker-compose.yml` and `config.yaml.example` pointed readers at `docs/docker.md` and `docs/config.md`. Neither file has ever existed in this repository. Both now point at the user guide, and `config.yaml.example` is the one file every user copies before editing.
+- The HTTP API table was missing its `DELETE /api/runners/:name` row in all five translations. The row went into the English table in 075b612; the follow-up translation commit restored the prose section that went in with it — because that section is a heading and `check-docs-structure` fails on a missing heading — and left the table row behind.
+- v1.7.1 was released with nothing in the tree pointing at it: the baseline tag in `internal/config/config.go` and 100 version references across docs and examples still read v1.7.0, and the release's three entries were still under `[Unreleased]`. Both are corrected here, and `.github/actions/check-release-version` now makes that combination fail the release instead of shipping.
+
+### Changed
+
+- Startup self-check log lines carry the prefix `[preflight …]` instead of `[自检 …]`. The troubleshooting section in all six languages opens by telling the reader to grep that prefix, so five of the six were handing non-Chinese readers a keyword they could not type. The message bodies are still Chinese — that is a larger piece of work — but finding the lines no longer requires reading Chinese. **A runbook that greps `自检` needs updating.**
+
+### Added
+
+- Five checks, each verified by mutation (reintroduce the defect, watch exactly one check go red). `internal/docsconsistency` compares translations against the English original *below* the heading level ci-recipes covers — table rows, code blocks, list items and resolved link targets, per section — checks that repo paths referenced from non-Markdown files exist, ties the marker the docs tell you to grep to the constant the code logs, and requires every README under `examples/` to have a declared language policy. `.github/actions/check-release-version` gates `v*.*.*` tags on the baseline and the CHANGELOG. The `Quick start runs` job in `CI (Consistency)` executes the guide's quick-start block against a locally built image and then asks for `GET /ready` — `/health` answers 200 even when the mount is unusable, so it would not have caught this.
+- `docs/docs-improvement-plan.md` — the audit these changes come from: 17 findings with evidence, the root causes, and what is left in batches 2 to 4. Like `ci-recipes-migration.md` it is a maintainer's working document and has no translations.
+
+## [1.7.1] - 2026-09-21
+
+### Fixed
+
 - The cached-runner example could not be built. `examples/deploy/fleet/Dockerfile.runner-cached` ended with `RUN node --version`, which fails with `node: not found` and takes the whole build down — and it was never going to pass. That image seeds the GitHub Actions tool cache at `/opt/hostedtoolcache/node/<version>/<arch>/`, which is deliberately *not* on `PATH`: `actions/setup-node` locates the version there at job time and prepends it itself. Putting the directory on `PATH` would make the command succeed and pin one Node version for every job, which is precisely the version selection this cache exists to serve. The line had been copied from `examples/runner-images/Dockerfile.node`, where Node comes from apt into `/usr/bin` and the same smoke test is meaningful. It is gone, and the install step now ends with `test -x "$dir/$arch/bin/node"`, which checks the layout `@actions/tool-cache` actually looks for rather than something the image never promised. `USER app` stays: the base image ends as `app` and this file switches to root partway through, so dropping it would run the Agent as root.
 - The Android example's `safe.directory` entry could never reach a job. `examples/runner-images/Dockerfile.android` ran `git config --global --add safe.directory "$FLUTTER_HOME"`, and `--global` writes `$HOME/.gitconfig` — but the `app` user's home is `/runner` (`useradd -d /runner` in `Dockerfile.runner`), which is exactly the path the Manager bind-mounts the host directory onto when it creates the container. The file was shadowed in every job, so the line configured nothing, while looking like the image had the case covered. It did nothing at build time either: by then `$FLUTTER_HOME` has been chowned to 1001 and the step runs as `app`, so owner and euid match and git raises no dubious-ownership error at all. It is now `git config --system` in the root section, writing `/etc/gitconfig`, which is outside the mount and survives — and which covers the case the entry was actually for: a job that reaches flutter as root through `sudo -i`, where `SUDO_UID` is gone and git refuses a repository owned by 1001. The same file now also records that `flutter precache` warms `$FLUTTER_HOME/bin/cache` under `/opt` (shared, outside the mount) while `$PUB_CACHE` defaults to `/runner/.pub-cache` (inside it, one copy per runner, not warmable from the image).
 - The Node example's npm cache location looked like a mistake and is now explained. `NPM_CONFIG_CACHE=/home/app/.npm` points outside `$HOME` on purpose — `$HOME` is `/runner`, the bind mount — so the cache lives in an image layer that every runner container on the same daemon shares through overlayfs, with job writes going to copy-on-write, the same reasoning as the shared tool cache in `examples/deploy/fleet/Dockerfile.runner-cached`. The comment above it described wrapping binaries into `/usr/local`, which the file has never done, and said nothing about the mount — an invitation to "fix" it back to `$HOME/.npm` and quietly move every runner's cache into its own host directory.
@@ -299,7 +317,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/soulteary/runner-fleet/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/soulteary/runner-fleet/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/soulteary/runner-fleet/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/soulteary/runner-fleet/compare/v1.5.0...v1.5.1

@@ -27,7 +27,7 @@ workflow 往往隐式依赖了它们，迁到自托管后会以各种形式失�
 以本仓库的 Runner 镜像为基础叠加自己的工具链即可：
 
 ```dockerfile
-FROM ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+FROM ghcr.io/soulteary/runner-fleet:v1.7.1-runner
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends <你的包> \
     && rm -rf /var/lib/apt/lists/*
@@ -86,7 +86,7 @@ ENV PATH=$PATH:$ANDROID_HOME/platform-tools
 ```yaml
 runners:
     container_mode: true
-    container_image: ghcr.io/soulteary/runner-fleet:v1.7.0-runner   # 全局默认
+    container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner   # 全局默认
     items:
         - name: android-builder
           target_type: repo
@@ -108,7 +108,7 @@ Manager 启动时会检查配置中用到的每个镜像是否具备 `git`、`un
 缺失会在日志里指出：
 
 ```bash
-docker compose logs runner-manager | grep 自检
+docker compose logs runner-manager | grep '\[preflight'
 ```
 
 也可手动确认：
