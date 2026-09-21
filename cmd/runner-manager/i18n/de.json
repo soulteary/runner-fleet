@@ -134,5 +134,15 @@
   "autorefresh.label": "Auto-Aktualisierung (15 s)",
   "autorefresh.updated": "Aktualisiert um {{time}}",
   "autorefresh.failed": "Aktualisierung fehlgeschlagen, wird wiederholt",
-  "autorefresh.paused": "Auto-Aktualisierung aus"
+  "autorefresh.paused": "Auto-Aktualisierung aus",
+  "filter.all": "Alle",
+  "filter.running": "Laufend",
+  "filter.stopped": "Gestoppt",
+  "filter.new": "Nicht registriert",
+  "filter.problem": "Zu prüfen",
+  "filter.drift": "Konfig geändert",
+  "filter.search_placeholder": "Nach Name oder Ziel suchen",
+  "filter.clear": "Zurücksetzen",
+  "filter.showing": "{{shown}} von {{total}} angezeigt",
+  "filter.no_match": "Kein Runner entspricht dem aktuellen Filter."
 }
