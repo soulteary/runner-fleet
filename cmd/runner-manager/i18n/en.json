@@ -130,5 +130,7 @@
   "precheck.blocked": "Conflicts found — rename or clean up first, then submit again",
   "badge.drift": "config changed",
   "btn.recreate": "Recreate",
-  "confirm_recreate": "Recreate the container for {{name}} with the current config?\n\nThe old container is removed and a new one is created. A job running on it right now will be interrupted."
+  "confirm_recreate": "Recreate the container for {{name}} with the current config?\n\nThe old container is removed and a new one is created. A job running on it right now will be interrupted.",
+  "page.lang_label": "Interface language",
+  "modal.label_drift": "Config drift"
 }

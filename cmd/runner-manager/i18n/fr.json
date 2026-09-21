@@ -130,5 +130,7 @@
   "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre",
   "badge.drift": "config modifiée",
   "btn.recreate": "Recréer",
-  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu."
+  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu.",
+  "page.lang_label": "Langue de l'interface",
+  "modal.label_drift": "Écart de configuration"
 }

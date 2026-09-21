@@ -130,5 +130,7 @@
   "precheck.blocked": "存在冲突，请先改名或清理后再提交",
   "badge.drift": "配置已变更",
   "btn.recreate": "重建容器",
-  "confirm_recreate": "按当前配置重建 {{name}} 的容器？\n\n会先删除旧容器再新建。若上面正在跑 Job，会被中断。"
+  "confirm_recreate": "按当前配置重建 {{name}} 的容器？\n\n会先删除旧容器再新建。若上面正在跑 Job，会被中断。",
+  "page.lang_label": "界面语言",
+  "modal.label_drift": "配置差异"
 }

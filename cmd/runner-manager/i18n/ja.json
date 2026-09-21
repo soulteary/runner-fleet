@@ -130,5 +130,7 @@
   "precheck.blocked": "競合があります。名前を変えるか整理してから送信してください",
   "badge.drift": "設定変更あり",
   "btn.recreate": "コンテナ再作成",
-  "confirm_recreate": "現在の設定で {{name}} のコンテナを再作成しますか？\n\n既存のコンテナを削除して作り直します。実行中の Job があれば中断されます。"
+  "confirm_recreate": "現在の設定で {{name}} のコンテナを再作成しますか？\n\n既存のコンテナを削除して作り直します。実行中の Job があれば中断されます。",
+  "page.lang_label": "表示言語",
+  "modal.label_drift": "設定の差分"
 }
