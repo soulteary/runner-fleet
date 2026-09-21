@@ -11,8 +11,10 @@ import (
 	"testing"
 )
 
-// tr(c, "api.x") / trf(c, "api.x", …) 里的键。
-var apiKeyRe = regexp.MustCompile(`\btrf?\(\s*\w+\s*,\s*"(api\.[a-z0-9_.]+)"`)
+// 要查的键前缀。api.* 由 handler 直接 tr/trf；github.dereg.* 由 githubcheck 以
+// MessageKey 字面量回传，再由 handler 渲染——后者在调用点上看不见键名，
+// 所以按字面量扫，而不是按 tr/trf 的调用形状扫。
+var i18nKeyRe = regexp.MustCompile(`"((?:api|github\.dereg)\.[a-z0-9_.]+)"`)
 
 // TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages
 // handler 里用到的每个 api.* 键，六份 i18n JSON 都要有。
@@ -29,31 +31,36 @@ func TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages(t *testing.T) {
 	conf := loadDocsConf(t, repo)
 
 	used := map[string]string{} // key -> 第一次出现的位置
-	err := filepath.WalkDir(filepath.Join(repo, "internal"), func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".go") {
-			return err
-		}
-		if strings.HasSuffix(d.Name(), "_test.go") {
-			return nil
-		}
-		b, errRead := os.ReadFile(path)
-		if errRead != nil {
-			return errRead
-		}
-		rel, _ := filepath.Rel(repo, path)
-		for _, m := range apiKeyRe.FindAllStringSubmatch(string(b), -1) {
-			if _, seen := used[m[1]]; !seen {
-				used[m[1]] = filepath.ToSlash(rel)
+	// cmd 也要扫：CSRF 守卫拦在路由之前，代码在 cmd/runner-manager，但它返回的 403
+	// 与 handler 的错误走同一条路进到界面。只扫 internal 的话，那两个键会被反向检查
+	// 判成「没人用」——而它们恰恰是最容易被漏掉的，因为不在 handler 里。
+	for _, root := range []string{"internal", "cmd"} {
+		err := filepath.WalkDir(filepath.Join(repo, root), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".go") {
+				return err
 			}
+			if strings.HasSuffix(d.Name(), "_test.go") {
+				return nil
+			}
+			b, errRead := os.ReadFile(path)
+			if errRead != nil {
+				return errRead
+			}
+			rel, _ := filepath.Rel(repo, path)
+			for _, m := range i18nKeyRe.FindAllStringSubmatch(string(b), -1) {
+				if _, seen := used[m[1]]; !seen {
+					used[m[1]] = filepath.ToSlash(rel)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(used) < 20 {
 		// 正则改坏时会安静地什么都扫不到，那样这条用例永远绿。
-		t.Fatalf("只扫到 %d 个 api.* 键，apiKeyRe 可能已经匹配不上了", len(used))
+		t.Fatalf("只扫到 %d 个 api.* 键，i18nKeyRe 可能已经匹配不上了", len(used))
 	}
 
 	langs := append([]string{"en"}, conf.langs...)
@@ -70,7 +77,7 @@ func TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages(t *testing.T) {
 		}
 		have := map[string]bool{}
 		for k, v := range m {
-			if strings.HasPrefix(k, "api.") {
+			if isI18nKey(k) {
 				have[k] = true
 				if strings.TrimSpace(v) == "" {
 					t.Errorf("%s.json 的 %s 是空串；空值会让 tr 回落，等于没译", lang, k)
@@ -97,4 +104,9 @@ func TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages(t *testing.T) {
 			}
 		}
 	}
+}
+
+// isI18nKey 与 i18nKeyRe 认的前缀保持一致。
+func isI18nKey(k string) bool {
+	return strings.HasPrefix(k, "api.") || strings.HasPrefix(k, "github.dereg.")
 }

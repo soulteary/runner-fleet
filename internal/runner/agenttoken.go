@@ -49,27 +49,27 @@ func EnsureAgentToken(installDir string) (string, error) {
 	// RandomHex(n) 返回 2n 个十六进制字符，与原先 rand.Read(32 字节)+hex 编码等价
 	token, err := secure.RandomHex(agentTokenBytes)
 	if err != nil {
-		return "", fmt.Errorf("生成 Agent 令牌失败: %w", err)
+		return "", fmt.Errorf("cannot generate the Agent token: %w", err)
 	}
 
 	// os.CreateTemp 以 0600 创建，与正式文件一致
 	f, err := os.CreateTemp(installDir, AgentTokenFile+".tmp-*")
 	if err != nil {
-		return "", fmt.Errorf("创建临时令牌文件失败: %w", err)
+		return "", fmt.Errorf("cannot create the temporary token file: %w", err)
 	}
 	tmp := f.Name()
 	defer func() { _ = os.Remove(tmp) }()
 	if _, err := f.Write([]byte(token)); err != nil {
 		_ = f.Close()
-		return "", fmt.Errorf("写入临时令牌文件 %s 失败: %w", tmp, err)
+		return "", fmt.Errorf("cannot write the temporary token file %s: %w", tmp, err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("写入临时令牌文件 %s 失败: %w", tmp, err)
+		return "", fmt.Errorf("cannot write the temporary token file %s: %w", tmp, err)
 	}
 
 	if err := os.Link(tmp, path); err != nil {
 		if !os.IsExist(err) {
-			return "", fmt.Errorf("发布 Agent 令牌 %s 失败: %w", path, err)
+			return "", fmt.Errorf("cannot publish the Agent token %s: %w", path, err)
 		}
 		// 名字已被占：别人先发布了，用他的。经由 Link 挂上来的内容必然是完整的
 		if existing := ReadAgentToken(installDir); existing != "" {
@@ -78,8 +78,9 @@ func EnsureAgentToken(installDir string) (string, error) {
 		// 占位的是个读不出内容的文件。本实现不会产生这种文件，所以它要么是更早版本
 		// 写入失败的残留，要么是权限问题。两种都不该由这里擅自删除——见上面关于
 		// unlink 的说明——交给人处理，并把该做什么说清楚。
-		return "", fmt.Errorf("令牌文件 %s 已存在但读不到内容（可能是早先版本写入失败的残留，或权限不对）；"+
-			"确认无误后删除它，Manager 会重新生成；在此之前该 Runner 的 Agent 不启用鉴权", path)
+		return "", fmt.Errorf("the token file %s exists but reads back empty (a leftover from a failed write by an earlier version, "+
+			"or the permissions are wrong). Delete it once you are sure, and the Manager writes a new one; "+
+			"until then this runner's Agent runs unauthenticated", path)
 	}
 	return token, nil
 }
@@ -96,7 +97,7 @@ func WarnAgentTokenUnavailable(installDir string, err error) {
 	}
 	v, _ := tokenWarnOnce.LoadOrStore(installDir, &sync.Once{})
 	v.(*sync.Once).Do(func() {
-		log.Printf("警告: %v", err)
+		log.Printf("warning: %v", err)
 	})
 }
 

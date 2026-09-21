@@ -134,7 +134,7 @@ func TestRunRegistrationJobReportsInstallFailure(t *testing.T) {
 	if r.Success {
 		t.Fatal("安装失败时不应记为成功")
 	}
-	if !strings.Contains(r.Message, "自动安装 Runner 失败") {
+	if !strings.Contains(r.Message, "installing the runner automatically failed") {
 		t.Fatalf("消息应说明是安装阶段失败，实际: %q", r.Message)
 	}
 }
@@ -156,7 +156,7 @@ func TestRunRegistrationJobDetectsInstallWithoutConfigScript(t *testing.T) {
 	if r.Success {
 		t.Fatal("没有 config.sh 就不可能注册成功")
 	}
-	if !strings.Contains(r.Message, "安装完成但未找到") {
+	if !strings.Contains(r.Message, "the install finished but") {
 		t.Fatalf("消息应指出安装完成却没有 config 脚本，实际: %q", r.Message)
 	}
 }
@@ -201,7 +201,7 @@ func TestRunRegistrationJobWritesTimestampedResult(t *testing.T) {
 	runRegistrationJob(job(installDir))
 
 	r := readRegResult(t, installDir)
-	if !r.Success || r.Message != "注册成功" {
+	if !r.Success || r.Message != "registered" {
 		t.Fatalf("期望成功，实际: %+v", r)
 	}
 	if _, err := time.Parse(time.RFC3339, r.At); err != nil {
@@ -229,19 +229,19 @@ func TestRunRegistrationJobEnrichesKnownFailures(t *testing.T) {
 		{
 			name:       "token 失效",
 			scriptOut:  "Invalid registration token",
-			wantInMsg:  "重新生成新的注册 Token",
+			wantInMsg:  "Generate a fresh registration token",
 			wantOrigin: "Invalid registration token",
 		},
 		{
 			name:       "token 已被用过",
 			scriptOut:  "The registration token has already been used",
-			wantInMsg:  "重新生成新的注册 Token",
+			wantInMsg:  "Generate a fresh registration token",
 			wantOrigin: "already been used",
 		},
 		{
 			name:       "token 过期",
 			scriptOut:  "Registration token expired",
-			wantInMsg:  "重新生成新的注册 Token",
+			wantInMsg:  "Generate a fresh registration token",
 			wantOrigin: "expired",
 		},
 		{

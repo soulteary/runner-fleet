@@ -8,10 +8,10 @@
 
 **审计基准**：`main` @ `0e812a7`，最新发布 v1.7.1。<!-- version-check-ignore -->
 
-**执行状态**：**四批全部完成；第 7 节已拍板（选项 B）；§1.3 的 API 消息一侧也已补上 i18n。**
-剩下的是 §1.3 里**日志**那一半：`log.Printf` 没有请求语境，要按服务端语言而不是
-请求语言来选，是另一个设计问题；以及 `internal/githubcheck` 的 7 条跨包消息。
-两者都记在 §1.3 下面。
+**执行状态**：**四批全部完成；第 7 节已拍板（选项 B）；§1.3 已全部修完。**
+服务端消息按请求语言查表（`api.*` 键），日志固定英文，跨包的注销消息改成
+「键 + 参数」由 handler 边界渲染。改完之后加了一条守卫用例，防止中文再回到
+用户可见输出里——详见 §1.3。
 每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、且只有那一条会红。
 下面的问题描述保留审计当时的原文，改掉它们会让「为什么要加这条检查」失去凭据；
 已修的条目在标题上标注。
@@ -96,7 +96,7 @@ docker compose logs runner-manager | grep 自检
 `internal/docsconsistency/preflight_marker_test.go` 守文档里让人 grep 的词就是这个常量。
 **日志正文仍是中文**——那是 §1.3，这里只解决「怎么把这些行捞出来」。
 
-### 1.3 API 提示语不跟随界面语言  ◐ API 消息已修，日志与跨包消息未修
+### 1.3 API 提示语不跟随界面语言  ✅ 已修
 
 界面有 152 个 i18n 键 × 6 种语言（`cmd/runner-manager/i18n/`，且 `i18n_test.go` 交叉校验键集），
 但那只覆盖模板里的静态文案。用户操作后真正读到的那句话来自服务端，是中文硬编码：
@@ -130,14 +130,26 @@ echo.NewHTTPError(http.StatusBadRequest, "name、target_type、target 必填")
 `Sprintf`，拼出 `api.recreate_requires_registered%!(EXTRA string=new)` 这种既不像缺译文
 也不像参数的噪音——现在缺键时退成「键: 参数」。
 
-**没做的两半**：
+**已落地（日志一侧）**：日志**固定英文**，不跟随任何语言。不是省事——一条日志没有请求
+可依，它的读者是运维，而运维的工具链（grep、Loki 查询、告警规则）最怕的恰恰是同一件事
+换着语言出现。这个决定顺带决定了 `fmt.Errorf` 那一层：那些错误既进日志又被拼进 API 消息，
+一个字符串服务不了两个去向，让它是英文，跟随语言的那一半由外层的 `api.*` 键承担。
+`preflight` 的 57 条自检项与建议、`config` 的 31 条校验错误、`container` / `main` /
+`agenttoken` 等处共约 139 条字面量一并改英文；测试里 20 余处断言中文散文的地方改成断言
+i18n 键或英文子串。
 
-- **日志**（25 处 `log.Printf`）。`tr` 要 `echo.Context`，而日志没有请求语境——它该跟随的是
-  服务端语言而不是请求语言，是另一个设计问题（多半要一个 `LOG_LANG` 或跟随 `LANG`）。
-  在那之前，`[preflight …]` 前缀保证了不认识汉字也能把它们捞出来。
-- **`internal/githubcheck` 的 7 条**。那个包没有 `echo.Context`，消息经 `dereg.Message`
-  拼进 API 响应，所以英文界面下 `api.removed` 的外壳是英文、跟进来的那半句仍是中文。
-  要么让它回传键、由 handler 边界翻译，要么把它也接上 i18n——都比这一批大。
+**已落地（跨包消息）**：`githubcheck.DeregisterResult` 不再回传成品散文，改成
+`MessageKey` + `MessageArgs`。那一个值有两个去向——一条英文日志和一条跟随请求语言的
+API 响应——一个字段服务不了两个，所以拆成键与参数，由 handler 边界分别渲染：
+日志走 `trEnf`（固定英文），响应走 `trf`（跟随请求）。
+
+**守卫**：`TestServerLanguage_NoCJKInGoStringLiterals` 用 `go/parser` 扫非测试 Go 的字符串
+字面量（AST 天然把注释排除在外——这个仓库的注释本来就是中文写的，要管的只有字面量）；
+`TestServerLanguage_NoCJKInUIAssets` 扫模板与前端资源里注释之外的中日韩文字。后者当场
+逮到一条：`app.js` 把全角冒号 `：` 写死成分隔符，英文界面上渲染成
+`Check failed：token expired`——一个汉字都没有，但那是一句中文排版混进了拉丁文句子。
+四个变异（把中文放回 Go、把全角冒号放回 JS、在模板里写死一个日文标签、改坏遍历根目录）
+各自只让对应的那一条变红。
 
 ### 1.4 两处指向不存在文件的引用  ✅ 已修
 

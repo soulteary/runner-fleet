@@ -111,7 +111,7 @@ func TestCheckDefaultModeDocker_DinDReachable(t *testing.T) {
 
 	t.Setenv("DOCKER_HOST", "tcp://"+ln.Addr().String())
 	got := checkDefaultModeDocker(context.Background())
-	if got.Level != CheckOK || !strings.Contains(got.Message, "可达") {
+	if got.Level != CheckOK || !strings.Contains(got.Message, "reachable") {
 		t.Fatalf("DinD 可达时应为 ok: %+v", got)
 	}
 }
@@ -167,15 +167,15 @@ func TestPreflight_DefaultModeSkipsContainerChecks(t *testing.T) {
 	var names []string
 	for _, r := range results {
 		names = append(names, r.Name)
-		if r.Name == "容器网络" || r.Name == "Runner 镜像" {
+		if r.Name == "container network" || r.Name == "runner image" {
 			t.Errorf("默认模式不应执行容器相关检查: %+v", r)
 		}
 	}
-	for _, want := range []string{"runners 目录", "Runner 目录权限", "Job 内 Docker"} {
+	for _, want := range []string{"runners directory", "runner directory permissions", "Docker in jobs"} {
 		findCheck(t, results, want)
 	}
 	if len(results) != 3 {
-		t.Fatalf("默认模式的检查项应为 %v，实际 %v", []string{"runners 目录", "Runner 目录权限", "Job 内 Docker"}, names)
+		t.Fatalf("默认模式的检查项应为 %v，实际 %v", []string{"runners directory", "runner directory permissions", "Docker in jobs"}, names)
 	}
 }
 

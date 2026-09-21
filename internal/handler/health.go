@@ -77,7 +77,7 @@ func writeHealth(c echo.Context, agg *health.Aggregator) error {
 // checkConfigLoads 配置文件能不能读、能不能解析。
 func checkConfigLoads(context.Context) error {
 	if _, err := config.Load(ConfigPath); err != nil {
-		return fmt.Errorf("加载配置失败: %w", err)
+		return fmt.Errorf("cannot load the configuration: %w", err)
 	}
 	return nil
 }
@@ -89,19 +89,19 @@ func checkConfigLoads(context.Context) error {
 func checkBasePathUsable(context.Context) error {
 	cfg, err := config.Load(ConfigPath)
 	if err != nil {
-		return fmt.Errorf("加载配置失败: %w", err)
+		return fmt.Errorf("cannot load the configuration: %w", err)
 	}
 	base := cfg.Runners.BasePath
 	info, err := os.Stat(base)
 	if err != nil {
-		return fmt.Errorf("runner 根目录不可用: %w", err)
+		return fmt.Errorf("the runner base directory is not reachable: %w", err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("runner 根目录不是目录: %s", base)
+		return fmt.Errorf("the runner base directory is not a directory: %s", base)
 	}
 	probe := filepath.Join(base, ".health-write-probe")
 	if err := os.WriteFile(probe, []byte{}, 0o600); err != nil {
-		return fmt.Errorf("runner 根目录不可写: %w", err)
+		return fmt.Errorf("the runner base directory is not writable: %w", err)
 	}
 	// 删不掉不算失败：写成功已经证明了要证明的事，留个空文件也不影响什么
 	_ = os.Remove(probe)

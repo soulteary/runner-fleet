@@ -175,7 +175,9 @@ func TestStopRunnerContainerModeProbeFailureStillAttempts(t *testing.T) {
 	if rec.Code != http.StatusOK && rec.Code != http.StatusInternalServerError {
 		t.Fatalf("得到 %d，期望 200（带 probe）或 500", rec.Code)
 	}
-	if strings.Contains(rec.Body.String(), "未在运行") {
+	// 断言键而不是译文：这条用例没装 I18nLoader，tr 会回落成键本身，
+	// 而键在整条链路上是稳定的——换一版英文措辞不该让这条守卫悄悄失效。
+	if strings.Contains(rec.Body.String(), "api.not_running") {
 		t.Fatalf("探测失败不能被当成「没在跑」，实际: %s", rec.Body.String())
 	}
 }

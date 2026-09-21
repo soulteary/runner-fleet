@@ -47,21 +47,21 @@ func runCheck(ctx context.Context, name string, f func(context.Context) CheckRes
 // 返回结果按检查顺序排列；调用方自行决定是记录日志还是返回给界面。
 func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 	if cfg == nil {
-		return []CheckResult{fail("config", "配置为空", "")}
+		return []CheckResult{fail("config", "the configuration is empty", "")}
 	}
 	results := []CheckResult{
-		runCheck(ctx, "runners 目录", func(context.Context) CheckResult { return checkBasePath(cfg) }),
-		runCheck(ctx, "Runner 目录权限", func(context.Context) CheckResult { return checkRunnerDirPermissions(cfg) }),
+		runCheck(ctx, "runners directory", func(context.Context) CheckResult { return checkBasePath(cfg) }),
+		runCheck(ctx, "runner directory permissions", func(context.Context) CheckResult { return checkRunnerDirPermissions(cfg) }),
 	}
 	if !cfg.Runners.ContainerMode {
-		return append(results, runCheck(ctx, "Job 内 Docker", checkDefaultModeDocker))
+		return append(results, runCheck(ctx, "Docker in jobs", checkDefaultModeDocker))
 	}
 	results = append(results,
-		runCheck(ctx, "Docker 可达性", checkDockerReachable),
-		runCheck(ctx, "容器网络", func(ctx context.Context) CheckResult { return checkNetwork(ctx, cfg) }),
+		runCheck(ctx, "Docker reachability", checkDockerReachable),
+		runCheck(ctx, "container network", func(ctx context.Context) CheckResult { return checkNetwork(ctx, cfg) }),
 	)
 	results = append(results, checkRunnerImages(ctx, cfg)...)
-	return append(results, runCheck(ctx, "Job 内 Docker", func(ctx context.Context) CheckResult {
+	return append(results, runCheck(ctx, "Docker in jobs", func(ctx context.Context) CheckResult {
 		return checkJobDockerBackend(ctx, cfg)
 	}))
 }
@@ -69,31 +69,31 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 // checkBasePath 检查 runners 根目录存在且对当前进程可写（容器内以 UID 1001 运行，
 // 宿主机目录未 chown 1001:1001 是最常见的部署失误）
 func checkBasePath(cfg *config.Config) CheckResult {
-	const name = "runners 目录"
+	const name = "runners directory"
 	base := cfg.Runners.BasePath
 	info, err := os.Stat(base)
 	if err != nil {
-		return fail(name, fmt.Sprintf("%s 不可访问: %v", base, err),
+		return fail(name, fmt.Sprintf("%s is not reachable: %v", base, err),
 			fmt.Sprintf("mkdir -p %s && chown %d:%d %s", base, os.Getuid(), os.Getgid(), base))
 	}
 	if !info.IsDir() {
-		return fail(name, fmt.Sprintf("%s 不是目录", base), "")
+		return fail(name, fmt.Sprintf("%s is not a directory", base), "")
 	}
 	// 用唯一临时文件名而非固定名：固定名会与目录中同名的用户文件相撞，
 	// 自检本应只读，却把它打开又删掉
 	f, err := os.CreateTemp(base, ".preflight-write-test-*")
 	if err != nil {
-		return fail(name, fmt.Sprintf("%s 对当前用户(UID %d)不可写: %v", base, os.Getuid(), err),
-			fmt.Sprintf("在宿主机执行 chown -R %d:%d <宿主机上对应目录>", os.Getuid(), os.Getgid()))
+		return fail(name, fmt.Sprintf("%s is not writable by the current user (UID %d): %v", base, os.Getuid(), err),
+			fmt.Sprintf("on the host, run: chown -R %d:%d <the matching directory on the host>", os.Getuid(), os.Getgid()))
 	}
 	probe := f.Name()
 	_ = f.Close()
 	// 删除失败说明目录并非真正可用（如 sticky bit 或只读挂载），不能报成可写
 	if err := os.Remove(probe); err != nil {
-		return fail(name, fmt.Sprintf("%s 可创建文件但无法删除（探测文件 %s 已残留）: %v", base, probe, err),
-			fmt.Sprintf("检查目录权限与挂载选项，确认 UID %d 对该目录有完整读写权限", os.Getuid()))
+		return fail(name, fmt.Sprintf("%s allows creating a file but not removing it (the probe file %s was left behind): %v", base, probe, err),
+			fmt.Sprintf("check the directory mode and mount options; UID %d needs full read and write access", os.Getuid()))
 	}
-	return ok(name, fmt.Sprintf("%s 可写（UID %d）", base, os.Getuid()))
+	return ok(name, fmt.Sprintf("%s is writable (UID %d)", base, os.Getuid()))
 }
 
 // checkRunnerDirPermissions 点名可被他人进入的 Runner 安装目录。
@@ -106,7 +106,7 @@ func checkBasePath(cfg *config.Config) CheckResult {
 // 这里只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下擅自收紧
 // 权限会把本来能跑的弄坏，该由人看过再决定。
 func checkRunnerDirPermissions(cfg *config.Config) CheckResult {
-	const name = "Runner 目录权限"
+	const name = "runner directory permissions"
 	base := cfg.Runners.BasePath
 	var loose []string
 	for _, item := range cfg.Runners.Items {
@@ -120,20 +120,21 @@ func checkRunnerDirPermissions(cfg *config.Config) CheckResult {
 		}
 	}
 	if len(loose) == 0 {
-		return ok(name, "各 Runner 目录均不可被其他用户进入")
+		return ok(name, "no runner directory is reachable by other local users")
 	}
 	sort.Strings(loose)
 	return warn(name,
-		fmt.Sprintf("%d 个 Runner 目录可被宿主机上的其他用户进入：%s。"+
-			"目录里有 config.sh 写下的 .credentials_rsaparams（Runner 的 GitHub 身份私钥），"+
-			"读到它就能冒充该 Runner 领取 Job 并看到传给 Job 的 secrets",
-			len(loose), strings.Join(loose, "、")),
+		fmt.Sprintf("%d runner directories are reachable by other users on the host: %s. "+
+			"Each holds the .credentials_rsaparams that config.sh wrote — the private key the runner "+
+			"authenticates to GitHub with. Reading it is enough to impersonate that runner, take its "+
+			"jobs, and see the secrets passed to them",
+			len(loose), strings.Join(loose, ", ")),
 		"chmod 700 "+strings.Join(loose, " "))
 }
 
 // checkDefaultModeDocker 默认模式下 Job 在 Manager 容器内执行，这里说明 Job 内 docker 会连到哪
 func checkDefaultModeDocker(ctx context.Context) CheckResult {
-	const name = "Job 内 Docker"
+	const name = "Docker in jobs"
 	h := strings.TrimSpace(os.Getenv("DOCKER_HOST"))
 	if h == "" {
 		h = "unix://" + HostDockerSocket
@@ -142,50 +143,50 @@ func checkDefaultModeDocker(ctx context.Context) CheckResult {
 		// 仅凭前缀就报 ok 会在 DinD 未启动时给出绿色结果，而 Job 里的 docker 全都会失败
 		addr := tcpAddr(strings.TrimPrefix(h, "tcp://"))
 		if err := dialTCP(ctx, addr); err != nil {
-			return warn(name, fmt.Sprintf("默认模式，DOCKER_HOST 指向 %s，但当前不可达: %v", h, err),
-				"docker compose --profile dind up -d；确认 DinD 已启动且与 Manager 同网")
+			return warn(name, fmt.Sprintf("default mode, DOCKER_HOST points at %s, which is not reachable: %v", h, err),
+				"docker compose --profile dind up -d, and check that DinD is running on the same network as the Manager")
 		}
-		return ok(name, fmt.Sprintf("默认模式，Job 内 docker 将连接 %s（DinD，可达）", h))
+		return ok(name, fmt.Sprintf("default mode, docker in jobs will reach %s (DinD, reachable)", h))
 	}
 	sock := strings.TrimPrefix(h, "unix://")
 	if _, err := os.Stat(sock); err != nil {
-		return warn(name, fmt.Sprintf("默认模式，但 %s 不存在，Job 内无法使用 docker", sock),
-			"需要 Job 内 Docker 时请挂载 -v /var/run/docker.sock:/var/run/docker.sock，或改用 DinD")
+		return warn(name, fmt.Sprintf("default mode, but %s does not exist, so jobs cannot use docker", sock),
+			"to give jobs Docker, mount -v /var/run/docker.sock:/var/run/docker.sock, or switch to DinD")
 	}
 	if gid := socketGID(sock); gid >= 0 && !inGroup(gid) {
-		return warn(name, fmt.Sprintf("%s 属于 GID %d，当前进程不在该组，Job 内 docker 会报 permission denied", sock, gid),
-			fmt.Sprintf("docker-compose 中设置 group_add: [\"%d\"]，或在 .env 中 DOCKER_GID=%d", gid, gid))
+		return warn(name, fmt.Sprintf("%s belongs to GID %d and this process is not in that group, so docker in jobs will report permission denied", sock, gid),
+			fmt.Sprintf("set group_add: [\"%d\"] in docker-compose, or DOCKER_GID=%d in .env", gid, gid))
 	}
-	return ok(name, fmt.Sprintf("默认模式，Job 内 docker 将使用 %s", h))
+	return ok(name, fmt.Sprintf("default mode, docker in jobs will use %s", h))
 }
 
 // checkDockerReachable 容器模式下 Manager 必须能操作宿主机 Docker
 func checkDockerReachable(ctx context.Context) CheckResult {
-	const name = "Docker 可达性"
+	const name = "Docker reachability"
 	out, err := dockerCmd(ctx, "version", "--format", "{{.Server.Version}}")
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
 			msg = err.Error()
 		}
-		return fail(name, "无法连接 Docker daemon: "+msg, dockerAccessHint)
+		return fail(name, "cannot reach the Docker daemon: "+msg, dockerAccessHint)
 	}
-	return ok(name, "Docker daemon 版本 "+strings.TrimSpace(string(out)))
+	return ok(name, "Docker daemon version "+strings.TrimSpace(string(out)))
 }
 
 // checkNetwork 容器模式下 Runner 容器与 Manager 必须同网，否则 Manager 访问不到 Agent。
 // compose down 会删掉非 external 的网络，是文档里专门列过的坑。
 func checkNetwork(ctx context.Context, cfg *config.Config) CheckResult {
-	const name = "容器网络"
+	const name = "container network"
 	network := cfg.Runners.ContainerNetwork
 	if network == "" {
 		network = "runner-net"
 	}
 	if _, err := dockerCmd(ctx, "network", "inspect", network); err != nil {
-		return fail(name, fmt.Sprintf("网络 %s 不存在，Runner 容器将无法创建/启动", network),
+		return fail(name, fmt.Sprintf("the network %s does not exist, so runner containers cannot be created or started", network),
 			"docker network create "+network)
 	}
-	return ok(name, "网络 "+network+" 存在")
+	return ok(name, "the network "+network+" exists")
 }
 
 // requiredRunnerTools Job 普遍依赖的命令。缺任何一个都会以难以定位的方式失败：
@@ -228,20 +229,20 @@ func RunnerImages(cfg *config.Config) []string {
 func checkRunnerImages(ctx context.Context, cfg *config.Config) []CheckResult {
 	var results []CheckResult
 	for _, img := range RunnerImages(cfg) {
-		present := runCheck(ctx, "Runner 镜像", func(ctx context.Context) CheckResult {
+		present := runCheck(ctx, "runner image", func(ctx context.Context) CheckResult {
 			if _, err := dockerCmd(ctx, "image", "inspect", img); err != nil {
-				return warn("Runner 镜像",
-					fmt.Sprintf("%s 不在本地，首次启动 Runner 时才会拉取（私有仓库需先 docker login）", img),
+				return warn("runner image",
+					fmt.Sprintf("%s is not present locally; it is pulled the first time a runner starts (a private registry needs docker login first)", img),
 					"docker pull "+img)
 			}
-			return ok("Runner 镜像", img+" 已就绪")
+			return ok("runner image", img+" is ready")
 		})
 		results = append(results, present)
 		// 镜像已在本地才做工具链检查，避免在自检阶段触发一次镜像拉取
 		if present.Level != CheckOK {
 			continue
 		}
-		results = append(results, runCheck(ctx, "Runner 镜像工具链", func(ctx context.Context) CheckResult {
+		results = append(results, runCheck(ctx, "runner image toolchain", func(ctx context.Context) CheckResult {
 			return checkRunnerImageTools(ctx, img)
 		}))
 	}
@@ -278,7 +279,7 @@ func parseMissingTools(out []byte) []string {
 // checkRunnerImageTools 起一个一次性容器确认镜像内具备 requiredRunnerTools。
 // 自定义 Runner 镜像很容易漏装这些，而缺失要等 Job 跑到一半才暴露。
 func checkRunnerImageTools(ctx context.Context, img string) CheckResult {
-	const name = "Runner 镜像工具链"
+	const name = "runner image toolchain"
 	// 镜像的 ENTRYPOINT 是 Agent，这里覆盖为 shell；--network none 省掉网络配置开销
 	script := "for t in " + strings.Join(requiredRunnerTools, " ") +
 		"; do command -v \"$t\" >/dev/null 2>&1 || echo \"" + missingToolMarker + "$t\"; done"
@@ -286,16 +287,17 @@ func checkRunnerImageTools(ctx context.Context, img string) CheckResult {
 	defer cancel()
 	out, err := dockerCmd(runCtx, "run", "--rm", "--network", "none", "--entrypoint", "sh", img, "-c", script)
 	if err != nil {
-		return warn(name, fmt.Sprintf("无法检查 %s 内的命令（跳过）: %s", img, firstLine(out, err)),
-			"可手动执行: docker run --rm --entrypoint sh "+img+" -c \"command -v git unzip\"")
+		return warn(name, fmt.Sprintf("could not inspect the commands inside %s (skipped): %s", img, firstLine(out, err)),
+			"check it by hand: docker run --rm --entrypoint sh "+img+" -c \"command -v git unzip\"")
 	}
 	missing := parseMissingTools(out)
 	if len(missing) > 0 {
-		return warn(name, fmt.Sprintf("%s 缺少 %s，Job 会在用到时才失败（缺 git 时 actions/checkout 会静默退化为无 .git 的 tar 包）",
-			img, strings.Join(missing, "、")),
-			"在自定义镜像中补装这些包，可参考 examples/runner-images/")
+		return warn(name, fmt.Sprintf("%s is missing %s; a job only fails when it reaches them (without git, "+
+			"actions/checkout silently degrades to a tarball with no .git)",
+			img, strings.Join(missing, ", ")),
+			"install those packages in a custom image; see examples/runner-images/")
 	}
-	return ok(name, img+" 具备 "+strings.Join(requiredRunnerTools, "、"))
+	return ok(name, img+" has "+strings.Join(requiredRunnerTools, ", "))
 }
 
 // firstLine 取命令输出或错误的首行，避免把整段 docker 输出塞进自检结果
@@ -312,21 +314,21 @@ func firstLine(out []byte, err error) string {
 
 // checkJobDockerBackend 按 job_docker_backend 检查 Job 内 Docker 的前置条件
 func checkJobDockerBackend(ctx context.Context, cfg *config.Config) CheckResult {
-	const name = "Job 内 Docker"
+	const name = "Docker in jobs"
 	switch strings.ToLower(strings.TrimSpace(cfg.Runners.JobDockerBackend)) {
 	case "host-socket":
 		if _, err := os.Stat(HostDockerSocket); err != nil {
-			return fail(name, HostDockerSocket+" 不存在，无法挂载进 Runner 容器",
-				"在 docker-compose 中为 runner-manager 挂载 -v /var/run/docker.sock:/var/run/docker.sock")
+			return fail(name, HostDockerSocket+" does not exist, so it cannot be mounted into runner containers",
+				"mount -v /var/run/docker.sock:/var/run/docker.sock onto runner-manager in docker-compose")
 		}
 		gid := runnerDockerGID(cfg)
 		if gid < 0 {
-			return warn(name, "无法确定 docker.sock 所属组，创建 Runner 容器时不会追加 --group-add，Job 内 docker 可能报 permission denied",
-				"在 config 中设置 runners.docker_gid，或在 .env 中设置 DOCKER_GID")
+			return warn(name, "could not determine the group owning docker.sock, so --group-add is not passed when creating runner containers and docker in jobs may report permission denied",
+				"set runners.docker_gid in the config, or DOCKER_GID in .env")
 		}
-		return ok(name, fmt.Sprintf("host-socket，Runner 容器将追加 --group-add %d", gid))
+		return ok(name, fmt.Sprintf("host-socket; runner containers get --group-add %d", gid))
 	case "none":
-		return ok(name, "none，Job 内不提供 Docker")
+		return ok(name, "none; jobs get no Docker")
 	default: // dind
 		host := cfg.Runners.DindHost
 		if host == "" {
@@ -334,10 +336,10 @@ func checkJobDockerBackend(ctx context.Context, cfg *config.Config) CheckResult 
 		}
 		addr := net.JoinHostPort(host, "2375")
 		if err := dialTCP(ctx, addr); err != nil {
-			return warn(name, fmt.Sprintf("dind，但 %s 当前不可达: %v", addr, err),
-				"docker compose --profile dind up -d；若 Job 不需要 Docker 可将 job_docker_backend 设为 none")
+			return warn(name, fmt.Sprintf("dind, but %s is not reachable: %v", addr, err),
+				"docker compose --profile dind up -d, or set job_docker_backend to none if jobs do not need Docker")
 		}
-		return ok(name, "dind，"+addr+" 可达")
+		return ok(name, "dind; "+addr+" is reachable")
 	}
 }
 
@@ -405,7 +407,7 @@ func LogPreflight(results []CheckResult) {
 		}
 		line := fmt.Sprintf("%s %s: %s", prefix, r.Name, r.Message)
 		if r.Hint != "" && r.Level != CheckOK {
-			line += "  → 建议: " + r.Hint
+			line += "  → hint: " + r.Hint
 		}
 		preflightLogf("%s", line)
 	}

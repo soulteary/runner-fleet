@@ -151,12 +151,14 @@ func TestCSRFGuardTrustedOriginsEscapeHatch(t *testing.T) {
 	}
 }
 
-// 403 要走统一的错误格式，界面才能把原因显示出来
+// 403 要走统一的错误格式，界面才能把原因显示出来。
+//
+// 走 newEchoServer 而不是手搭一个 echo：拒绝原因现在是查表出来的（handler.Trf），
+// 手搭的服务器没装 I18nLoader，tr 会回落成键本身，这条用例就会去断言
+// "api.csrf_cross_site" 这种给不了人任何信息的字符串，还断言得很开心。
 func TestCSRFGuardRejectionBodyNamesTheCause(t *testing.T) {
-	e := echo.New()
-	e.HTTPErrorHandler = httpErrorHandler
-	e.Use(csrfGuardMiddleware(nil))
-	e.POST("/api/runners", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	t.Setenv("TRUSTED_ORIGINS", "")
+	e := newEchoServer()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/runners", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")

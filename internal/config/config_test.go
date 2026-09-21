@@ -223,7 +223,7 @@ func TestValidate_VolumeHostPathRules(t *testing.T) {
 			JobDockerBackend: "dind",
 		},
 	}
-	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "必须设置 runners.volume_host_path") {
+	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "runners.volume_host_path must be set") {
 		t.Fatalf("expected missing volume_host_path validation error, got: %v", err)
 	}
 
@@ -235,7 +235,7 @@ func TestValidate_VolumeHostPathRules(t *testing.T) {
 			VolumeHostPath:   "relative/path",
 		},
 	}
-	if err := Validate(cfg3); err == nil || !strings.Contains(err.Error(), "绝对路径") {
+	if err := Validate(cfg3); err == nil || !strings.Contains(err.Error(), "must be an absolute path") {
 		t.Fatalf("expected absolute path validation error, got: %v", err)
 	}
 }
@@ -277,7 +277,7 @@ func TestValidateTarget(t *testing.T) {
 	if err := ValidateTarget("org", "myorg"); err != nil {
 		t.Errorf("org myorg: %v", err)
 	}
-	if err := ValidateTarget("org", "owner/repo"); err == nil || !strings.Contains(err.Error(), "不能包含 /") {
+	if err := ValidateTarget("org", "owner/repo"); err == nil || !strings.Contains(err.Error(), "cannot contain /") {
 		t.Errorf("org owner/repo should error: %v", err)
 	}
 	if err := ValidateTarget("repo", "owner/repo"); err != nil {
@@ -307,7 +307,7 @@ func TestValidate_ContainerNameConflict(t *testing.T) {
 		},
 	}
 	err := Validate(cfg)
-	if err == nil || !strings.Contains(err.Error(), "容器名冲突") {
+	if err == nil || !strings.Contains(err.Error(), "container name conflict") {
 		t.Fatalf("expected container name conflict error, got: %v", err)
 	}
 }
@@ -453,7 +453,7 @@ func TestValidate_InvalidRunnerNameOrPathFromConfig(t *testing.T) {
 			},
 		},
 	}
-	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "name 包含非法字符") {
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "name contains an illegal character") {
 		t.Fatalf("expected invalid name validation error, got: %v", err)
 	}
 
@@ -467,7 +467,7 @@ func TestValidate_InvalidRunnerNameOrPathFromConfig(t *testing.T) {
 			},
 		},
 	}
-	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "path 包含非法字符") {
+	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "path contains an illegal character") {
 		t.Fatalf("expected invalid path validation error, got: %v", err)
 	}
 }
@@ -497,7 +497,7 @@ func TestValidate_TargetRulesFromConfig(t *testing.T) {
 			},
 		},
 	}
-	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "不能包含 /") {
+	if err := Validate(cfg2); err == nil || !strings.Contains(err.Error(), "cannot contain /") {
 		t.Fatalf("expected org target validation error, got: %v", err)
 	}
 }
@@ -514,7 +514,7 @@ func TestValidate_InstallPathConflict(t *testing.T) {
 			},
 		},
 	}
-	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "安装目录冲突") {
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "install directory conflict") {
 		t.Fatalf("expected install path conflict validation error, got: %v", err)
 	}
 }
@@ -817,7 +817,7 @@ func TestValidate_EmptyItemName(t *testing.T) {
 			},
 		},
 	}
-	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "name 不能为空") {
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "name cannot be empty") {
 		t.Fatalf("expected empty name validation error, got: %v", err)
 	}
 }

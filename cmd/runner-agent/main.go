@@ -60,7 +60,7 @@ var startMu sync.Mutex
 func startRunner(installDir string) error {
 	script := filepath.Join(installDir, runScriptName())
 	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("未找到 %s: %w", script, err)
+		return fmt.Errorf("%s not found: %w", script, err)
 	}
 	cmd := exec.Command(script)
 	cmd.Dir = installDir
@@ -81,7 +81,7 @@ func startRunner(installDir string) error {
 func stopRunner(installDir string) error {
 	pids := runnerproc.Find(installDir)
 	if len(pids) == 0 {
-		return fmt.Errorf("未找到 %s 下正在运行的 Runner 进程", installDir)
+		return fmt.Errorf("no running runner process found under %s", installDir)
 	}
 	var firstErr error
 	for _, pid := range pids {
@@ -183,8 +183,9 @@ var tokenWarnOnce sync.Once
 
 func logTokenUnreadable(path string, err error) {
 	tokenWarnOnce.Do(func() {
-		log.Printf("警告: 令牌文件 %s 存在但无法读取（%v），接口将不启用鉴权。"+
-			"多为 Manager 与 Agent 的 UID 不一致所致，重建该 Runner 容器即可改用环境变量注入令牌", path, err)
+		log.Printf("warning: the token file %s exists but cannot be read (%v), so the endpoints run unauthenticated. "+
+			"This usually means the Manager and the Agent run under different UIDs; recreate the runner container "+
+			"to have the token injected through the environment instead", path, err)
 	})
 }
 
@@ -238,11 +239,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	authState := "已启用"
+	authState := "enabled"
 	if expectedToken() == "" {
-		authState = "未启用（无令牌文件，兼容旧容器）"
+		authState = "disabled (no token file; kept for containers created by older versions)"
 	}
-	log.Printf("Runner Agent 监听 :%s，RUNNER_INSTALL_DIR=%s，接口鉴权%s", port, installDir(), authState)
+	log.Printf("Runner Agent listening on :%s, RUNNER_INSTALL_DIR=%s, endpoint auth %s", port, installDir(), authState)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}

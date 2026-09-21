@@ -98,3 +98,29 @@ func lookup(c echo.Context, key string) (string, bool) {
 	}
 	return "", false
 }
+
+// trEnf 渲染英文文案，供没有请求语境的地方用——主要是日志。
+//
+// 日志固定英文是定过的：一条日志没有请求可依，它的读者是运维，而运维的工具链
+// （grep、Loki 查询、告警规则）最怕的就是同一件事换着语言出现。API 响应跟随请求语言，
+// 日志固定英文，两者的读者和约束本来就不是一回事。
+//
+// 缺键时与 trf 一样退成「键: 参数」，不做 Sprintf。
+func trEnf(key string, args ...any) string {
+	if s, ok := bundle("en")[key]; ok && s != "" {
+		return fmt.Sprintf(s, args...)
+	}
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, key)
+	for _, a := range args {
+		parts = append(parts, fmt.Sprint(a))
+	}
+	return strings.Join(parts, ": ")
+}
+
+// Trf 把 trf 暴露给 handler 包外的中间件。
+//
+// CSRF 守卫拦在路由之前，代码在 cmd/runner-manager，但它返回的 403 和 handler
+// 里的错误走同一条路进到界面的 toast。界面说法语、这一条说中文，读到的人不会
+// 认为是「有一条没翻」，只会认为撞上了另一个服务。
+func Trf(c echo.Context, key string, args ...any) string { return trf(c, key, args...) }

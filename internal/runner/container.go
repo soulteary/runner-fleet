@@ -57,9 +57,9 @@ func GetAgentStatus(ctx context.Context, containerName string, port int, token s
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		msg := strings.TrimSpace(string(body))
 		if msg == "" {
-			return nil, fmt.Errorf("agent 返回 %d", resp.StatusCode)
+			return nil, fmt.Errorf("agent returned %d", resp.StatusCode)
 		}
-		return nil, fmt.Errorf("agent 返回 %d: %s", resp.StatusCode, msg)
+		return nil, fmt.Errorf("agent returned %d: %s", resp.StatusCode, msg)
 	}
 	var out AgentStatus
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -90,9 +90,9 @@ func CallAgentStart(ctx context.Context, containerName string, port int, token s
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		msg := strings.TrimSpace(string(body))
 		if msg == "" {
-			return fmt.Errorf("agent /start 返回 %d", resp.StatusCode)
+			return fmt.Errorf("agent /start returned %d", resp.StatusCode)
 		}
-		return fmt.Errorf("agent /start 返回 %d: %s", resp.StatusCode, msg)
+		return fmt.Errorf("agent /start returned %d: %s", resp.StatusCode, msg)
 	}
 	return nil
 }
@@ -126,18 +126,18 @@ func dockerPermissionDenied(out []byte) bool { return docker.PermissionDenied(ou
 func dockerCmdError(op string, out []byte, err error) error {
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
-		trimmed = "(无输出)"
+		trimmed = "(no output)"
 	}
 	if dockerPermissionDenied(out) {
-		return fmt.Errorf("%s 失败（权限不足或无法连接 daemon）。%s。输出: %s: %w", op, dockerAccessHint, trimmed, err)
+		return fmt.Errorf("%s failed (permission denied, or the daemon is unreachable). %s. Output: %s: %w", op, dockerAccessHint, trimmed, err)
 	}
-	return fmt.Errorf("%s 失败。输出: %s: %w", op, trimmed, err)
+	return fmt.Errorf("%s failed. Output: %s: %w", op, trimmed, err)
 }
 
-const dockerAccessHint = "若 Manager 在容器内，请为 runner-manager 配置 group_add 使用宿主机 docker 组 GID（.env 中 DOCKER_GID=$(getent group docker | cut -d: -f3)），或使用 user: \"0:0\" 以 root 访问 socket"
+const dockerAccessHint = "If the Manager runs in a container, give runner-manager a group_add with the host docker group GID (DOCKER_GID=$(getent group docker | cut -d: -f3) in .env), or use user: \"0:0\" to reach the socket as root"
 
 // managerMustUseHostDocker 提示：容器模式下 Manager 必须用宿主机 Docker 创建 Runner 容器，不能把 DOCKER_HOST 设为 DinD
-const errContainerModeNeedHostDocker = "容器模式下 Manager 必须使用宿主机 Docker（unix socket）创建/启停 Runner 容器，不能使用 DinD。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375，使 Manager 使用默认 unix:///var/run/docker.sock；DinD 仅供 Runner 容器内 Job 的 docker build 等使用"
+const errContainerModeNeedHostDocker = "in container mode the Manager must use the host Docker (unix socket) to create, start and stop runner containers; DinD cannot do it. Remove or comment out DOCKER_HOST=tcp://runner-dind:2375 in .env so the Manager falls back to unix:///var/run/docker.sock. DinD is only for what jobs do inside the runner container, such as docker build"
 
 func managerDockerHostIsDind() bool {
 	h := os.Getenv("DOCKER_HOST")
@@ -221,7 +221,7 @@ func applyResourceLimitsToExisting(ctx context.Context, containerName string, li
 		if msg == "" {
 			msg = err.Error()
 		}
-		log.Printf("警告: 为已存在容器 %s 施加资源上限失败，该容器仍沿用创建时的限制: %s（可 docker rm -f %s 后在界面重新启动以重建）",
+		log.Printf("warning: cannot apply resource limits to the existing container %s, which keeps the limits it was created with: %s (run docker rm -f %s and start it again from the UI to rebuild it)",
 			containerName, msg, containerName)
 	}
 }
@@ -258,7 +258,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	token, tokenErr := EnsureAgentToken(installDir)
 	if tokenErr != nil {
 		// 拿不到令牌不阻断启停，降级为不带鉴权头（与旧版本行为一致）
-		log.Printf("警告: %s %v，本次调用 Agent 不带鉴权头", runnerName, tokenErr)
+		log.Printf("warning: %s %v, so this Agent call carries no auth header", runnerName, tokenErr)
 	}
 	facts, err := inspectRunnerContainer(ctx, cn)
 	if err != nil {
@@ -269,7 +269,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 		drift := driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, resolveImageID)
 		switch {
 		case forceRecreate:
-			log.Printf("按要求重建容器 %s%s", cn, driftSuffix(drift))
+			log.Printf("recreating container %s as requested%s", cn, driftSuffix(drift))
 			if out, rmErr := dockerCmd(ctx, "rm", "-f", cn); rmErr != nil {
 				return dockerCmdError("docker rm", out, rmErr)
 			}
@@ -278,8 +278,9 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			// 正在运行的容器不自动重建：上面很可能正跑着 Job，删掉就是把它拦腰截断。
 			// 只记一条日志，由界面提示用户停止后再启动，或显式点「重建容器」。
 			if drift != "" {
-				log.Printf("提示: 容器 %s 的创建参数与当前配置不一致（%s）。正在运行的容器不会自动重建，"+
-					"停止后再启动，或在界面点「重建容器」即可按新配置重建", cn, drift)
+				log.Printf("note: container %s was created with settings that no longer match the config (%s). "+
+					"A running container is never rebuilt on its own: stop it and start it again, or use "+
+					"\"Recreate container\" in the UI to rebuild it against the current config", cn, drift)
 			}
 			// 存量容器可能是在配置资源上限之前创建的，这里补一次
 			applyResourceLimitsToExisting(ctx, cn, cfg.Runners.Resources)
@@ -287,7 +288,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 			_ = CallAgentStart(ctx, cn, cfg.Runners.AgentPort, token)
 			return nil
 		case drift != "":
-			log.Printf("容器 %s 的创建参数与当前配置不一致（%s），删除后按新配置重建", cn, drift)
+			log.Printf("container %s was created with settings that no longer match the config (%s); removing it and rebuilding against the current config", cn, drift)
 			if out, rmErr := dockerCmd(ctx, "rm", "-f", cn); rmErr != nil {
 				return dockerCmdError("docker rm", out, rmErr)
 			}
@@ -311,7 +312,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	if cfg.Runners.ContainerMode && strings.TrimSpace(cfg.Runners.VolumeHostPath) == "" {
 		baseClean := filepath.Clean(cfg.Runners.BasePath)
 		if strings.HasPrefix(baseClean, "/app") || strings.HasPrefix(filepath.Clean(installDir), "/app") {
-			return fmt.Errorf("容器模式下 Manager 若在容器内运行，必须在 config/config.yaml 中设置 runners.volume_host_path 为宿主机上 runners 根目录的绝对路径（当前 base_path 为 %s）", cfg.Runners.BasePath)
+			return fmt.Errorf("in container mode, a Manager that itself runs in a container needs runners.volume_host_path in config/config.yaml set to the absolute path of the runners base directory on the host (base_path is currently %s)", cfg.Runners.BasePath)
 		}
 	}
 	spec := desiredContainerSpec(cfg, runnerName, installDir, token)
@@ -337,7 +338,7 @@ func driftSuffix(drift string) string {
 	if drift == "" {
 		return ""
 	}
-	return "（" + drift + "）"
+	return " (" + drift + ")"
 }
 
 // StopRunnerContainer 停止容器（不删除，便于下次 start）
@@ -403,7 +404,7 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	agent, err := GetAgentStatus(ctx, cn, cfg.Runners.AgentPort, token)
 	if err != nil {
 		agentErrType := ProbeErrorTypeAgentConnect
-		if strings.Contains(err.Error(), "agent 返回") {
+		if strings.Contains(err.Error(), "agent returned") {
 			agentErrType = ProbeErrorTypeAgentHTTP
 		}
 		return true, StatusUnknown, drift, newProbeError(agentErrType, err)

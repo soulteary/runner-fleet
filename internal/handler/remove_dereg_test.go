@@ -69,13 +69,17 @@ func stubDereg(t *testing.T, fn func(ctx context.Context, installDir, targetType
 // 删除 Runner 必须尝试从 GitHub 注销：只删本地会在 GitHub 上留下一个同名 Runner，
 // 之后用同一名称重新添加就会因重名而注册失败。
 func TestRemoveRunner_DeregistersFromGitHub(t *testing.T) {
+	defer withI18n(map[string]string{
+		"api.removed":       "REMOVED %s",
+		"github.dereg.done": "DEREGISTERED",
+	})()
 	_, installDir := removeTestSetup(t, true)
 	var gotDir, gotType, gotTarget, gotName string
 	called := false
 	stubDereg(t, func(_ context.Context, dir, tt, target, name string) githubcheck.DeregisterResult {
 		called = true
 		gotDir, gotType, gotTarget, gotName = dir, tt, target, name
-		return githubcheck.DeregisterResult{Done: true, Message: "已从 GitHub 注销该 Runner"}
+		return githubcheck.DeregisterResult{Done: true, MessageKey: "github.dereg.done"}
 	})
 
 	code, body := doRemove(t)
@@ -91,7 +95,9 @@ func TestRemoveRunner_DeregistersFromGitHub(t *testing.T) {
 	if body["github_deregistered"] != true {
 		t.Fatalf("响应应标明已注销，得到 %v", body)
 	}
-	if !strings.Contains(body["message"].(string), "已从 GitHub 注销") {
+	// 注销结果必须嵌进响应消息里。按键断言：外壳是 api.removed，
+	// 里层是 githubcheck 回传的键，两层都由 handler 按同一个请求语言渲染。
+	if !strings.Contains(body["message"].(string), "DEREGISTERED") {
 		t.Fatalf("注销结果应写进响应消息，得到 %v", body["message"])
 	}
 }
@@ -123,12 +129,16 @@ func TestRemoveRunner_DeregistersBeforeDeletingInstallDir(t *testing.T) {
 // 注销失败不阻断本地删除——用户要的是「从这里去掉它」——
 // 但必须如实说出 GitHub 上还留着一个，以及该去哪儿删
 func TestRemoveRunner_DeregisterFailureIsReportedNotSwallowed(t *testing.T) {
-	defer withI18n(map[string]string{"api.removed": "REMOVED-FROM-CONFIG %s"})()
+	defer withI18n(map[string]string{
+		"api.removed":         "REMOVED-FROM-CONFIG %s",
+		"github.dereg.no_pat": "NOT-DELETED %s Settings %q",
+	})()
 	_, _ = removeTestSetup(t, false)
 	stubDereg(t, func(_ context.Context, _, _, _, _ string) githubcheck.DeregisterResult {
 		return githubcheck.DeregisterResult{
-			Done:    false,
-			Message: "GitHub 上的同名 Runner 未被删除：没有 .github_check_token。请到 Settings → Actions → Runners 手动删除 \"alpha\"",
+			Done:        false,
+			MessageKey:  "github.dereg.no_pat",
+			MessageArgs: []any{".github_check_token", "alpha"},
 		}
 	})
 
@@ -140,9 +150,9 @@ func TestRemoveRunner_DeregisterFailureIsReportedNotSwallowed(t *testing.T) {
 		t.Fatalf("响应应标明未注销，得到 %v", body)
 	}
 	msg, _ := body["message"].(string)
-	// 第一项是本地化后的外壳，按键断言；后两项来自 githubcheck 的 Message，
-	// 那部分目前仍是中文——跨包消息还没接进 i18n。
-	for _, want := range []string{"REMOVED-FROM-CONFIG", "未被删除", "Settings"} {
+	// 两层都按键断言：外壳是 api.removed，嵌进去的那半句是 githubcheck 回传的键，
+	// 由 handler 用同一个请求语言渲染——跨包消息现在也跟着语言走了。
+	for _, want := range []string{"REMOVED-FROM-CONFIG", "NOT-DELETED", "Settings"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("响应消息 %q 里应含 %q", msg, want)
 		}

@@ -344,12 +344,12 @@ var execCommand = exec.Command
 func Start(installDir string) error {
 	absDir, err := filepath.Abs(installDir)
 	if err != nil {
-		return fmt.Errorf("解析 runner 路径失败: %w", err)
+		return fmt.Errorf("cannot resolve the runner path: %w", err)
 	}
 	installDir = absDir
 	script := filepath.Join(installDir, RunScriptName())
 	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("未找到运行脚本 %s: %w", script, err)
+		return fmt.Errorf("run script %s not found: %w", script, err)
 	}
 	cmd := execCommand(script)
 	cmd.Dir = installDir
@@ -371,7 +371,7 @@ func Start(installDir string) error {
 // StartIfInstalled 若已注册则启动：容器模式调 StartRunnerContainer，否则调 Start。供 main 与 handler 统一“已注册未运行则启动”逻辑
 func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir string) error {
 	if cfg == nil {
-		return fmt.Errorf("配置为空")
+		return fmt.Errorf("the configuration is empty")
 	}
 	if cfg.Runners.ContainerMode {
 		return StartRunnerContainer(ctx, cfg, name, installDir)
@@ -387,12 +387,12 @@ func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir 
 func Stop(installDir string) error {
 	absDir, err := filepath.Abs(installDir)
 	if err != nil {
-		return fmt.Errorf("解析 runner 路径失败: %w", err)
+		return fmt.Errorf("cannot resolve the runner path: %w", err)
 	}
 	installDir = absDir
 	pids := runnerproc.Find(installDir)
 	if len(pids) == 0 {
-		return fmt.Errorf("未找到 %s 下正在运行的 Runner 进程", installDir)
+		return fmt.Errorf("no running runner process found under %s", installDir)
 	}
 	var firstErr error
 	for _, pid := range pids {

@@ -108,7 +108,7 @@ func checkOne(client *http.Client, token, targetType, target, runnerName string)
 func listRunners(ctx context.Context, client *http.Client, token, targetType, target string) ([]ghRunner, error) {
 	tt := strings.ToLower(strings.TrimSpace(targetType))
 	if err := config.ValidateTarget(tt, target); err != nil {
-		return nil, fmt.Errorf("target 无效: %w", err)
+		return nil, fmt.Errorf("invalid target: %w", err)
 	}
 	base, err := runnersEndpoint(tt, target)
 	if err != nil {
@@ -127,7 +127,7 @@ func listRunners(ctx context.Context, client *http.Client, token, targetType, ta
 			return all, nil
 		}
 	}
-	return all, fmt.Errorf("目标下的 Runner 超过 %d 个，未能全部列出", maxPages*apiPerPage)
+	return all, fmt.Errorf("the target has more than %d runners; the list is incomplete", maxPages*apiPerPage)
 }
 
 // runnersEndpoint 拼出 actions/runners 的 API 地址。
@@ -140,7 +140,7 @@ func runnersEndpoint(targetType, target string) (string, error) {
 	}
 	owner, repo, ok := strings.Cut(raw, "/")
 	if !ok {
-		return "", fmt.Errorf("target 应为 owner/repo 格式")
+		return "", fmt.Errorf("target must be in owner/repo form")
 	}
 	return apiBase + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/actions/runners", nil
 }
@@ -149,14 +149,14 @@ func runnersEndpoint(targetType, target string) (string, error) {
 func doJSON(ctx context.Context, client *http.Client, method, u, token string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, method, u, nil)
 	if err != nil {
-		return fmt.Errorf("构造请求失败: %w", err)
+		return fmt.Errorf("could not build the request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("请求 GitHub API 失败: %w", err)
+		return fmt.Errorf("the GitHub API request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNoContent {
@@ -169,7 +169,7 @@ func doJSON(ctx context.Context, client *http.Client, method, u, token string, o
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("解析 GitHub API 响应失败: %w", err)
+		return fmt.Errorf("could not parse the GitHub API response: %w", err)
 	}
 	return nil
 }
@@ -179,29 +179,36 @@ func doJSON(ctx context.Context, client *http.Client, method, u, token string, o
 func httpError(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("GitHub 返回 401：%s 里的令牌无效或已过期", RunnerTokenFile)
+		return fmt.Errorf("GitHub returned 401: the token in %s is invalid or expired", RunnerTokenFile)
 	case http.StatusForbidden:
 		if resp.Header.Get("X-RateLimit-Remaining") == "0" {
 			reset := resp.Header.Get("X-RateLimit-Reset")
 			if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
-				return fmt.Errorf("GitHub API 限流，%s 后恢复", time.Until(time.Unix(ts, 0)).Round(time.Second))
+				return fmt.Errorf("GitHub API rate limit reached, resets in %s", time.Until(time.Unix(ts, 0)).Round(time.Second))
 			}
-			return fmt.Errorf("GitHub API 限流，请稍后再试")
+			return fmt.Errorf("GitHub API rate limit reached, try again shortly")
 		}
-		return fmt.Errorf("GitHub 返回 403：令牌权限不足（组织需 admin:org，仓库需 repo）")
+		return fmt.Errorf("GitHub returned 403: the token lacks scope (admin:org for an organization, repo for a repository)")
 	case http.StatusNotFound:
-		return fmt.Errorf("GitHub 返回 404：目标不存在，或令牌看不到它")
+		return fmt.Errorf("GitHub returned 404: the target does not exist, or the token cannot see it")
 	default:
-		return fmt.Errorf("GitHub 返回 %d", resp.StatusCode)
+		return fmt.Errorf("GitHub returned %d", resp.StatusCode)
 	}
 }
 
-// DeregisterResult 说明一次注销尝试的结果，供调用方原样展示给用户
+// DeregisterResult 说明一次注销尝试的结果。
 type DeregisterResult struct {
 	// Done 为 true 表示 GitHub 上已经没有这个 Runner 了（本次删除的，或本来就没有）
 	Done bool
-	// Message 面向用户：Done 为 false 时说明为什么没删成、该去哪儿手动删
-	Message string
+
+	// MessageKey / MessageArgs 描述结果，由调用方渲染。
+	//
+	// 这里刻意不给现成的句子。同一个结果有两个去向、两种语言要求：它既要拼进 API
+	// 响应（跟随请求语言），又要写进日志（固定英文，见 handler 的 i18n 说明）。
+	// 一个 string 字段服务不了两边——本包又够不着翻译表，因为那是 handler 那一侧
+	// 由 main 注入的。所以这里只回传「是什么事」，由拿得到语言的人去说成话。
+	MessageKey  string
+	MessageArgs []any
 }
 
 // Deregister 把某个 Runner 从 GitHub 注销。
@@ -215,17 +222,16 @@ func Deregister(ctx context.Context, installDir, targetType, target, runnerName 
 	token := TokenForRunner(installDir)
 	if token == "" {
 		return DeregisterResult{
-			Message: fmt.Sprintf("GitHub 上的同名 Runner 未被删除：该 Runner 目录下没有 %s（可选 PAT），"+
-				"本工具无从调用删除接口。请到目标仓库或组织的 Settings → Actions → Runners 手动删除 %q，"+
-				"否则之后用同一名称重新添加会因重名而注册失败", RunnerTokenFile, runnerName),
+			MessageKey:  "github.dereg.no_pat",
+			MessageArgs: []any{RunnerTokenFile, runnerName},
 		}
 	}
 	client := &http.Client{Timeout: apiTimeout}
 	runners, err := listRunners(ctx, client, token, targetType, target)
 	if err != nil {
 		return DeregisterResult{
-			Message: fmt.Sprintf("GitHub 上的同名 Runner 未被删除：%v。"+
-				"请到 Settings → Actions → Runners 确认并手动删除 %q", err, runnerName),
+			MessageKey:  "github.dereg.lookup_failed",
+			MessageArgs: []any{err, runnerName},
 		}
 	}
 	var id int64
@@ -236,21 +242,21 @@ func Deregister(ctx context.Context, installDir, targetType, target, runnerName 
 		}
 	}
 	if id == 0 {
-		return DeregisterResult{Done: true, Message: "GitHub 上没有同名 Runner，无需注销"}
+		return DeregisterResult{Done: true, MessageKey: "github.dereg.not_listed"}
 	}
 	base, err := runnersEndpoint(strings.ToLower(strings.TrimSpace(targetType)), target)
 	if err != nil {
-		return DeregisterResult{Message: fmt.Sprintf("GitHub 上的同名 Runner 未被删除：%v", err)}
+		return DeregisterResult{MessageKey: "github.dereg.endpoint_failed", MessageArgs: []any{err}}
 	}
 	if err := doJSON(ctx, client, http.MethodDelete, base+"/"+strconv.FormatInt(id, 10), token, nil); err != nil {
 		// 404 说明它已经不在了，目的已经达到
 		if strings.Contains(err.Error(), "404") {
-			return DeregisterResult{Done: true, Message: "GitHub 上没有同名 Runner，无需注销"}
+			return DeregisterResult{Done: true, MessageKey: "github.dereg.not_listed"}
 		}
 		return DeregisterResult{
-			Message: fmt.Sprintf("GitHub 上的同名 Runner 未被删除：%v。"+
-				"请到 Settings → Actions → Runners 手动删除 %q", err, runnerName),
+			MessageKey:  "github.dereg.delete_failed",
+			MessageArgs: []any{err, runnerName},
 		}
 	}
-	return DeregisterResult{Done: true, Message: "已从 GitHub 注销该 Runner"}
+	return DeregisterResult{Done: true, MessageKey: "github.dereg.done"}
 }
