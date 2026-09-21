@@ -156,8 +156,11 @@ func TestEnsureAgentToken_Format(t *testing.T) {
 		t.Fatalf("令牌长度应为 %d（%d 字节的 hex），得到 %d: %q",
 			agentTokenBytes*2, agentTokenBytes, len(token), token)
 	}
+	isLowerHex := func(r rune) bool {
+		return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+	}
 	for _, r := range token {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+		if !isLowerHex(r) {
 			t.Fatalf("令牌应为小写十六进制，出现 %q: %s", r, token)
 		}
 	}
