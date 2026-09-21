@@ -7,9 +7,12 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 ARG VERSION=dev
+# 未传入时为空，version-kit 会把空字段从输出里省掉
+ARG COMMIT=
+ARG BUILD_DATE=
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION}" -o runner-manager ./cmd/runner-manager
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" -o runner-manager ./cmd/runner-manager
 
 FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="Runner Fleet Manager" \

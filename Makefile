@@ -20,8 +20,12 @@ help:
 	@echo "  docker-build-runner-example: 构建自定义 Runner 镜像示例，如"
 	@echo "    make docker-build-runner-example EXAMPLE=android IMAGE=your-registry/android-runner:1"
 
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS = -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildDate=$(BUILD_DATE)
+
 build:
-	go build -ldflags "-X main.Version=$(VERSION)" -o $(BINARY) ./cmd/runner-manager
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/runner-manager
 
 build-agent:
 	go build -o runner-agent ./cmd/runner-agent

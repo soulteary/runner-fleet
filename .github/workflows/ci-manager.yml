@@ -99,7 +99,7 @@ jobs:
       - name: Build Manager
         if: steps.modroot.outputs.found == 'true'
         run: |
-          go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" -o runner-manager ./cmd/runner-manager
+          go build -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }} -X main.Commit=${{ github.sha }} -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o runner-manager ./cmd/runner-manager
         working-directory: ${{ steps.modroot.outputs.root }}
 
       - name: Init example config
