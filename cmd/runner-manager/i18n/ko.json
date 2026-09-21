@@ -130,5 +130,9 @@
   "precheck.blocked": "충돌이 있습니다. 이름을 바꾸거나 정리한 뒤 다시 제출하세요",
   "badge.drift": "설정 변경됨",
   "btn.recreate": "컨테이너 재생성",
-  "confirm_recreate": "현재 설정으로 {{name}}의 컨테이너를 다시 만들까요?\n\n기존 컨테이너를 삭제하고 새로 만듭니다. 실행 중인 Job이 있으면 중단됩니다."
+  "confirm_recreate": "현재 설정으로 {{name}}의 컨테이너를 다시 만들까요?\n\n기존 컨테이너를 삭제하고 새로 만듭니다. 실행 중인 Job이 있으면 중단됩니다.",
+  "autorefresh.label": "자동 새로고침 (15초)",
+  "autorefresh.updated": "{{time}}에 업데이트됨",
+  "autorefresh.failed": "새로고침 실패, 다시 시도합니다",
+  "autorefresh.paused": "자동 새로고침 꺼짐"
 }
