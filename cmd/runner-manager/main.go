@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -24,6 +23,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/handler"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	secure "github.com/soulteary/secure-kit"
 )
 
 //go:embed templates/*.html
@@ -271,9 +271,13 @@ func basicAuthMiddleware() (echo.MiddlewareFunc, string) {
 			return c.Path() == "/health"
 		},
 		Validator: func(username, password string, c echo.Context) (bool, error) {
-			// 定长比较：用 == 会让比对耗时随匹配前缀长度变化
-			userOk := subtle.ConstantTimeCompare([]byte(username), []byte(expectedUser)) == 1
-			passOk := subtle.ConstantTimeCompare([]byte(password), []byte(pw)) == 1
+			// 定长比较：用 == 会让比对耗时随匹配前缀长度变化。
+			//
+			// 用 secure.ConstantTimeEqual 而不是 subtle.ConstantTimeCompare：
+			// 后者在两侧长度不等时立即返回 0，于是耗时会随「猜的长度是否等于
+			// 真实长度」而变，把口令长度泄漏出去。前者先把两侧补到同长再比。
+			userOk := secure.ConstantTimeEqual(username, expectedUser)
+			passOk := secure.ConstantTimeEqual(password, pw)
 			return userOk && passOk, nil
 		},
 	}), expectedUser

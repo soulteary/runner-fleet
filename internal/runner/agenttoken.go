@@ -7,14 +7,14 @@
 package runner
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	secure "github.com/soulteary/secure-kit"
 )
 
 // AgentTokenFile Runner 安装目录下保存 Agent 令牌的文件名
@@ -46,11 +46,11 @@ func EnsureAgentToken(installDir string) (string, error) {
 	}
 	path := filepath.Join(installDir, AgentTokenFile)
 
-	buf := make([]byte, agentTokenBytes)
-	if _, err := rand.Read(buf); err != nil {
+	// RandomHex(n) 返回 2n 个十六进制字符，与原先 rand.Read(32 字节)+hex 编码等价
+	token, err := secure.RandomHex(agentTokenBytes)
+	if err != nil {
 		return "", fmt.Errorf("生成 Agent 令牌失败: %w", err)
 	}
-	token := hex.EncodeToString(buf)
 
 	// os.CreateTemp 以 0600 创建，与正式文件一致
 	f, err := os.CreateTemp(installDir, AgentTokenFile+".tmp-*")

@@ -139,3 +139,29 @@ func TestEnsureAgentToken_PublishedFileIsNeverEmpty(t *testing.T) {
 		t.Fatalf("发布出来的文件内容不完整: %q（返回值 %q）", string(b), token)
 	}
 }
+
+// TestEnsureAgentToken_Format 钉住令牌的外形：64 个小写十六进制字符。
+//
+// 生成实现从 rand.Read(32 字节)+hex.EncodeToString 换成了 secure.RandomHex(32)，
+// 两者必须完全等价。令牌既写进 .agent_token，也作为 AGENT_TOKEN 注入容器，
+// 而 agent_token 的漂移检查只看「容器里有没有一个非空值」、不比对取值
+// （见 drift.go 中的说明）——换一种编码不会触发重建，只会让存量容器
+// 从此一直 401，且界面上看不出原因。
+func TestEnsureAgentToken_Format(t *testing.T) {
+	token, err := EnsureAgentToken(t.TempDir())
+	if err != nil {
+		t.Fatalf("生成令牌失败: %v", err)
+	}
+	if len(token) != agentTokenBytes*2 {
+		t.Fatalf("令牌长度应为 %d（%d 字节的 hex），得到 %d: %q",
+			agentTokenBytes*2, agentTokenBytes, len(token), token)
+	}
+	isLowerHex := func(r rune) bool {
+		return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+	}
+	for _, r := range token {
+		if !isLowerHex(r) {
+			t.Fatalf("令牌应为小写十六进制，出现 %q: %s", r, token)
+		}
+	}
+}
