@@ -23,7 +23,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/handler"
 	"github.com/soulteary/runner-fleet/internal/runner"
-	secure "github.com/soulteary/secure-kit"
+	secure "github.com/soulteary/secure-kit/v2"
 )
 
 //go:embed templates/*.html
