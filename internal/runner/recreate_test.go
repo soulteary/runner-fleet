@@ -240,8 +240,8 @@ func TestLockRunnerOps_DifferentRunnersRunInParallel(t *testing.T) {
 // 但启停路径必须读实时值——刚 build 完就点「启动」，读到旧 ID 就不会重建了。
 func TestImageIDCache_StatusPathCachesStartPathDoesNot(t *testing.T) {
 	logPath := fakeDocker(t, `[]`)
-	imageIDCache.Delete("img:cache-test")
-	t.Cleanup(func() { imageIDCache.Delete("img:cache-test") })
+	resetImageIDCache()
+	t.Cleanup(resetImageIDCache)
 
 	countInspects := func() int {
 		return strings.Count(dockerCalls(t, logPath), "image inspect -f {{.Id}} img:cache-test")

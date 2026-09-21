@@ -10,13 +10,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
+	docker "github.com/soulteary/docker-kit"
 	"github.com/soulteary/runner-fleet/internal/config"
 )
 
@@ -106,56 +104,24 @@ func setAgentAuth(req *http.Request, token string) {
 	}
 }
 
+// 以下四个都是对 docker-kit 的直接转发。保留本包的名字，是因为它们在本包与用例里
+// 有近三十处引用，而换个名字并不会让任何一处读起来更清楚。
+//
+// docker-kit 的判定与这里原先的实现逐条相同——包括 "没有此容器" 这类中文 locale 的
+// 提示（它们本来就是从这里抽出去的），所以这不是「大致等价」，是同一份逻辑。
+
 func dockerCmd(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	return cmd.CombinedOutput()
+	return docker.Run(ctx, args...)
 }
 
 // containerNotFound 判断 docker 输出是否表示「容器不存在」（含英文/中文等）
-func containerNotFound(out []byte) bool {
-	s := string(out)
-	lower := strings.ToLower(s)
-	if strings.Contains(lower, "no such container") || strings.Contains(lower, "no such object") {
-		return true
-	}
-	// Docker 中文环境或其它 locale 的常见提示
-	if strings.Contains(s, "没有此容器") || strings.Contains(s, "没有找到容器") || strings.Contains(s, "未找到容器") {
-		return true
-	}
-	return false
-}
+func containerNotFound(out []byte) bool { return docker.NotFound(out) }
 
 // containerStartUnrecoverable 判断 docker start 失败是否因网络已删除等导致无法恢复，需删容器后重建
-func containerStartUnrecoverable(out []byte) bool {
-	s := string(out)
-	lower := strings.ToLower(s)
-	if strings.Contains(lower, "network") && (strings.Contains(lower, "not found") || strings.Contains(lower, "no such")) {
-		return true
-	}
-	if strings.Contains(lower, "could not find network") || strings.Contains(lower, "could not attach to network") {
-		return true
-	}
-	if strings.Contains(lower, "failed to create endpoint") || strings.Contains(lower, "failed to get network") {
-		return true
-	}
-	return false
-}
+func containerStartUnrecoverable(out []byte) bool { return docker.UnrecoverableStart(out) }
 
 // dockerPermissionDenied 判断是否为访问 Docker 权限/连接错误（宿主机 socket 需对 Manager 容器可访问）
-func dockerPermissionDenied(out []byte) bool {
-	s := string(out)
-	lower := strings.ToLower(s)
-	if strings.Contains(lower, "permission denied") || strings.Contains(lower, "permissions have not been granted") {
-		return true
-	}
-	if strings.Contains(lower, "cannot connect to the docker daemon") || strings.Contains(lower, "is the docker daemon running") {
-		return true
-	}
-	if strings.Contains(lower, "connection refused") {
-		return true
-	}
-	return false
-}
+func dockerPermissionDenied(out []byte) bool { return docker.PermissionDenied(out) }
 
 func dockerCmdError(op string, out []byte, err error) error {
 	trimmed := strings.TrimSpace(string(out))
@@ -191,15 +157,10 @@ const HostDockerSocket = "/var/run/docker.sock"
 // 同一个 Runner 会被多条路径同时碰：Manager 启动 15 秒后的自动拉起、每 5 分钟的定时拉起、
 // 注册完成后的启动、界面上的点击。以前撞车最多留下一条「container name is already in use」
 // 的日志；现在重建会先 docker rm，两个调用交叉执行就可能删掉对方刚建好的容器。
-var runnerOps sync.Map // 容器名 -> *sync.Mutex
+var runnerOps docker.Locks
 
 // lockRunnerOps 取得某个容器的操作锁，返回解锁函数
-func lockRunnerOps(containerName string) func() {
-	v, _ := runnerOps.LoadOrStore(containerName, &sync.Mutex{})
-	mu := v.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
-}
+func lockRunnerOps(containerName string) func() { return runnerOps.Lock(containerName) }
 
 // 启动容器后给 Agent 的就绪时间：新建的容器要等镜像入口起来，已存在的容器快一些。
 // 做成变量只为测试能调小，生产路径上取值与此前一致。
@@ -213,17 +174,9 @@ const unknownDockerGID = -1
 
 // socketGID 返回 path 所属组 GID；读取失败或平台不支持时返回 unknownDockerGID。
 // Manager 在容器内时 docker.sock 为宿主机挂载，stat 得到的即宿主机 docker 组 GID。
-func socketGID(path string) int {
-	info, err := os.Stat(path)
-	if err != nil {
-		return unknownDockerGID
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return unknownDockerGID
-	}
-	return int(st.Gid)
-}
+//
+// docker-kit 的 SocketGID 取不到时同样返回 -1，与 unknownDockerGID 一致。
+func socketGID(path string) int { return docker.SocketGID(path) }
 
 // runnerDockerGID 决定 Runner 容器需追加的 docker 组 GID：
 // 优先 runners.docker_gid（可由环境变量 DOCKER_GID 覆盖），否则自动探测 docker.sock 所属组。
