@@ -33,6 +33,7 @@ RUN set -eux; \
     curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${arch}.tar.gz" \
       | tar xz -C "$dir"; \
     mv "$dir/node-v${NODE_VERSION}-linux-${arch}" "$dir/$arch"; \
+    test -x "$dir/$arch/bin/node"; \
     touch "$dir/$arch.complete"
 
 # ============ 共享 Action 归档缓存（可选，收益小） ============
@@ -57,5 +58,13 @@ ENV ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/opt/actions-cache
 # 它会把 _work/_actions/<action> 做成指向共享目录的符号链接，Job 里对 action 目录的任何写入
 # 都会污染所有 Runner。默认的「拷 tar.gz 再解压」才是安全的。
 
+# 基础镜像以 app(UID 1001) 收尾，上面 USER root 之后必须切回来，否则 Agent 以 root 跑。
 USER app
-RUN node --version
+
+# 这里**不要**加 `RUN node --version`：工具链缓存刻意不进 PATH。
+# /opt/hostedtoolcache/node/<version>/<arch>/bin 是 actions/setup-node 在 Job 里按版本
+# 找到后自己前置的，镜像构建阶段 node 本来就不在 PATH 上，调它必然 command not found ——
+# 那不是缓存装坏了。把这个目录写进 ENV PATH 能让这条命令过，但等于给所有 Job 钉死一个
+# node 版本，正好废掉这份缓存要服务的版本选择。装没装好由上面那条 test -x 验。
+# ../../runner-images/Dockerfile.node 里的 `node --version` 是另一回事：那边走 apt 装进
+# /usr/bin，本来就在 PATH 上。
