@@ -8,8 +8,9 @@
 
 **审计基准**：`main` @ `0e812a7`，最新发布 v1.7.1。<!-- version-check-ignore -->
 
-**执行状态**：**第 1、2 批已完成，第 5 节的五条检查已全部落地**（§1.1–§1.5、§2.1、
-§2.4–§2.7、§5.1–§5.5）。第 3 批起未开始，§1.3 只做到「如实写明边界」那一半。
+**执行状态**：**第 1、2 批已完成；第 3 批里不依赖决策的部分已完成**（§1.1–§1.5、§2.1、
+§2.4–§2.7、§3.2、§3.4、§5.1–§5.5）。§1.3 只做到「如实写明边界」那一半；
+第 3 批的第 11、12 两项与 §2.2、§2.3 一起卡在第 7 节的决策上；第 4 批未开始。
 每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、且只有那一条会红。
 下面的问题描述保留审计当时的原文，改掉它们会让「为什么要加这条检查」失去凭据；
 已修的条目在标题上标注。
@@ -264,13 +265,18 @@ README 的一句 "Health: `GET /health`; version: `GET /version`" 也停在 v1.7
 
 仓库开着 Issues 和 Wiki，Discussions 关着；Wiki 为空。
 
-### 3.2 docs/ 首页没有 examples 入口
+### 3.2 docs/ 首页没有 examples 入口  ✅ 已修
 
 `docs/README.md`（及五份译文）只列 guide / development / CHANGELOG，
 `examples` 出现 **0 次**。而根 README 出现 3 次。从 docs 首页进来的人看不到那 293 行部署示例。
 
 `docs/ci-recipes-migration.md`（218 行）同样是孤儿：没有任何 Markdown 链接指向它，
 只有 CHANGELOG 正文提过一次文件名。
+
+**已落地**：六份 `docs/README.md` 各加两条 examples 入口，并标注 `(中文)`——在第 7 节
+决定之前，把人送进中文文档而不预先说明，是把 §2.2 的问题换个地方再犯一次。
+`ci-recipes-migration.md` 与本文件一起挂到了六份 `development.md` 的发布一节下，
+并写明两者都是维护者的工作记录、刻意不做译文。
 
 ### 3.3 CHANGELOG 的条目长到没法扫
 
@@ -284,11 +290,24 @@ README 的一句 "Health: `GET /health`; version: `GET /version`" 也停在 v1.7
 影响我」，需要的是一句话 + 链接。现在这份文件把「变更记录」和「设计说明」两个用途
 压在了一起，两边都不好读。
 
-### 3.4 README 与 guide 大段重复
+### 3.4 README 与 guide 大段重复  ✅ 已修
 
 README（64 行）里的 Quick start、container mode 说明、apt 包基线说明与 `guide.md`
 高度重叠，且已经漂移了（§1.1 的命令在两处是两个形态；`/ready`、`/metrics` README 没跟上）。
 每次改一处就要记得改另一处，而没有任何检查盯着。
+
+**执行时发现的第 18 个问题**：README 的 Features 一节里写着
+「**Delete**: Remove from config (does not delete disk).」——**这是错的**。
+`internal/handler/handler.go` 的删除路径会 `os.RemoveAll(installDir)`（仅限 `base_path`
+之下的目录），`development.md` 的 API 表也写着会删安装目录。这条错误陈述只存在于 README，
+而且是对一个**不可逆操作**的描述，正是这类重复最坏的形态：不是过时，是相反。
+
+**已落地**：README 从 66 行降到 49 行。Features 七条整节删掉（与 Highlights 重复，
+唯一不重复的那条就是上面那句错的），Use cases 三条删掉（纯宣传，无技术事实），
+Highlights 从八条并到七条。删除语义按正确形态补进了六份 `guide.md` 的第 3 节。
+刻意留下的唯一一处技术性重复是快速开始命令块——30 秒起步得在首页，完整说明得在指南——
+由 `internal/docsconsistency/quickstart_test.go` 比对两处的命令行（不比注释，
+注释一边被翻译一边是英文）。
 
 ### 3.5 缺「这东西是怎么工作的」
 
@@ -414,7 +433,7 @@ Mutation：新增一份未登记策略的 `examples/*/README.md` → 红。
 两者都按标识符边界匹配而不是子串——第一版用 `strings.Contains`，
 把译文里的变量名写长一个字母测试纹丝不动，那是自己踩出来的坑。
 
-### 第 3 批：语言与结构（1 周，含一次拍板；其中第 15 项的五条检查已提前落地）
+### 第 3 批：语言与结构  ◐ 不依赖决策的部分已完成（13、14、15）
 
 11. **决策**：examples/ 与两个 `.example` 模板的语言策略（见 §7）
 12. 按决策执行；`examples/deploy/README.md:174` 的收尾链接改成语言中立或跟随当前语言

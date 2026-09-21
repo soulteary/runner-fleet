@@ -12,24 +12,13 @@ HTTP management UI built with Golang Echo to view and manage multiple self-hoste
 
 ## Highlights
 
-- **Zero database**: YAML-only config, no external deps; config is your backup and easy to version.
-- **Web one-stop**: Add, register, start/stop, edit, and view status in the UI—no SSH or manual `config.sh`.
-- **Auto install & register**: In "Quick Add" enter a token to auto-download the runner, register, and start; paste `./config.sh --url ... --token ...` from GitHub to parse and fill the form.
-- **Container-first**: Docker / docker-compose out of the box; DinD and host-socket for in-job Docker; optional **container mode** (one runner per container) with Manager controlling lifecycle and status.
-- **Config drift is repaired, not just reported**: image, network, mount directory, in-job Docker backend and the agent token are all fixed at `docker create` time, so editing the config never reached an existing container. The Manager compares each container against the current config: a **stopped** runner is rebuilt on its next start, a **running** one is flagged "config changed" with the exact difference and rebuilt when you say so.
-- **Hosted-CLI baseline + custom images**: stock images align the CLI layer with GitHub-hosted `ubuntu-24.04`; extend with Android/Node (etc.) via [`examples/runner-images/`](examples/runner-images/) and per-runner `container_image`.
-- **Self-heal & troubleshoot**: ~15s after start, registered but stopped runners are started; periodic check every 5 minutes; in container mode, `status=unknown` shows a structured probe (error type, check/fix commands) for copy-paste troubleshooting or start/stop self-heal.
-- **Observable**: Registration result is written and shown in the UI; optional PAT (`.github_check_token`) to periodically verify runners appear in GitHub's list, synced to the UI.
-
-## Features
-
-- **View**: List all runners, status (installed/unregistered/missing dir), running or not; view full config per runner.
-- **Edit**: Change subpath, target type, target, labels (name is read-only).
-- **Quick Add**: Name + target (org/repo) + optional token; one-click add and optional auto-register. Conflicts (name taken, container-name collision, install directory in use, leftover container on the host) are reported while you type, with a suggested name.
-- **Delete**: Remove from config (does not delete disk).
-- **Start/Stop**: Start or stop registered runners.
-- **Container mode** (optional): One runner per container; Manager starts/stops via Docker; runner image tag uses `-runner` suffix.
-- **Recreate container** (container mode): Rebuild a runner's container with the current config; the list flags runners whose container no longer matches, with the difference in the tooltip.
+- **Zero database**: YAML-only config, no external deps; the config *is* your backup and is easy to version.
+- **Web one-stop**: add, register, start/stop, edit and inspect runners in the UI — no SSH, no hand-run `config.sh`. Paste GitHub's `./config.sh --url … --token …` and the form fills itself; name and directory conflicts surface while you type, with a suggested name.
+- **Container-first**: Docker / docker-compose out of the box; DinD and host-socket for in-job Docker; optional **container mode** (one runner per container) with the Manager owning lifecycle and status.
+- **Config drift is repaired, not just reported**: image, network, mount directory, in-job Docker backend and the agent token are all fixed at `docker create` time, so editing the config never reached an existing container. The Manager compares each container against the current config — a **stopped** runner is rebuilt on its next start, a **running** one is flagged with the exact difference and rebuilt when you say so.
+- **Hosted-CLI baseline + custom images**: stock images align the CLI layer with GitHub-hosted `ubuntu-24.04`; extend with Android / Node and friends via [`examples/runner-images/`](examples/runner-images/) and per-runner `container_image`.
+- **Self-heals, and says why when it can't**: registered-but-stopped runners start ~15s after boot and are re-checked every 5 minutes; in container mode a failed probe returns a structured diagnosis — error type, a check command and a fix command — instead of a bare "unknown".
+- **Observable**: `/ready` and Prometheus `/metrics` for the deployment, the registration result per runner, and an optional PAT that keeps the UI in sync with what GitHub actually lists.
 
 ## Quick start
 
@@ -46,18 +35,12 @@ Open http://localhost:8080. The default image tag is the stable release (e.g. v1
 
 Two copy-and-go deployments live in [`examples/deploy/`](examples/deploy/): `standalone/` (single container, runner processes inside the Manager — `docker run` or Compose) and `fleet/` (one container per runner, image and toolchain caches shared, build caches isolated).
 
-## Use cases
-
-- **Personal / team**: One machine as self-hosted runners for multiple repos or orgs; manage via Web UI, no need to remember CLI.
-- **Internal CI**: Deploy on internal network; use DinD (isolated) or host-socket (shared with host) when jobs need Docker; runners recover after Manager or DinD restart.
-- **Isolation & traceability**: Container mode gives one container per runner with clear boundaries; combine with registration result and GitHub visibility check to verify runners.
-
 ## Documentation
 
-- **[User Guide](docs/guide.md)** — Deployment (Docker/docker-compose), config, adding runners, security & troubleshooting
-- **[Deployment examples](examples/deploy/)** — Single-container and multi-container setups, what each cache shares or isolates, deployment pitfalls
+- **[User Guide](docs/guide.md)** — deployment, configuration, adding runners, operations, security & troubleshooting
+- **[Deployment examples](examples/deploy/)** (中文) — single-container and multi-container setups, which caches are shared and which isolated, deployment pitfalls
 - **[Development & Build](docs/development.md)** — Go build, local debug, HTTP API, Makefile
-- **[Changelog](CHANGELOG.md)** — Release history and upgrade notes
+- **[Changelog](CHANGELOG.md)** — release history and upgrade notes
 
 ## Other
 

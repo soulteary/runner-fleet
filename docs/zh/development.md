@@ -246,4 +246,9 @@ ci-recipes runner-fleet check-docs-structure
 `Quick start runs` 则拿就地构建的镜像整段执行使用指南里的快速开始命令块，再去请求
 `GET /ready`——一段没人跑过的文档步骤，就是一段没人知道它坏了的步骤。
 
+与本文同目录还有两份维护者的工作记录，刻意不做译文——它们记的是构建决策，不是产品行为：
+[CI shell 迁移到 ci-recipes](../ci-recipes-migration.md) 是那次搬迁的审计（哪些 shell 该搬、
+迁移修掉的四个缺陷、代价是什么），[文档改进计划](../docs-improvement-plan.md) 则是上面这些
+检查的出处，里面写着哪些已做、哪些还开着。
+
 [← 返回文档](README.md)

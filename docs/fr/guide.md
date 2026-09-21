@@ -216,6 +216,8 @@ runners:
 
 **Vérification des conflits de nom** : pendant la saisie du nom, le formulaire interroge `/api/runner-precheck` et montre avant l'envoi ce qui poserait problème — un runner de ce nom existe déjà, le nom donne le même nom de conteneur qu'un autre, le répertoire d'installation est déjà pris, un répertoire résiduel contient déjà un runner enregistré (`.runner`), ou un conteneur de ce nom traîne encore sur l'hôte. Les blocages s'affichent en rouge avec un nom proposé applicable en un clic ; les avertissements (répertoire non vide réutilisé) n'empêchent pas de continuer. Envoyer quand même est refusé côté serveur par un **409** portant les mêmes conflits — l'ancien ajout silencieux d'un suffixe aléatoire est supprimé (`auto_rename: true` pour le retrouver).
 
+**Supprimer un runner** : il est arrêté, désenregistré de GitHub si son répertoire contient un PAT, et **son répertoire d'installation est supprimé** — uniquement si ce répertoire se trouve sous `runners.base_path`, afin qu'un chemin mal configuré n'emporte pas un répertoire système. `_work` et les caches qu'il contient disparaissent aussi : rien n'est récupérable ensuite.
+
 Plusieurs runners par machine : utilisez des sous-répertoires distincts.
 
 ---
