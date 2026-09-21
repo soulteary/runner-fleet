@@ -10,6 +10,51 @@
 
 - Go 1.27（与 [go.mod](../../go.mod) 一致）。
 
+## 架构
+
+三个进程。值得知道的是它们各自管什么。
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+图里的标签在所有译文里都保持英文：那些是进程名、路径与端点，把标识符翻译掉只会更难 grep，
+并不会更好读。
+
+**Manager 只做编排，不承载 Runner。** 容器模式下每个 Runner 是一个独立容器，由 Manager 通过宿主机的
+Docker socket 创建——这也是 Manager 必须拿到那个 socket、且不能把它指向 DinD 的原因。默认模式下
+根本没有 Agent、也没有 Runner 容器：Runner 进程就跑在 Manager 自己的容器里，Manager 直接读 `/proc`。
+
+**状态要跨进程边界，所以走 HTTP。** Manager 与 Runner 容器不在同一个 PID namespace，看不见对方的进程，
+于是它去问 Agent，由 Agent 读自己的 `/proc`。这次调用带一个按 Runner 生成的 bearer 令牌——同一个 Docker
+网络里的任何容器都够得着 Agent 的 `/start` 与 `/stop`。调用失败时答案是 `unknown` 而不是 `installed`：
+「已注册但没在跑，那就拉起来」这条逻辑，绝不能作用在一个根本没探到的 Runner 上。
+见[运行状态是怎么判定的](#运行状态是怎么判定的)。
+
+**有九样东西在 `docker create` 那一刻定死**，之后再不会变：容器名、镜像、网络、挂载目录、Job Docker
+后端、DinD 主机、docker GID、Agent 令牌，以及资源上限。`docker start` 只是把已经建好的那个原样拉起来，
+所以光改配置永远到不了已存在的容器。这就是漂移检测存在的全部理由——Manager 比对每个容器的实际创建参数
+与当前配置，**已停止**的在下次启动时重建，**正在运行**的只打标记而不去打断 Job。镜像除了比引用还比
+镜像 ID，所以重新 build 同名 tag 同样算数。
+
 ## 构建
 
 ```bash

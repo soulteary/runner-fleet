@@ -270,6 +270,71 @@ scrape_configs:
       password: <BASIC_AUTH_PASSWORD>
 ```
 
+### Upgrade
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Kein Runner muss neu registriert werden: seine Identität liegt in seinem Installationsverzeichnis, das ein Upgrade nicht anfasst.
+
+Im Containermodus existieren die Runner-Container weiterhin mit dem **alten** Runner-Image, denn
+Image, Netzwerk, Mount-Verzeichnis und der Rest werden im Moment des `docker create` festgelegt.
+Der Manager bemerkt das und repariert es selbst: ein **gestoppter** Runner wird beim nächsten Start
+neu gebaut, ein **laufender** als „Konfiguration geändert" markiert und neu gebaut, sobald Sie auf
+Neu erstellen klicken oder ihn im Leerlauf stoppen und starten. Zwei Details entscheiden, ob das
+neue Image überhaupt da ist, um daraus zu bauen:
+
+- Ein **Versions-Tag** holt sich selbst: nach einem Versionssprung liegt das neue `-runner`-Tag
+  nicht lokal vor, also lädt `docker create` es.
+- Ein **veränderliches Tag** (`:main`, oder dasselbe Versions-Tag neu gebaut) löst lokal bereits auf,
+  also verwendet `docker create` das veraltete Image weiter. Ziehen Sie es vorher selbst —
+  `docker pull <Runner-Image>`. Drift wird über die Image-**ID** und nicht nur über die Referenz
+  verglichen, nach dem Pull läuft der Neubau also wie gewohnt.
+
+`runners.resources` ist die einzige Einstellung, die einen bestehenden Container ohne Neubau
+erreicht: der Manager wendet sie beim Start mit `docker update` an, ein Upgrade auf eine Version
+mit Limits erzwingt also kein Neuanlegen aller Container.
+
+Lesen Sie das [Changelog](../../CHANGELOG.md) der Zielversion — Breaking Changes und alles, was einen manuellen Schritt braucht, steht dort.
+
+### Was zu sichern ist
+
+Das README sagt, die Konfiguration sei Ihr Backup. Das gilt für die *Konfiguration*, nicht für die
+*Identität*: die Zugangsdaten eines Runners liegen in seinem Installationsverzeichnis, und ohne sie
+muss ein wiederhergestelltes Deployment von Hand neu registriert werden.
+
+Sichern Sie `config/config.yaml` und jedes Verzeichnis `runners/<Name>/`, ohne `_work/`.
+
+| In `runners/<Name>/` | Geschrieben von | Wenn es verloren geht |
+|---|---|---|
+| `.runner`, `.credentials_rsaparams` und die übrigen von `config.sh` geschriebenen Dateien | actions/runner | Der Runner ist weg. Neu registrieren — und den veralteten Eintrag vorher auf GitHub löschen, denn eine neue Registrierung unter demselben Namen scheitert, solange der alte gelistet ist |
+| `.agent_token` | Manager (Modus `0600`) | Wird neu erzeugt; der Container gilt als abgewichen und wird beim nächsten Start neu gebaut |
+| `.github_check_token` | Sie, optional | Die Sichtbarkeitsprüfung endet, und beim Löschen kann der Runner nicht mehr von GitHub abgemeldet werden |
+| `.registration_result.json`, `.github_status.json` | Manager | Kosmetisch — beide entstehen bei der nächsten Registrierung oder Prüfung neu |
+| `_work/` | Die Jobs | Nichts Erhaltenswertes. Checkouts und Build-Ausgaben, der größte Posten auf der Platte, und er wächst |
+
+Beim Wiederherstellen zählt der Eigentümer: alles muss am Ende UID 1001 gehören, dasselbe
+`sudo chown -R 1001:1001 config runners` wie bei der Erstinstallation. `GET /ready` schreibt
+tatsächlich eine Testdatei in das runners-Verzeichnis und ist damit der schnellste Weg zu
+bestätigen, dass eine Wiederherstellung wirklich brauchbar ist.
+
+### Hinter einem Reverse Proxy
+
+Der Manager spricht einfaches HTTP und bringt kein eigenes TLS mit; der Proxy terminiert TLS. Das
+wiegt hier schwerer als sonst: Basic Auth sendet das Passwort bei jeder Anfrage, und ohne TLS geht
+es bei jeder einzelnen im Klartext über das Netz.
+
+Die Cross-Site-Prüfung braucht keine Konfiguration. Sie liest `Sec-Fetch-Site`, das der Browser
+lokal berechnet — ein Proxy, der `Host` umschreibt, kann sie nicht brechen. `TRUSTED_ORIGINS` ist
+der Notausgang für den Fall, dass es doch passiert: tragen Sie die Ursprünge so ein, wie die
+Adresszeile des Browsers sie zeigt, kommagetrennt, und beschränken Sie die Liste auf Ursprünge, die
+Sie kontrollieren. Siehe [4. Sicherheit und Validierung](#4-sicherheit-und-validierung).
+
+Richten Sie den Health-Check des Proxys auf `/health` und, falls vorhanden, sein Readiness-Gate auf
+`/ready`; beide bleiben ohne Authentifizierung. Exponieren Sie `/metrics` nicht öffentlich: mit
+Basic Auth verlangt es Zugangsdaten, ohne Basic Auth ist es so offen wie alles andere.
+
 ### Version und Logs
 
 `GET /version` gibt die Version zurück und sonst nichts. Build-Details fehlen bewusst:

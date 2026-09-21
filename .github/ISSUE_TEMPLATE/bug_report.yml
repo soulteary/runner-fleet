@@ -1,0 +1,106 @@
+name: Bug report / 问题反馈
+description: Something does not work as documented / 与文档描述的行为不一致
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        排障几乎总是要先问这几件事，所以直接放在这里了——填好它们通常能省掉一轮来回。
+        Troubleshooting almost always starts with the same few questions, so they are asked up
+        front. Filling them in usually saves a round trip.
+
+        安全漏洞请勿走这里，见 [SECURITY.md](https://github.com/soulteary/runner-fleet/blob/main/SECURITY.md)。
+        Do not report vulnerabilities here — see SECURITY.md.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 你做了什么、期望看到什么、实际看到什么。/ What you did, what you expected, what you got.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: |
+        `GET /version`，或镜像 tag，或 `runner-manager -version`。
+        From `GET /version`, the image tag, or `runner-manager -version`.
+      placeholder: v1.7.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 运行形态 / Mode
+      description: |
+        `runners.container_mode`——每个 Runner 独立容器，还是 Runner 进程跑在 Manager 容器内。
+        Whether each runner gets its own container, or the runner processes live inside the Manager.
+      options:
+        - "默认 / default (container_mode: false)"
+        - "容器模式 / container mode (container_mode: true)"
+        - 不确定 / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Job 内 Docker 后端 / In-job Docker backend
+      description: |
+        `runners.job_docker_backend`。这一项决定 Job 能碰到什么，很多问题只在其中一种下出现。
+        It decides what a job can reach, and several problems only appear under one of them.
+      options:
+        - dind
+        - host-socket
+        - none
+        - 不确定 / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: preflight
+    attributes:
+      label: 启动自检输出 / Startup self-check output
+      description: |
+        `docker compose logs runner-manager | grep '\[preflight'`
+
+        它在启动时检查 runners 目录、Docker 可达性、网络、Runner 镜像与 Job Docker 后端，
+        失败项会带上可直接执行的修复命令。**正文目前是中文**（已知边界，见使用指南第 1 节）。
+
+        It checks the runners directory, Docker reachability, the network, the runner image and
+        the in-job Docker backend at boot, and names a fix for each failing item. The text is
+        currently Chinese — a known limit, see section 1 of the User Guide.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志 / Relevant logs
+      description: |
+        `docker compose logs runner-manager --tail=200`。请先去掉 token 与密码。
+        Please strip tokens and passwords first.
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 配置 / Configuration
+      description: |
+        `config/config.yaml` 里相关的部分，或 `.env` 里设的变量名（**不要贴取值**）。
+        The relevant part of `config/config.yaml`, or which variables you set in `.env`
+        (names, **not values**).
+      render: yaml
+
+  - type: input
+    id: host
+    attributes:
+      label: 宿主机 / Host
+      description: |
+        发行版与架构，以及 `docker version` 的 Server 版本。本工具仅支持 Linux 上的
+        amd64 / arm64。
+        Distro and architecture, plus the Server version from `docker version`. This tool is
+        Linux-only, on amd64 / arm64.
+      placeholder: Ubuntu 24.04, arm64, Docker 27.3.1

@@ -270,6 +270,71 @@ scrape_configs:
       password: <BASIC_AUTH_PASSWORD>
 ```
 
+### Mise à niveau
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Aucun runner n'a besoin d'être réenregistré : son identité vit dans son répertoire d'installation, que la mise à niveau ne touche pas.
+
+En mode conteneur, les conteneurs runner existent toujours avec l'**ancienne** image, car image,
+réseau, répertoire monté et le reste sont figés au moment du `docker create`. Le Manager le
+remarque et le répare de lui-même : un runner **arrêté** est reconstruit à son prochain démarrage,
+un runner **en cours** est signalé « config modifiée » et reconstruit quand vous cliquez sur
+Recréer ou que vous l'arrêtez et le redémarrez à vide. Deux détails déterminent si la nouvelle
+image est bien là pour servir de base :
+
+- Un **tag de version** se récupère tout seul : après un changement de version, le nouveau tag
+  `-runner` n'est pas présent localement, donc `docker create` le télécharge.
+- Un **tag mutable** (`:main`, ou le même tag de version reconstruit) se résout déjà localement,
+  donc `docker create` réutilise l'image périmée. Récupérez-la vous-même d'abord —
+  `docker pull <image runner>`. La dérive se compare sur l'**ID** d'image autant que sur la
+  référence : une fois le pull effectué, la reconstruction a lieu comme d'habitude.
+
+`runners.resources` est le seul réglage qui atteigne un conteneur existant sans reconstruction : le
+Manager l'applique avec `docker update` au démarrage, donc passer à une version qui gère les
+limites n'oblige pas à tout recréer.
+
+Lisez le [journal des modifications](../../CHANGELOG.md) de la version visée — les changements incompatibles et tout ce qui demande une étape manuelle y sont signalés.
+
+### Ce qu'il faut sauvegarder
+
+Le README dit que la configuration est votre sauvegarde. C'est vrai de la *configuration*, pas de
+l'*identité* : les identifiants d'un runner vivent dans son répertoire d'installation, et sans eux
+un déploiement restauré doit être réenregistré à la main.
+
+Sauvegardez `config/config.yaml` et chaque répertoire `runners/<nom>/`, en excluant `_work/`.
+
+| Dans `runners/<nom>/` | Écrit par | Si vous le perdez |
+|---|---|---|
+| `.runner`, `.credentials_rsaparams` et les autres fichiers écrits par `config.sh` | actions/runner | Le runner est perdu. Réenregistrez-le, et supprimez d'abord l'entrée périmée sur GitHub — un nouvel enregistrement sous le même nom échoue tant que l'ancien est listé |
+| `.agent_token` | Manager (mode `0600`) | Régénéré ; le conteneur est signalé comme dérivé et reconstruit à son prochain démarrage |
+| `.github_check_token` | Vous, optionnellement | La vérification de visibilité s'arrête, et supprimer le runner ne peut plus le désenregistrer de GitHub |
+| `.registration_result.json`, `.github_status.json` | Manager | Cosmétique — les deux sont reconstruits au prochain enregistrement ou contrôle |
+| `_work/` | Les jobs | Rien à conserver. Ce sont des checkouts et des artefacts de build, c'est le plus gros poste sur disque, et il grossit |
+
+Le propriétaire compte à la restauration : tout doit finir possédé par l'UID 1001, le même
+`sudo chown -R 1001:1001 config runners` qu'à la première installation. `GET /ready` écrit
+réellement un fichier de test dans le répertoire runners : c'est donc le moyen le plus rapide de
+confirmer qu'une restauration est réellement exploitable.
+
+### Derrière un reverse proxy
+
+Le Manager parle HTTP en clair et n'a pas de TLS propre : c'est le proxy qui termine TLS. Cela
+compte davantage ici qu'ailleurs, car Basic Auth envoie le mot de passe à chaque requête, et sans
+TLS il traverse le réseau en clair à chaque fois.
+
+Le contrôle intersites ne demande aucune configuration. Il lit `Sec-Fetch-Site`, que le navigateur
+calcule localement : un proxy qui réécrit `Host` ne peut pas le casser. `TRUSTED_ORIGINS` est la
+porte de sortie pour le cas où cela arriverait — listez les origines telles que la barre d'adresse
+du navigateur les affiche, séparées par des virgules, et limitez la liste aux origines que vous
+contrôlez. Voir [4. Sécurité et validation](#4-sécurité-et-validation).
+
+Pointez le health check du proxy sur `/health` et sa barrière de disponibilité, s'il en a une, sur
+`/ready` ; les deux restent sans authentification. N'exposez pas `/metrics` publiquement : avec
+Basic Auth activé il exige des identifiants, et sans Basic Auth il est aussi ouvert que le reste.
+
 ### Version et logs
 
 `GET /version` retourne la version et rien d'autre. Les détails de build en sont délibérément

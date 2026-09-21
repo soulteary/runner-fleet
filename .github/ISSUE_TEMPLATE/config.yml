@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞 / Security vulnerability
+    url: https://github.com/soulteary/runner-fleet/security/advisories/new
+    about: 请勿公开提交安全问题，走私密通报。Do not report vulnerabilities publicly — use the private advisory form.
+  - name: 使用指南 / User Guide
+    url: https://github.com/soulteary/runner-fleet/blob/main/docs/guide.md
+    about: 部署、配置、运维与排障。Deployment, configuration, operations and troubleshooting.

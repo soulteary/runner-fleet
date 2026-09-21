@@ -266,6 +266,61 @@ scrape_configs:
       password: <BASIC_AUTH_PASSWORD>
 ```
 
+### 升级
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+不需要重新注册任何 Runner：Runner 的身份存在各自的安装目录里，升级不碰那里。
+
+容器模式下，Runner 容器仍然是用**旧的** Runner 镜像建出来的——镜像、网络、挂载目录这些都只在
+`docker create` 那一刻定死。Manager 会自己发现并修好：**已停止**的 Runner 在下次启动时重建，
+**正在运行**的标上「配置已变更」，等你点「重建容器」或在它空闲时停止再启动。新镜像到底在不在本地、
+能不能拿来重建，取决于两件事：
+
+- **版本 tag** 会自己拉下来：升版本之后新的 `-runner` tag 本地没有，`docker create`
+  会去取。
+- **可变 tag**（`:main`，或同一个版本 tag 重新构建过）本地已经解析得到，`docker create` 会直接复用那个
+  旧镜像。先自己拉一次——`docker pull <Runner 镜像>`。漂移比对的是镜像 **ID** 而不只是引用，所以拉完
+  重建照常发生。
+
+`runners.resources` 是唯一一个不重建也能作用到已有容器的配置项：Manager 在启动时用 `docker update`
+施加它，所以升级到支持资源上限的版本不需要把所有容器推倒重来。
+
+升级前读一下目标版本的[变更日志](../../CHANGELOG.md)——破坏性变更和需要手工处理的步骤都写在那里。
+
+### 该备份什么
+
+README 说配置就是你的备份。这话对**配置**成立，对**身份**不成立：Runner 的凭据存在它自己的安装目录里，
+没有它，恢复出来的部署只能一个个重新注册。
+
+备份 `config/config.yaml`，以及每个 `runners/<名称>/` 目录（`_work/` 除外）。
+
+| `runners/<名称>/` 里的 | 谁写的 | 丢了会怎样 |
+|---|---|---|
+| `.runner`、`.credentials_rsaparams` 等 `config.sh` 写下的文件 | actions/runner | 这个 Runner 就没了。需要重新注册，且要先到 GitHub 上把那条残留删掉——旧的还在列表里时，同名重新注册会失败 |
+| `.agent_token` | Manager（权限 `0600`） | 会重新生成；该容器被判为漂移，下次启动时重建 |
+| `.github_check_token` | 你放的，可选 | 可见性检查停止，删除 Runner 时也不能再从 GitHub 注销 |
+| `.registration_result.json`、`.github_status.json` | Manager | 无关紧要——下一次注册或检查就会重新生成 |
+| `_work/` | Job 自己 | 没有值得留的。里面是检出的代码与构建产物，是磁盘上最大的一块，而且一直在长 |
+
+恢复时属主很关键：所有东西最终都要属于 UID 1001，和第一次安装时那条
+`sudo chown -R 1001:1001 config runners` 一样。`GET /ready` 会往 runners 目录真写一个探测文件，
+所以它是确认「恢复出来的东西真能用」最快的办法。
+
+### 放在反向代理后面
+
+Manager 只说 HTTP，自己不带 TLS，所以由代理终结 TLS。这一点在这里比平常更要紧：Basic Auth 每个请求
+都带上密码，没有 TLS 就是每个请求都把它明文发一遍。
+
+跨站检查不需要配置。它读的是 `Sec-Fetch-Site`，由浏览器在本地算出，代理改写 `Host` 破坏不了它。
+`TRUSTED_ORIGINS` 是万一真被误判时的逃生口——按浏览器地址栏里看到的来源填，逗号分隔，
+且只填你自己控制的域名。见[四、安全与校验](#四安全与校验)。
+
+把代理的健康检查指到 `/health`，如果它有就绪门控就指到 `/ready`，两者都免鉴权。
+不要把 `/metrics` 暴露到公网：启用 Basic Auth 时它要凭据，没启用时它和其它接口一样敞着。
+
 ### 版本与日志
 
 `GET /version` 只返回版本号。构建细节是刻意不放的：`go_version` 能让任何人把一条已公布的 Go

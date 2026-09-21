@@ -1,0 +1,51 @@
+# Security Policy
+
+## Reporting a vulnerability
+
+Report privately through GitHub's
+[security advisory form](https://github.com/soulteary/runner-fleet/security/advisories/new).
+It reaches the maintainer without the report being public first.
+
+Please do not open a public issue for a vulnerability. If the advisory form is unavailable to you,
+open an issue that says only that you have a security report and asks for a contact — no details.
+
+Useful in a report: the version or image tag, whether the deployment uses container mode, which
+`job_docker_backend` it runs, and what an attacker needs to reach (the network position, and
+whether Basic Auth is enabled).
+
+This is a small project with no SLA. Expect acknowledgement rather than a fix on a schedule.
+
+## What this tool holds
+
+Worth knowing when judging a deployment or a report. Each is documented in the
+[User Guide](docs/guide.md) at the section named.
+
+| Secret | Where | Notes |
+|---|---|---|
+| Runner registration credentials | `runners/<name>/.credentials_rsaparams`, written by `config.sh` | The RSA private key the runner authenticates to GitHub with. actions/runner sets no Unix permissions on it, so the **directory** mode is what protects it. New directories are created `0700`; ones created by older versions stay `0755` and are named by the startup self-check with the `chmod` to run |
+| Optional PAT | `runners/<name>/.github_check_token` | Used for the GitHub visibility check and to deregister a runner on delete. Org needs `admin:org`, repo needs `repo`. `chmod 600` it |
+| Agent token | `runners/<name>/.agent_token`, mode `0600` | Generated per runner by the Manager and injected as `AGENT_TOKEN`. Without it, any container on the same Docker network could call the Agent's `/start` and `/stop` |
+| Basic Auth password | `BASIC_AUTH_PASSWORD` | Optional and **off by default** |
+
+## Exposure worth understanding before deploying
+
+None of these are bugs; they are what the tool is. They are listed because a deployment that does
+not account for them is the more likely problem.
+
+- **No authentication by default.** Without `BASIC_AUTH_PASSWORD` the UI and the whole API are
+  open to anyone who can reach the port. Bind to localhost or an internal network, or set a
+  password. See [4. Security and validation](docs/guide.md#4-security-and-validation).
+- **`job_docker_backend: host-socket` gives jobs the host.** A job can bind-mount any host path
+  through the shared Docker socket. That is the point of the backend, and it means a workflow you
+  run is as trusted as root on that machine. `dind` isolates instead.
+- **The Manager needs the host Docker socket in container mode.** Access to it is equivalent to
+  root on the host.
+- **Anyone who can add a runner can run code.** Adding a runner and pointing it at a repository
+  you control is a normal use of the UI, so the UI's access boundary is the real boundary.
+- **`/metrics` requires auth when Basic Auth is on; `/health` and `/ready` never do.** Probes
+  carry no credentials, and neither probe reveals which check failed. See
+  [5. Operations](docs/guide.md#5-operations).
+
+## Supported versions
+
+The latest release. Fixes go into a new release rather than being backported.

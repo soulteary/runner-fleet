@@ -10,6 +10,55 @@
 
 - Go 1.27 ([go.mod](../../go.mod)과 일치).
 
+## 아키텍처
+
+프로세스는 셋. 알아둘 가치가 있는 것은 각자가 무엇을 맡는가입니다.
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+다이어그램의 라벨은 모든 번역본에서 영어로 둡니다. 프로세스 이름, 경로, 엔드포인트이며
+식별자를 번역하면 읽기 쉬워지기는커녕 grep만 어려워집니다.
+
+**Manager는 오케스트레이션만 하고 Runner를 품지 않습니다.** 컨테이너 모드에서는 각 Runner가 자신의
+컨테이너가 되며, Manager가 호스트의 Docker socket을 통해 만듭니다 — Manager에게 그 socket이 필요하고
+DinD를 가리켜서는 안 되는 이유가 이것입니다. 기본 모드에서는 Agent도 Runner 컨테이너도 없습니다.
+Runner 프로세스는 Manager 자신의 컨테이너 안에서 돌고, Manager가 `/proc`을 직접 읽습니다.
+
+**상태는 프로세스 경계를 넘으므로 HTTP를 탑니다.** Manager와 Runner 컨테이너는 PID namespace가 달라
+Manager가 Runner의 프로세스를 볼 수 없습니다. 그래서 Agent에게 묻고, Agent가 자기 `/proc`을 읽습니다.
+이 호출에는 Runner별 bearer 토큰이 실립니다 — 같은 Docker 네트워크의 어떤 컨테이너든 Agent의
+`/start`와 `/stop`에 닿을 수 있기 때문입니다. 호출이 실패하면 답은 `installed`가 아니라 `unknown`입니다.
+"등록되었지만 실행 중이 아니니 시작하자"가 애초에 닿지도 못한 Runner에 대해 발동해서는 안 됩니다.
+[실행 상태를 판정하는 방법](#실행-상태를-판정하는-방법)을 참조하세요.
+
+**아홉 가지가 `docker create` 시점에 고정**되고 그 뒤로는 바뀌지 않습니다: 컨테이너 이름, 이미지,
+네트워크, 마운트 디렉터리, Job 내 Docker 백엔드, DinD 호스트, docker GID, Agent 토큰, 그리고 리소스
+상한. `docker start`는 이미 만들어진 것을 그대로 다시 띄울 뿐이므로, 설정만 바꿔서는 기존 컨테이너에
+결코 닿지 않습니다. 드리프트 감지가 존재하는 이유가 전부 이것입니다 — Manager는 각 컨테이너의 실제
+생성 파라미터를 현재 설정과 대조해, **중지된** 것은 다음 시작 때 다시 만들고 **실행 중인** 것은 Job을
+끊는 대신 표시만 합니다. 이미지는 참조뿐 아니라 ID로도 비교하므로 같은 tag를 다시 빌드한 경우도
+포함됩니다.
+
 ## 빌드
 
 ```bash
