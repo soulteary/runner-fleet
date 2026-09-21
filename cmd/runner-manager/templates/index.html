@@ -152,6 +152,8 @@
     .github-link:hover { text-decoration: none; opacity: 0.85; }
     .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
     .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+    /* 相对时间下面再给出准确时刻：前者回答「是不是卡住了」，后者用于对日志 */
+    .modal-body .row .val .ts-abs { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
     .btn-reveal-fix {
       padding: 4px 10px;
       font-size: 12px;
@@ -186,6 +188,11 @@
     .msg-wrap-actions .btn-close-msg { padding: 6px 14px; font-size: 13px; background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
     .msg-wrap-actions .btn-close-msg:hover { color: var(--text); border-color: var(--text); }
     .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+    .list-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .list-toolbar .autorefresh { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
+    .list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
+    .refresh-status { color: var(--muted); font-size: 12px; }
+    .refresh-status.err { color: var(--warn); }
     .parse-box {
       margin-bottom: 20px;
       padding-bottom: 20px;
@@ -234,8 +241,7 @@
     .reg-err { color: var(--danger); font-size: 12px; }
     .probe-err { color: var(--danger); font-size: 12px; }
     /* ===== Toast ===== */
-    /* 原先启停、复制、报错一律走原生 alert：它会阻塞整个页面，样式也和这套暗色界面
-       格格不入。探测失败那条路径更是 alert → confirm → alert 连开三个系统弹窗。 */
+    /* 取代原生 alert：它阻塞整个页面，样式也和这套暗色界面格格不入。 */
     .toast-wrap { position: fixed; right: 20px; bottom: 20px; z-index: 200; display: flex; flex-direction: column; gap: 10px; width: min(420px, calc(100vw - 40px)); }
     .toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: 12px 14px; font-size: 13px; color: var(--text); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 8px; }
     .toast.ok { border-left-color: var(--success); }
@@ -271,6 +277,10 @@
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">{{index .T "runner_list.hint"}}</p>
+    <div class="list-toolbar">
+      <label class="autorefresh"><input type="checkbox" id="autoRefreshToggle" checked>{{index .T "autorefresh.label"}}</label>
+      <span id="refreshStatus" class="refresh-status" aria-live="polite"></span>
+    </div>
     <table>
       <thead>
         <tr>
@@ -283,64 +293,7 @@
           <th></th>
         </tr>
       </thead>
-      <tbody>
-        {{range .Runners}}
-        <tr>
-          <td>{{.Name}}</td>
-          <td>{{.TargetType}}: {{.Target}}</td>
-          <td>
-            <span class="badge {{.Status}}">{{.Status}}</span>
-            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
-            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
-                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
-            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
-            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
-          </td>
-          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
-          <td>
-            {{if .RegistrationMessage}}
-              {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
-                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
-              {{else}}
-                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
-              {{end}}
-            {{else}}
-              <span class="github-unknown">—</span>
-            {{end}}
-            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
-                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
-            {{if .GitHubYes}}
-              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
-            {{else if .GitHubNo}}
-              <br><span class="github-no">{{index $.T "github.no"}}</span>
-            {{else if .GitHubCheckAt}}
-              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
-            {{else if .RegistrationMessage}}
-              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
-            {{end}}
-          </td>
-          <td class="path">{{.InstallDir}}</td>
-          <td>
-            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
-            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
-            {{if eq .Status "unknown"}}
-            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
-            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
-            {{end}}
-            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
-            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
-            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
-            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
-          </td>
-        </tr>
-        {{end}}
-        {{if not .Runners}}
-        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
-        {{end}}
-      </tbody>
+      <tbody id="runnerRowsBody">{{template "runnerRows" .}}</tbody>
     </table>
   </div>
 
@@ -401,7 +354,7 @@
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
-          <div class="row"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
+          <div class="row" id="vProbeErrorTypeRow"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
           <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
           <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
           <div class="row" id="vProbeFixCmdRow"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
@@ -472,6 +425,7 @@
       (actions || []).forEach(function(a) {
         const b = document.createElement('button');
         b.type = 'button';
+        // 这里不能套 .btn-view/.btn-del：那两个类名同时是行操作的行为选择器
         b.className = 'btn-neutral';
         b.textContent = a.label;
         b.addEventListener('click', function() { dismissToast(el); a.onClick(); });
@@ -806,6 +760,49 @@
       document.getElementById('addMsgWrap').style.display = 'none';
       location.reload();
     });
+    // 「上次检查于 2026-09-21T09:00:00Z」这种原样输出的 RFC3339，得在脑子里换算
+    // 成「多久以前」才有用——而这一栏真正要回答的就是「检查是不是卡住了」。
+    // 相对时间交给 Intl.RelativeTimeFormat：复数和各语言说法它自己处理，
+    // 不必为此再铺一套六种语言的文案。
+    function relativeTime(d, lang) {
+      if (typeof Intl === 'undefined' || !Intl.RelativeTimeFormat) return '';
+      try {
+        const rtf = new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' });
+        const diff = (d.getTime() - Date.now()) / 1000;
+        const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+        for (let i = 0; i < units.length; i++) {
+          if (Math.abs(diff) >= units[i][1]) return rtf.format(Math.round(diff / units[i][1]), units[i][0]);
+        }
+        return rtf.format(Math.round(diff), 'second');
+      } catch (_) {
+        return '';
+      }
+    }
+    // 相对时间放主行，准确时刻放下面一行小字：前者回答「是不是卡住了」，
+    // 后者用来和日志对时间。解析不了就原样显示，别把信息弄丢。
+    function renderTimestamp(el, iso) {
+      el.textContent = '';
+      if (!iso) { el.textContent = '—'; return; }
+      const lang = document.documentElement.lang || 'en';
+      const d = new Date(iso);
+      const rel = isNaN(d.getTime()) ? '' : relativeTime(d, lang);
+      if (!rel) { el.textContent = iso; return; }
+      el.appendChild(document.createTextNode(rel));
+      const abs = document.createElement('span');
+      abs.className = 'ts-abs';
+      // 跟着页面语言而不是浏览器 locale：界面已经切到中文了，
+      // 下面这行还按系统 locale 显示会很割裂
+      abs.textContent = d.toLocaleString(lang);
+      el.appendChild(abs);
+    }
+    // 健康的 Runner 上这 5 行全是「—」，占掉三栏网格的一大半
+    const PROBE_ROW_IDS = ['vProbeErrorTypeRow', 'vProbeSuggestionRow', 'vProbeCheckCmdRow', 'vProbeFixCmdRow', 'vProbeErrorRow'];
+    function setProbeRowsVisible(on) {
+      PROBE_ROW_IDS.forEach(function(id) {
+        const row = document.getElementById(id);
+        if (row) row.style.display = on ? '' : 'none';
+      });
+    }
     // 超过这个长度的值挤在三分之一栏里会折成一条细柱，不如铺满一行
     const WIDE_ROW_CHARS = 40;
     function setRowWide(rowId, text) {
@@ -914,6 +911,7 @@
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
             document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
             const probeError = resolveProbeError(data);
+            setProbeRowsVisible(!!probeError);
             document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
             document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
             currentProbeCheckCommand = probeError ? resolveProbeCheckCommand(data) : '';
@@ -931,7 +929,7 @@
             setRowWide('vProbeFixCmdRow', probeError ? resolveProbeFixCommand(data) : '');
             setRowWide('vProbeErrorRow', probeError);
             setRowWide('vRegistrationMessageRow', data.registration_message);
-            document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
+            renderTimestamp(document.getElementById('vRegistrationCheckedAt'), data.registration_checked_at);
             var gh = data.registered_on_github;
             var ghEl = document.getElementById('vRegisteredOnGitHub');
             var ghLink = document.getElementById('vGitHubLink');
@@ -956,7 +954,7 @@
             if (data.github_busy === true) busyEl.textContent = t('modal.gh_busy');
             else if (data.github_busy === false) busyEl.textContent = t('modal.gh_idle');
             else busyEl.textContent = t('modal.gh_busy_unknown');
-            document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
+            renderTimestamp(document.getElementById('vGitHubCheckAt'), data.github_check_at);
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');
             const stopBtn = document.getElementById('modalStopBtnFooter');
@@ -1055,26 +1053,37 @@
       }
     });
 
-    document.querySelectorAll('.btn-view').forEach(btn => {
-      btn.addEventListener('click', () => openModal('view', btn.getAttribute('data-name')));
-    });
-    document.querySelectorAll('.btn-edit').forEach(btn => {
-      btn.addEventListener('click', () => openModal('edit', btn.getAttribute('data-name')));
-    });
-
-    document.querySelectorAll('.btn-del').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = btn.getAttribute('data-name');
-        if (!name || !(await confirmDialog(t('confirm_remove').replace('{{"{{"}}name{{"}}"}}', name)))) return;
-        setRowBusy(btn, true);
-        try {
-          const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
-          const data = await r.json().catch(() => ({}));
-          if (r.ok) { location.reload(); return; }
-          showToast(data.message || r.statusText || t('msg.request_failed'), 'err');
-        } catch (e) { showToast(e.message, 'err'); }
-        setRowBusy(btn, false);
-      });
+    async function removeRunner(name, btn) {
+      if (!name || !(await confirmDialog(t('confirm_remove').replace('{{"{{"}}name{{"}}"}}', name)))) return;
+      setRowBusy(btn, true);
+      try {
+        const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) { location.reload(); return; }
+        showToast(data.message || r.statusText || t('msg.request_failed'), 'err');
+      } catch (e) { showToast(e.message, 'err'); }
+      setRowBusy(btn, false);
+    }
+    // 行内按钮走事件委托而不是逐个 addEventListener：自动刷新会整体替换 <tbody>，
+    // 直接绑在按钮上的监听在第一次刷新之后就全部失效了。
+    const runnerRowsBody = document.getElementById('runnerRowsBody');
+    runnerRowsBody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-name]');
+      if (!btn || !runnerRowsBody.contains(btn)) return;
+      const name = btn.getAttribute('data-name');
+      if (!name) return;
+      // 按钮一路传下去，忙碌态才知道该给哪一行置灰
+      if (btn.classList.contains('btn-view')) openModal('view', name);
+      else if (btn.classList.contains('btn-edit')) openModal('edit', name);
+      else if (btn.classList.contains('btn-del')) removeRunner(name, btn);
+      else if (btn.classList.contains('btn-start')) runnerAction(name, 'start', btn);
+      else if (btn.classList.contains('btn-stop')) runnerAction(name, 'stop', btn);
+      // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
+      else if (btn.classList.contains('btn-recreate')) {
+        confirmDialog(fillVars(t('confirm_recreate'), { name: name })).then(function(ok) {
+          if (ok) runnerAction(name, 'recreate', btn);
+        });
+      }
     });
 
     async function runnerAction(name, action, btn) {
@@ -1088,8 +1097,9 @@
           const probeError = resolveProbeError(data);
           if (!probeError) { location.reload(); return; }
           // 探测失败不再连开三个原生弹窗（alert → confirm → alert）：一条 toast 给结论，
-          // 「查看详情」直接打开已有的查看弹窗——检查命令、修复命令连同它那套
-          // 「先展示、确认后再复制」的保护都已经在那里，不必在这里重来一遍。
+          // 「查看详情」直接打开已有的查看弹窗——检查命令、修复命令连同那套
+          // 「先展示、确认后再复制」的保护都已经在那里，不必重来一遍。
+          // 这里不整页 reload，否则 toast 当场就没了；列表由自动刷新兜住。
           showToast(
             (data.message || t('msg.action_done')) +
             '\n' + t('probe.alert_type') + resolveProbeType(data) +
@@ -1125,24 +1135,123 @@
       const ok = await copyCommandText(currentProbeFixCommand);
       showToast(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'), ok ? 'ok' : 'err');
     });
-    document.querySelectorAll('.btn-start').forEach(btn => {
-      if (btn.id === 'modalStartBtnFooter') return;
-      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'start', btn));
+    // ===== 列表自动刷新 =====
+    // 「忙碌中」和「GitHub ✓」本来就是后台约 5 分钟一次的检查结果，页面不刷新
+    // 就永远看不到它们变化，这两列在日常使用中等于是死的。
+    // 拉的是 /api/runner-rows 渲染好的 <tbody> 片段（和首屏同一个模板），
+    // 而不是 /api/runners 的 JSON 自己拼行——行里 GitHubYes/GitHubNo 这类三态
+    // 判断在 JS 里重写一遍，正是最容易把「空闲」显示成「忙碌中」的地方。
+    const REFRESH_MS = 15000;
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    const refreshStatusEl = document.getElementById('refreshStatus');
+    let refreshTimer = null;
+    let refreshing = false;
+
+    function refreshPaused() {
+      // 弹窗开着时刷新没意义（用户看的是弹窗里的数据）；标签页不可见时也不必打扰
+      // 服务端——容器模式下每刷新一次都要对每台 runner 做一次 docker inspect。
+      // 确认框也要算进去：正等用户确认删除时把 <tbody> 换掉，那一行会在脚下消失
+      return !autoRefreshToggle.checked || document.hidden ||
+        modal.classList.contains('show') || confirmModal.classList.contains('show');
+    }
+
+    async function refreshRows() {
+      if (refreshing || refreshPaused()) return;
+      refreshing = true;
+      try {
+        const r = await fetch('/api/runner-rows', { headers: { 'Accept': 'text/html' } });
+        if (!r.ok) throw new Error(r.statusText);
+        const html = await r.text();
+        // 再判一次：请求在途的这段时间里用户可能已经打开弹窗或关掉了自动刷新
+        if (!refreshPaused()) {
+          runnerRowsBody.innerHTML = html;
+          refreshStatusEl.className = 'refresh-status';
+          refreshStatusEl.textContent = fillVars(t('autorefresh.updated'), { time: new Date().toLocaleTimeString() });
+        }
+      } catch (_) {
+        refreshStatusEl.className = 'refresh-status err';
+        refreshStatusEl.textContent = t('autorefresh.failed');
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    autoRefreshToggle.addEventListener('change', function() {
+      try { localStorage.setItem('runnerFleetAutoRefresh', this.checked ? '1' : '0'); } catch (_) {}
+      if (this.checked) { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = ''; refreshRows(); }
+      else { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = t('autorefresh.paused'); }
     });
-    document.querySelectorAll('.btn-stop').forEach(btn => {
-      if (btn.id === 'modalStopBtnFooter') return;
-      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'stop', btn));
-    });
-    // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
-    document.querySelectorAll('.btn-recreate').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = btn.getAttribute('data-name');
-        if (!name || !(await confirmDialog(fillVars(t('confirm_recreate'), { name: name })))) return;
-        runnerAction(name, 'recreate', btn);
-      });
-    });
+    try {
+      if (localStorage.getItem('runnerFleetAutoRefresh') === '0') autoRefreshToggle.checked = false;
+    } catch (_) {}
+    if (!autoRefreshToggle.checked) refreshStatusEl.textContent = t('autorefresh.paused');
+    // 标签页切回来时立刻补一次，不用干等下一个周期
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRows(); });
+    refreshTimer = setInterval(refreshRows, REFRESH_MS);
     document.getElementById('modalStartBtnFooter').addEventListener('click', function() { runnerAction(this.getAttribute('data-name'), 'start', this); });
     document.getElementById('modalStopBtnFooter').addEventListener('click', function() { runnerAction(this.getAttribute('data-name'), 'stop', this); });
   </script>
 </body>
 </html>
+
+{{/* runnerRows：列表的 <tbody> 内容。首屏由页面直接展开，自动刷新时由
+     /api/runner-rows 单独渲染同一个片段——两条路径共用一份行渲染逻辑，
+     GitHubYes/GitHubNo 这类三态判断不必在 JS 里再写一遍。 */}}
+{{define "runnerRows"}}
+        {{range .Runners}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.TargetType}}: {{.Target}}</td>
+          <td>
+            <span class="badge {{.Status}}">{{.Status}}</span>
+            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
+            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
+                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
+            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
+            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
+            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+          </td>
+          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
+          <td>
+            {{if .RegistrationMessage}}
+              {{if and (eq .Status "installed") .GitHubURL}}
+                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
+                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+              {{else}}
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+              {{end}}
+            {{else}}
+              <span class="github-unknown">—</span>
+            {{end}}
+            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
+                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
+            {{if .GitHubYes}}
+              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
+            {{else if .GitHubNo}}
+              <br><span class="github-no">{{index $.T "github.no"}}</span>
+            {{else if .GitHubCheckAt}}
+              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
+            {{else if .RegistrationMessage}}
+              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
+            {{end}}
+          </td>
+          <td class="path">{{.InstallDir}}</td>
+          <td>
+            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
+            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
+            {{if eq .Status "unknown"}}
+            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
+            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
+            {{end}}
+            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
+            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
+            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
+            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
+          </td>
+        </tr>
+        {{end}}
+        {{if not .Runners}}
+        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
+        {{end}}
+{{end}}

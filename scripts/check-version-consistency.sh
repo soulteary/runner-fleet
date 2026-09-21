@@ -8,6 +8,9 @@
 # docker compose up -d 默认拉到的是落后三个版本的镜像。只改数值不建机制的话，
 # 下次还会漏。
 #
+# 这个校验该不该搬进 soulteary/ci-recipes（以及为什么仓库里其余几处 shell 不该搬），
+# 见 docs/ci-recipes-migration.md。
+#
 # 用法: sh scripts/check-version-consistency.sh
 
 set -e
@@ -24,7 +27,12 @@ fi
 
 echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 
-# CHANGELOG 天然包含所有历史版本号，不参与校验
+raw=$(mktemp)
+list=$(mktemp)
+tmp=$(mktemp)
+trap 'rm -f "$raw" "$list" "$tmp"' EXIT
+
+# CHANGELOG 天然包含所有历史版本号，不参与校验（见下面循环里的跳过）
 # '*Dockerfile*' 而非 'Dockerfile*'：后者只匹配仓库根目录，会漏掉
 # examples/runner-images/ 下引用了本仓库镜像 tag 的示例
 #
@@ -42,16 +50,49 @@ echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 # 里的东西（config/config.yaml、.env 这些本地文件）仍然不参与校验。
 # CI 那边检出的是干净的树，没有未跟踪文件，所以这一项对 CI 没有任何影响。
 #
+# git 的退出码单独判断，不能把它塞进管道：管道的状态取自末端的 sort/grep，git 一失败
+# （不在仓库里、索引读不了、容器里 bind mount 触发 dubious ownership）就被压成
+# 「文件清单为空」，循环一次都不进，脚本一路打到最后那句全绿。这个假绿灯复现过：在非
+# git 目录里跑，git 打 fatal not a git repository，脚本照样 exit 0，唯一一处过期版本号
+# 毫无声响地过去了。清单拿不到就是判不了，只能红。
+if ! git ls-files --cached --others --exclude-standard \
+    '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' '*.sh' '*.go' > "$raw"; then
+    echo "git ls-files 失败：拿不到待校验的文件清单，不能据此判定通过。" >&2
+    exit 1
+fi
+
 # sort -u：合并冲突期间 --cached 会把未合并路径按 stage 打印多次，去重顺带让顺序稳定。
-FILES=$(git ls-files --cached --others --exclude-standard \
-    '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' '*.sh' '*.go' |
-    sort -u | grep -v '^CHANGELOG\.md$' || true)
+sort -u "$raw" > "$list"
 
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
+# unscannable 记录「清单里有、但没能真的扫过」的文件。这类文件必须让脚本变红：
+# 扫不到等于没校验，而没校验跟校验通过是两件事。
+unscannable=0
 
-for f in $FILES; do
+# 逐行读，而不是 for f in $(...)：后者先按空白切词、再对每个词做一次路径展开，于是
+# 带空格的文件名会被拆成两个不存在的路径，双双被 [ -f ] 静默跳过。复现过：把唯一一处
+# 过期版本号放进 "stale doc.md"，脚本打印全绿。逐行读还顺带让文件名里的 * ? [ 不再被
+# 当成通配符。
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # CHANGELOG 天然包含所有历史版本号，不参与校验
+    if [ "$f" = "CHANGELOG.md" ]; then
+        continue
+    fi
+    # 含空格之外的特殊字符（换行、非 ASCII）时 git 输出的是带双引号的转义形式。
+    # 在 sh 里解这层引号不值得，但也不能当没看见——静默跳过又是一个假绿灯。
+    case "$f" in
+    '"'*)
+        echo "::error::文件名含需要转义的字符，本脚本无法校验: ${f}" >&2
+        unscannable=1
+        continue
+        ;;
+    esac
     [ -f "$f" ] || continue
+    if [ ! -r "$f" ]; then
+        echo "::error file=${f}::无法读取，未纳入版本号校验" >&2
+        unscannable=1
+        continue
+    fi
     # 逐行扫描；带 version-check-ignore 标记的行跳过，供正文合法引用历史版本号
     grep -nE 'v[0-9]+\.[0-9]+\.[0-9]+|main\.Version=[0-9]+\.[0-9]+\.[0-9]+' "$f" |
         grep -v 'version-check-ignore' |
@@ -65,7 +106,7 @@ for f in $FILES; do
                 [ "$v" = "$EXPECTED" ] || printf '%s\t%s\t%s\n' "$f" "$lineno" "$v" >> "$tmp"
             done
         done
-done
+done < "$list"
 
 if [ -s "$tmp" ]; then
     while IFS="$(printf '\t')" read -r f lineno v; do
@@ -75,6 +116,9 @@ if [ -s "$tmp" ]; then
     echo "" >&2
     echo "发布新版本时请一并更新上述位置，或修正 ${SOURCE_FILE} 中的基准版本。" >&2
     echo "若该处确需引用历史版本号（如变更说明），在该行加注释标记 version-check-ignore 即可跳过。" >&2
+fi
+
+if [ -s "$tmp" ] || [ "$unscannable" != "0" ]; then
     exit 1
 fi
 
