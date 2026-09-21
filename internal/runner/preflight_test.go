@@ -354,3 +354,73 @@ func TestParseMissingTools_RecognisesEveryRequiredTool(t *testing.T) {
 		t.Fatalf("解析出 %v，期望全部 %v", got, requiredRunnerTools)
 	}
 }
+
+// 自检崩了不该把 Manager 的启动一起带走。
+//
+// 改用 preflight-kit 之前，Preflight 是直接顺序调用各项检查的，没有任何兜底——
+// 而 checkRunnerImages / checkJobDockerBackend 这些都要起子进程去问 docker，
+// 正是最容易出意外的地方。一次 panic 就等于 Manager 起不来，
+// 而它本来只是想在启动时多告诉你几句环境状况。
+func TestRunCheck_PanicBecomesAnErrorResultInsteadOfCrashing(t *testing.T) {
+	got := runCheck(context.Background(), "会炸的检查", func(context.Context) CheckResult {
+		panic("docker 客户端里的某个 nil")
+	})
+
+	if got.Level != CheckError {
+		t.Fatalf("Level = %q，期望 %q", got.Level, CheckError)
+	}
+	if got.Name != "会炸的检查" {
+		t.Errorf("Name = %q，兜底结果应当带上检查名，否则日志里看不出是哪一项炸了", got.Name)
+	}
+	if !strings.Contains(got.Message, "docker 客户端里的某个 nil") {
+		t.Errorf("Message 里应当保留 panic 的内容，实得 %q", got.Message)
+	}
+}
+
+// 正常返回的检查不受兜底影响，结果原样透传。
+func TestRunCheck_PassesThroughNormalResults(t *testing.T) {
+	for _, want := range []CheckResult{
+		ok("甲", "一切正常"),
+		warn("乙", "有点问题", "照这个改"),
+		fail("丙", "跑不起来", "照那个改"),
+	} {
+		got := runCheck(context.Background(), "名字用不上", func(context.Context) CheckResult { return want })
+		if got != want {
+			t.Errorf("结果被改动了：%+v -> %+v", want, got)
+		}
+	}
+}
+
+// Preflight 整体也要有兜底：用例没法往真实检查里塞 panic，
+// 这里退一步——确认每一项都确实经过了 runCheck，即没有哪条路径绕开它。
+func TestPreflight_EveryCheckGoesThroughRunCheck(t *testing.T) {
+	src, err := os.ReadFile("preflight.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "func Preflight(")
+	if start < 0 {
+		t.Fatal("找不到 Preflight")
+	}
+	end := strings.Index(body[start:], "\n}\n")
+	if end < 0 {
+		t.Fatal("找不到 Preflight 的结尾")
+	}
+	fn := body[start : start+end]
+
+	// 函数体里出现的 check* 调用都必须包在 runCheck 里。
+	// checkRunnerImages 是例外：它自己内部逐项调 runCheck（每个镜像两项）。
+	for _, name := range []string{
+		"checkBasePath", "checkRunnerDirPermissions", "checkDefaultModeDocker",
+		"checkDockerReachable", "checkNetwork", "checkJobDockerBackend",
+	} {
+		if !strings.Contains(fn, name) {
+			t.Errorf("Preflight 里没有 %s，用例该更新了", name)
+		}
+	}
+	if strings.Count(fn, "runCheck(") < 6 {
+		t.Errorf("Preflight 里 runCheck 的调用数 %d 少于检查项数，可能有路径绕开了 panic 兜底:\n%s",
+			strings.Count(fn, "runCheck("), fn)
+	}
+}
