@@ -1,17 +1,31 @@
+# Example configuration. Copy it to config/config.yaml before editing.
 # 示例配置。使用前请复制为 config/config.yaml 后按需修改。
-#   mkdir -p config && cp config.yaml.example config/config.yaml
-# 详细字段说明见 docs/zh/guide.md 的「二、配置」（English: docs/guide.md）
+#   mkdir -p config runners && cp config.yaml.example config/config.yaml
 #
+# Field reference: docs/guide.md, section 2 · 字段说明见 docs/zh/guide.md 的「二、配置」
+#
+# Docker / docker-compose: set runners.base_path to /app/runners, matching the volume in the image.
 # Docker / docker-compose：请将 runners.base_path 改为 /app/runners（与镜像内卷挂载一致）
-# 全容器部署时可通过 .env 设置 CONTAINER_MODE、VOLUME_HOST_PATH、JOB_DOCKER_BACKEND 等覆盖下列注释项，无需在本文件中取消注释或填写。
+#
+# A full-container deployment can set CONTAINER_MODE, VOLUME_HOST_PATH, JOB_DOCKER_BACKEND and the
+# rest from .env instead, so none of the commented fields below need to be filled in here.
+# 全容器部署时可通过 .env 设置 CONTAINER_MODE、VOLUME_HOST_PATH、JOB_DOCKER_BACKEND 等覆盖下列
+# 注释项，无需在本文件中取消注释或填写。
 
 server:
     port: 8080
     addr: 0.0.0.0
 runners:
+    # Running locally: ./runners — in Docker: /app/runners
     # 本地运行：./runners；Docker 部署：/app/runners
     base_path: ./runners
-    items: []   # 预置 Runner 列表，也可通过 Web 界面添加
+
+    # Predefined runners. You can also add them from the web UI.
+    # 预置 Runner 列表，也可通过 Web 界面添加
+    items: []
+
+    # In container mode, image and in-job Docker backend can be overridden per runner (empty falls
+    # back to the global values below), so one machine can serve projects with different toolchains.
     # 容器模式下可按 Runner 覆盖镜像与 Job Docker 后端（留空回落下面的全局配置），
     # 便于一台机器上不同项目使用不同工具链：
     # items:
@@ -19,27 +33,48 @@ runners:
     #     target_type: repo
     #     target: soulteary/droiddesk
     #     labels: [droiddesk]
-    #     container_image: your-registry/droiddesk-runner:1   # 预装 Flutter + Android SDK
-    #     job_docker_backend: none                            # 该项目不需要 Job 内 Docker
+    #     container_image: your-registry/droiddesk-runner:1   # Flutter + Android SDK preinstalled / 预装 Flutter + Android SDK
+    #     job_docker_backend: none                            # this project needs no Docker in jobs / 该项目不需要 Job 内 Docker
 
+    # Container mode: each runner runs in its own container. The Manager starts and stops them
+    # through the host's Docker socket and shares their network.
+    # With it on, the Manager must use the host Docker — do not set DOCKER_HOST=tcp://runner-dind:2375.
     # 容器模式：每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker（socket）启停，并与 Runner 容器同网络
     # 启用后 Manager 必须使用宿主机 docker（勿设 DOCKER_HOST=tcp://runner-dind:2375）
     # container_mode: true
-    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.7.1 生成；示例：ghcr.io/soulteary/runner-fleet:v1.7.1-runner
+
+    # Left empty, the runner image is derived from FLEET_IMAGE_TAG, else the default tag.
+    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.7.1 生成
     # container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
     # container_network: runner-net
     # agent_port: 8081
+
+    # Docker inside jobs: dind (a DinD service), host-socket (mount the host socket), none.
     # Job 内 Docker 后端：dind（DinD 服务）、host-socket（挂载宿主机 socket）、none（不提供）
-    # job_docker_backend: dind   # 默认 dind；可选 host-socket、none
-    # dind_host: runner-dind     # 仅 job_docker_backend=dind 时有效
-    # docker_gid: 999            # 仅 job_docker_backend=host-socket 时有效：Runner 容器追加的 docker 组 GID，
-    #                            # 使容器内 Job 能访问挂载的 docker.sock。留空/0 表示自动探测 docker.sock 所属组
-    # volume_host_path: /absolute/path/on/host/to/runners   # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径
+    # job_docker_backend: dind   # default dind / 默认 dind
+    # dind_host: runner-dind     # only when job_docker_backend=dind / 仅 job_docker_backend=dind 时有效
+
+    # Only when job_docker_backend=host-socket: the host's docker group GID, added to runner
+    # containers so jobs can reach the mounted docker.sock. Empty or 0 detects it from docker.sock.
+    # 仅 job_docker_backend=host-socket 时有效：Runner 容器追加的 docker 组 GID，
+    # 使容器内 Job 能访问挂载的 docker.sock。留空/0 表示自动探测 docker.sock 所属组
+    # docker_gid: 999
+
+    # Required when the Manager itself runs in a container: the absolute path of the runners
+    # directory **on the host**.
+    # Manager 在容器内时必填，为宿主机上 runners 目录的绝对路径
+    # volume_host_path: /absolute/path/on/host/to/runners
+
+    # Resource limits for runner containers in container mode; empty means unlimited. Setting them
+    # is strongly recommended: unlimited, one runaway job (a Gradle daemon, say) can exhaust the
+    # machine's memory and take the Manager down with it.
     # 容器模式下 Runner 容器的资源上限，留空不限制。强烈建议设置：
     # 不限制时单个失控 Job（如 Gradle daemon）可耗尽整机内存，连带拖垮 Manager
     # resources:
     #     cpus: "2"          # --cpus
     #     memory: 4g         # --memory
-    #     memory_swap: 4g    # --memory-swap，需同时设置 memory；等于 memory 表示禁用 swap
-    #     pids_limit: 512    # --pids-limit，-1 表示不限
+    #     memory_swap: 4g    # --memory-swap, needs memory set; equal to memory disables swap / 需同时设置 memory；等于 memory 表示禁用 swap
+    #     pids_limit: 512    # --pids-limit, -1 for unlimited / -1 表示不限
+    # Changes reach existing containers too (applied with docker update on start); clearing a limit
+    # needs the container rebuilt.
     # 修改后对已存在的容器同样生效（启停时通过 docker update 施加）；清除限制需重建容器

@@ -146,3 +146,50 @@ func keysOf(m map[string]string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// TestEnvVars_ConfigOverridesAreInTheEnvTemplate config.go 读的每个变量都要出现在 .env.example 里。
+//
+// 那个文件是「全容器部署只改 .env」这条路径的全部界面，而它此前漏了三个变量，其中两个
+// （CONTAINER_IMAGE、RUNNERS_VOLUME_HOST_PATH）是别名，只有读源码才知道存在。
+//
+// 范围刻意只取 internal/config/config.go：它读的正好是「能覆盖配置文件的那一组」，
+// 也就是一份 .env 需要覆盖的全集。Agent 在容器内读的 AGENT_PORT 之类不在其中——
+// 那些由 Manager 创建容器时注入，写进模板只会是噪音。
+func TestEnvVars_ConfigOverridesAreInTheEnvTemplate(t *testing.T) {
+	repo := repoRoot(t)
+
+	src, err := os.ReadFile(filepath.Join(repo, "internal", "config", "config.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vars := map[string]bool{}
+	for _, m := range envCallRe.FindAllStringSubmatch(string(src), -1) {
+		vars[m[1]] = true
+	}
+	for name, where := range loopReadEnvVars {
+		if where == "internal/config/config.go" {
+			vars[name] = true
+		}
+	}
+	if len(vars) < 8 {
+		t.Fatalf("只在 config.go 里扫到 %d 个变量，envCallRe 可能已经匹配不上了", len(vars))
+	}
+
+	tmpl, err := os.ReadFile(filepath.Join(repo, ".env.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range keysOf(boolKeysAsMap(vars)) {
+		if !mentionsEnvVar(string(tmpl), name) {
+			t.Errorf(".env.example 里没有 %s；全容器部署只改 .env 的人会找不到它", name)
+		}
+	}
+}
+
+func boolKeysAsMap(in map[string]bool) map[string]string {
+	out := make(map[string]string, len(in))
+	for k := range in {
+		out[k] = ""
+	}
+	return out
+}

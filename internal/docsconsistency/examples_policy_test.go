@@ -26,9 +26,10 @@ const (
 // 恰恰是全仓库排障密度最高的内容（15 条带根因，英文 guide.md 的排障只有 9 条），
 // 却只有中文，且根 README 的英文入口直接往那儿送人。
 //
-// 现状是中文单语，这是取舍不是遗漏：见 docs/docs-improvement-plan.md 第 7 节，
-// 三个选项与建议都在那里，等作者拍板。在那之前，这张表至少保证**新增**一份
-// examples README 时必须在这里补一行，也就是必须先想一下它要不要译文。
+// 中文单语是**决定过的**：docs-improvement-plan.md 第 7 节的三个选项里选了 B——
+// 只把两个 .example 模板改成双语（每个用户都会复制走它们），examples/ 维持中文。
+// 这张表保证新增一份 examples README 时必须在这里补一行，也就是必须重新想一下
+// 那个取舍对它还成不成立。
 var examplesPolicy = map[string]docLang{
 	"examples/deploy/README.md":        langZhOnly,
 	"examples/runner-images/README.md": langZhOnly,
