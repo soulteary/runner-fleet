@@ -9,6 +9,8 @@
 # 比不了标题文字（本来就该被翻译），所以比标题的「层级序列」：`##` `###` 的出现次序。
 # 少一节、多一节、层级错位都会让序列对不上，而正常翻译不会改变它。
 #
+# 这个校验该不该搬进 soulteary/ci-recipes，见 docs/ci-recipes-migration.md。
+#
 # 用法: sh scripts/check-docs-structure.sh
 
 set -e
@@ -16,10 +18,20 @@ set -e
 LANGS="zh fr de ko ja"
 DOCS="development.md guide.md README.md"
 
-# headings 提取标题层级序列，跳过 ``` 围栏内的行——代码块里的 `# 注释` 不是标题
+# headings 提取标题层级序列，跳过 ``` 与 ~~~ 围栏内的行——代码块里的 `# 注释` 不是标题。
+#
+# 收栏只认开栏用的那种字符。早先只认 ```，于是 ~~~ 围栏根本不算围栏，块里顶格的
+# `# 注释` 被当成标题计进序列（实测：两个标题的文档报成 3 个）。两边都用 ~~~ 时序列
+# 一致，看不出来；一边改成 ``` 就成了凭空的红灯，反过来也能把真的结构漂移盖住。
+# 只认同种字符收栏，还顺带避免了 ``` 块里出现 ~~~ 时把围栏提前关掉。
 headings() {
     awk '
-        /^```/ { fence = !fence; next }
+        /^(```|~~~)/ {
+            marker = substr($0, 1, 1)
+            if (!fence) { fence = 1; opener = marker }
+            else if (marker == opener) { fence = 0 }
+            next
+        }
         !fence && /^#+[ \t]/ {
             match($0, /^#+/)
             print substr($0, 1, RLENGTH)
@@ -35,11 +47,15 @@ for doc in $DOCS; do
     base_seq=$(headings "$base")
     base_count=$(printf '%s\n' "$base_seq" | grep -c '#' || true)
 
+    # doc_failed 与 failed 分开记：只有一个 failed 的话，前面某个文档一失败，后面
+    # 全部一致的文档连「全部一致」那行都不再打印，看起来像是根本没检查。
+    doc_failed=0
+
     for lang in $LANGS; do
         target="docs/$lang/$doc"
         if [ ! -f "$target" ]; then
             echo "::error file=$base::缺少译文 $target"
-            failed=1
+            doc_failed=1
             continue
         fi
         target_seq=$(headings "$target")
@@ -49,12 +65,14 @@ for doc in $DOCS; do
             echo "  英文版新增或调整了章节而这里没跟上时就会这样。逐节对照 $base 补齐后重跑本脚本。"
             echo "  英文层级序列: $(printf '%s' "$base_seq" | tr '\n' ' ')"
             echo "  本文件层级序列: $(printf '%s' "$target_seq" | tr '\n' ' ')"
-            failed=1
+            doc_failed=1
         fi
     done
 
-    if [ "$failed" = "0" ]; then
+    if [ "$doc_failed" = "0" ]; then
         echo "$base: $base_count 个标题，${LANGS} 全部一致"
+    else
+        failed=1
     fi
 done
 
