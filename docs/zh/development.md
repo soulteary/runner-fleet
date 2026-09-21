@@ -51,6 +51,7 @@ go run ./cmd/runner-manager
 | `/health` | GET | 存活探针。返回 `{"status":"ok","service":"runner-fleet"}`；不挂依赖检查，进程活着恒为 200；始终免鉴权。 |
 | `/ready` | GET | 就绪探针。响应体同上；配置读不了、或 runner 根目录缺失/不可写时返回 503。供 K8s `readinessProbe` 使用；同样免鉴权，且不会说明是哪一项失败。 |
 | `/version` | GET | 返回 `{"version":"..."}`。 |
+| `/metrics` | GET | Prometheus 指标（调用量与延迟）。path 标签取 Echo 路由模板（`/api/runners/:name`），不是请求 URL。启用 Basic Auth 后**需要鉴权**，在抓取任务里配 `basic_auth`。 |
 | `/api/runners` | GET | 返回 Runner 列表。容器模式下若状态探测失败，会返回 `status=unknown` 且带结构化 `probe`（含 `error/type/suggestion/check_command/fix_command`）。 |
 | `/api/runners/:name` | GET | 返回单个 Runner 详情。容器模式下若状态探测失败，同样返回结构化 `probe`。 容器模式下若容器的创建参数与配置不一致，响应会额外带 `container_drift`。 |
 | `/api/runners/:name/start` | POST | 启动指定 Runner。容器模式下若状态探测失败，仍会尝试启动，并在响应中返回结构化 `probe`。 |

@@ -51,6 +51,7 @@ Basic Auth 사용 시 `/health`를 제외한 모든 요청에 Header `Authorizat
 | `/health` | GET | 라이브니스. `{"status":"ok","service":"runner-fleet"}` 반환. 의존성 검사 없이 프로세스가 살아 있으면 항상 200. 항상 인증 없음. |
 | `/ready` | GET | 레디니스. 본문 형태는 동일. 설정을 읽을 수 없거나 runner 기본 디렉터리가 없거나 쓸 수 없으면 503. K8s `readinessProbe`용. 마찬가지로 인증 없음이며 어떤 검사가 실패했는지는 알리지 않음. |
 | `/version` | GET | `{"version":"..."}` 반환. |
+| `/metrics` | GET | Prometheus 메트릭(요청 수와 지연). `path` 라벨은 요청 URL이 아니라 Echo 라우트 템플릿(`/api/runners/:name`). Basic Auth 사용 시 **인증 필요** — 스크레이프 작업에 `basic_auth` 설정. |
 | `/api/runners` | GET | Runner 목록. 컨테이너 모드에서 probe 실패 시 `status=unknown`과 구조화된 `probe`(`error/type/suggestion/check_command/fix_command`) 반환. |
 | `/api/runners/:name` | GET | 단일 Runner 상세. 컨테이너 모드에서 probe 실패 시 동일한 `probe`. |
 | `/api/runners/:name/start` | POST | Runner 시작. probe 실패 시에도 시작 시도, 응답에 구조화된 `probe` 반환. |
