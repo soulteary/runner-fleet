@@ -186,6 +186,11 @@
     .msg-wrap-actions .btn-close-msg { padding: 6px 14px; font-size: 13px; background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
     .msg-wrap-actions .btn-close-msg:hover { color: var(--text); border-color: var(--text); }
     .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+    .list-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .list-toolbar .autorefresh { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
+    .list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
+    .refresh-status { color: var(--muted); font-size: 12px; }
+    .refresh-status.err { color: var(--warn); }
     .parse-box {
       margin-bottom: 20px;
       padding-bottom: 20px;
@@ -254,6 +259,10 @@
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">{{index .T "runner_list.hint"}}</p>
+    <div class="list-toolbar">
+      <label class="autorefresh"><input type="checkbox" id="autoRefreshToggle" checked>{{index .T "autorefresh.label"}}</label>
+      <span id="refreshStatus" class="refresh-status" aria-live="polite"></span>
+    </div>
     <table>
       <thead>
         <tr>
@@ -266,64 +275,7 @@
           <th></th>
         </tr>
       </thead>
-      <tbody>
-        {{range .Runners}}
-        <tr>
-          <td>{{.Name}}</td>
-          <td>{{.TargetType}}: {{.Target}}</td>
-          <td>
-            <span class="badge {{.Status}}">{{.Status}}</span>
-            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
-            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
-                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
-            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
-            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
-          </td>
-          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
-          <td>
-            {{if .RegistrationMessage}}
-              {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
-                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
-              {{else}}
-                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
-              {{end}}
-            {{else}}
-              <span class="github-unknown">—</span>
-            {{end}}
-            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
-                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
-            {{if .GitHubYes}}
-              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
-            {{else if .GitHubNo}}
-              <br><span class="github-no">{{index $.T "github.no"}}</span>
-            {{else if .GitHubCheckAt}}
-              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
-            {{else if .RegistrationMessage}}
-              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
-            {{end}}
-          </td>
-          <td class="path">{{.InstallDir}}</td>
-          <td>
-            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
-            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
-            {{if eq .Status "unknown"}}
-            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
-            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
-            {{end}}
-            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
-            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
-            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
-            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
-          </td>
-        </tr>
-        {{end}}
-        {{if not .Runners}}
-        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
-        {{end}}
-      </tbody>
+      <tbody id="runnerRowsBody">{{template "runnerRows" .}}</tbody>
     </table>
   </div>
 
@@ -932,24 +884,32 @@
       }
     });
 
-    document.querySelectorAll('.btn-view').forEach(btn => {
-      btn.addEventListener('click', () => openModal('view', btn.getAttribute('data-name')));
-    });
-    document.querySelectorAll('.btn-edit').forEach(btn => {
-      btn.addEventListener('click', () => openModal('edit', btn.getAttribute('data-name')));
-    });
-
-    document.querySelectorAll('.btn-del').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = btn.getAttribute('data-name');
-        if (!name || !confirm(t('confirm_remove').replace('{{"{{"}}name{{"}}"}}', name))) return;
-        try {
-          const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
-          const data = await r.json().catch(() => ({}));
-          if (r.ok) location.reload();
-          else alert(data.message || r.statusText);
-        } catch (e) { alert(e.message); }
-      });
+    async function removeRunner(name) {
+      if (!name || !confirm(t('confirm_remove').replace('{{"{{"}}name{{"}}"}}', name))) return;
+      try {
+        const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) location.reload();
+        else alert(data.message || r.statusText);
+      } catch (e) { alert(e.message); }
+    }
+    // 行内按钮走事件委托而不是逐个 addEventListener：自动刷新会整体替换 <tbody>，
+    // 直接绑在按钮上的监听在第一次刷新之后就全部失效了。
+    const runnerRowsBody = document.getElementById('runnerRowsBody');
+    runnerRowsBody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-name]');
+      if (!btn || !runnerRowsBody.contains(btn)) return;
+      const name = btn.getAttribute('data-name');
+      if (!name) return;
+      if (btn.classList.contains('btn-view')) openModal('view', name);
+      else if (btn.classList.contains('btn-edit')) openModal('edit', name);
+      else if (btn.classList.contains('btn-del')) removeRunner(name);
+      else if (btn.classList.contains('btn-start')) runnerAction(name, 'start');
+      else if (btn.classList.contains('btn-stop')) runnerAction(name, 'stop');
+      // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
+      else if (btn.classList.contains('btn-recreate')) {
+        if (confirm(fillVars(t('confirm_recreate'), { name: name }))) runnerAction(name, 'recreate');
+      }
     });
 
     async function runnerAction(name, action) {
@@ -996,24 +956,121 @@
       const ok = await copyCommandText(currentProbeFixCommand);
       alert(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'));
     });
-    document.querySelectorAll('.btn-start').forEach(btn => {
-      if (btn.id === 'modalStartBtnFooter') return;
-      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'start'));
+    // ===== 列表自动刷新 =====
+    // 「忙碌中」和「GitHub ✓」本来就是后台约 5 分钟一次的检查结果，页面不刷新
+    // 就永远看不到它们变化，这两列在日常使用中等于是死的。
+    // 拉的是 /api/runner-rows 渲染好的 <tbody> 片段（和首屏同一个模板），
+    // 而不是 /api/runners 的 JSON 自己拼行——行里 GitHubYes/GitHubNo 这类三态
+    // 判断在 JS 里重写一遍，正是最容易把「空闲」显示成「忙碌中」的地方。
+    const REFRESH_MS = 15000;
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    const refreshStatusEl = document.getElementById('refreshStatus');
+    let refreshTimer = null;
+    let refreshing = false;
+
+    function refreshPaused() {
+      // 弹窗开着时刷新没意义（用户看的是弹窗里的数据）；标签页不可见时也不必打扰
+      // 服务端——容器模式下每刷新一次都要对每台 runner 做一次 docker inspect。
+      return !autoRefreshToggle.checked || document.hidden || modal.classList.contains('show');
+    }
+
+    async function refreshRows() {
+      if (refreshing || refreshPaused()) return;
+      refreshing = true;
+      try {
+        const r = await fetch('/api/runner-rows', { headers: { 'Accept': 'text/html' } });
+        if (!r.ok) throw new Error(r.statusText);
+        const html = await r.text();
+        // 再判一次：请求在途的这段时间里用户可能已经打开弹窗或关掉了自动刷新
+        if (!refreshPaused()) {
+          runnerRowsBody.innerHTML = html;
+          refreshStatusEl.className = 'refresh-status';
+          refreshStatusEl.textContent = fillVars(t('autorefresh.updated'), { time: new Date().toLocaleTimeString() });
+        }
+      } catch (_) {
+        refreshStatusEl.className = 'refresh-status err';
+        refreshStatusEl.textContent = t('autorefresh.failed');
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    autoRefreshToggle.addEventListener('change', function() {
+      try { localStorage.setItem('runnerFleetAutoRefresh', this.checked ? '1' : '0'); } catch (_) {}
+      if (this.checked) { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = ''; refreshRows(); }
+      else { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = t('autorefresh.paused'); }
     });
-    document.querySelectorAll('.btn-stop').forEach(btn => {
-      if (btn.id === 'modalStopBtnFooter') return;
-      btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'stop'));
-    });
-    // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
-    document.querySelectorAll('.btn-recreate').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const name = btn.getAttribute('data-name');
-        if (!name || !confirm(fillVars(t('confirm_recreate'), { name: name }))) return;
-        runnerAction(name, 'recreate');
-      });
-    });
+    try {
+      if (localStorage.getItem('runnerFleetAutoRefresh') === '0') autoRefreshToggle.checked = false;
+    } catch (_) {}
+    if (!autoRefreshToggle.checked) refreshStatusEl.textContent = t('autorefresh.paused');
+    // 标签页切回来时立刻补一次，不用干等下一个周期
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRows(); });
+    refreshTimer = setInterval(refreshRows, REFRESH_MS);
     document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
     document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));
   </script>
 </body>
 </html>
+
+{{/* runnerRows：列表的 <tbody> 内容。首屏由页面直接展开，自动刷新时由
+     /api/runner-rows 单独渲染同一个片段——两条路径共用一份行渲染逻辑，
+     GitHubYes/GitHubNo 这类三态判断不必在 JS 里再写一遍。 */}}
+{{define "runnerRows"}}
+        {{range .Runners}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.TargetType}}: {{.Target}}</td>
+          <td>
+            <span class="badge {{.Status}}">{{.Status}}</span>
+            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
+            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
+                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
+            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
+            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
+            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+          </td>
+          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
+          <td>
+            {{if .RegistrationMessage}}
+              {{if and (eq .Status "installed") .GitHubURL}}
+                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
+                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+              {{else}}
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+              {{end}}
+            {{else}}
+              <span class="github-unknown">—</span>
+            {{end}}
+            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
+                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
+            {{if .GitHubYes}}
+              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
+            {{else if .GitHubNo}}
+              <br><span class="github-no">{{index $.T "github.no"}}</span>
+            {{else if .GitHubCheckAt}}
+              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
+            {{else if .RegistrationMessage}}
+              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
+            {{end}}
+          </td>
+          <td class="path">{{.InstallDir}}</td>
+          <td>
+            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
+            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
+            {{if eq .Status "unknown"}}
+            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
+            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
+            {{end}}
+            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
+            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
+            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
+            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
+          </td>
+        </tr>
+        {{end}}
+        {{if not .Runners}}
+        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
+        {{end}}
+{{end}}
