@@ -60,6 +60,8 @@ github.com/soulteary/logger-kit/v3 v3.0.0 h1:oCsNss5cRgMJD5Ub5mjWjgFmtvExlqilSPu
 github.com/soulteary/logger-kit/v3 v3.0.0/go.mod h1:zAV0BXZ42KFp5yXL6MMFtXg6O0xzxENx5VEW3/BKwEQ=
 github.com/soulteary/metrics-kit/v3 v3.0.0 h1:1KBslddLh5Qv9+pi06Py/SoM59Cbm2FiRDDsioGOJU8=
 github.com/soulteary/metrics-kit/v3 v3.0.0/go.mod h1:hugXfHjLJUSqNTjF6UUueEdO7KZEz7rzQOMHUvNd3hM=
+github.com/soulteary/procfind-kit v1.0.0 h1:Q2lc/MZAkstpcKkoRKOrigqn2e4tdwqKkpttoYVGdOU=
+github.com/soulteary/procfind-kit v1.0.0/go.mod h1:PhIceat1ly1j8KX/zLlWz+kTQKtolvH0eLAMeY4u74Y=
 github.com/soulteary/secure-kit v1.6.0 h1:QvvLkOhHq1lBWRkjWvELqeUiFPnKiuqBEqNSDVKE+p8=
 github.com/soulteary/secure-kit v1.6.0/go.mod h1:vNpwew8IBGYaxWnJMlTTSyRBVxHWmfhe3XXGs+Crby4=
 github.com/soulteary/version-kit/v3 v3.0.0 h1:dRlleqy7uupj3+kW1KJW8tRVX+CUFfFHDeNJElfkCBc=
