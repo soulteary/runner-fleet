@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "(hidden by default, click \"Reveal fix command\")",
   "confirm_remove": "Remove \"{{name}}\" from config?",
   "confirm_reveal_fix": "Fix command may have side effects. Show it anyway?",
-  "confirm_show_fix_cmd": "Show fix command (has side effects)? Run check command first to confirm.",
   "msg.check_cmd_copied": "Check command copied",
   "msg.copy_failed": "Copy failed, copy manually",
   "msg.fix_cmd_copied": "Fix command copied",
@@ -114,9 +113,7 @@
   "msg.action_done": "Action completed",
   "probe.alert_type": "Probe error type: ",
   "probe.alert_suggestion": "Suggestion: ",
-  "probe.alert_check_cmd": "Check command: ",
   "probe.alert_error": "Probe error: ",
-  "probe.alert_fix_cmd": "Fix command: ",
   "precheck.checking": "Checking for conflicts…",
   "precheck.ok": "Name is available",
   "precheck.name_taken": "A runner with this name already exists: {{detail}}",
@@ -146,5 +143,12 @@
   "filter.showing": "Showing {{shown}} of {{total}}",
   "filter.no_match": "No runners match the current filter.",
   "page.lang_label": "Interface language",
-  "modal.label_drift": "Config drift"
+  "modal.label_drift": "Config drift",
+  "btn.working": "Working…",
+  "toast.dismiss": "Dismiss",
+  "toast.view_detail": "View details",
+  "toast.reload_list": "Reload list",
+  "confirm.title": "Please confirm",
+  "confirm.ok": "Confirm",
+  "confirm.cancel": "Cancel"
 }
