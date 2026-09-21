@@ -152,6 +152,8 @@
     .github-link:hover { text-decoration: none; opacity: 0.85; }
     .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
     .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+    /* 相对时间下面再给出准确时刻：前者回答「是不是卡住了」，后者用于对日志 */
+    .modal-body .row .val .ts-abs { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
     .btn-reveal-fix {
       padding: 4px 10px;
       font-size: 12px;
@@ -336,7 +338,7 @@
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
-          <div class="row"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
+          <div class="row" id="vProbeErrorTypeRow"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
           <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
           <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
           <div class="row" id="vProbeFixCmdRow"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
@@ -640,6 +642,49 @@
       document.getElementById('addMsgWrap').style.display = 'none';
       location.reload();
     });
+    // 「上次检查于 2026-09-21T09:00:00Z」这种原样输出的 RFC3339，得在脑子里换算
+    // 成「多久以前」才有用——而这一栏真正要回答的就是「检查是不是卡住了」。
+    // 相对时间交给 Intl.RelativeTimeFormat：复数和各语言说法它自己处理，
+    // 不必为此再铺一套六种语言的文案。
+    function relativeTime(d, lang) {
+      if (typeof Intl === 'undefined' || !Intl.RelativeTimeFormat) return '';
+      try {
+        const rtf = new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' });
+        const diff = (d.getTime() - Date.now()) / 1000;
+        const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+        for (let i = 0; i < units.length; i++) {
+          if (Math.abs(diff) >= units[i][1]) return rtf.format(Math.round(diff / units[i][1]), units[i][0]);
+        }
+        return rtf.format(Math.round(diff), 'second');
+      } catch (_) {
+        return '';
+      }
+    }
+    // 相对时间放主行，准确时刻放下面一行小字：前者回答「是不是卡住了」，
+    // 后者用来和日志对时间。解析不了就原样显示，别把信息弄丢。
+    function renderTimestamp(el, iso) {
+      el.textContent = '';
+      if (!iso) { el.textContent = '—'; return; }
+      const lang = document.documentElement.lang || 'en';
+      const d = new Date(iso);
+      const rel = isNaN(d.getTime()) ? '' : relativeTime(d, lang);
+      if (!rel) { el.textContent = iso; return; }
+      el.appendChild(document.createTextNode(rel));
+      const abs = document.createElement('span');
+      abs.className = 'ts-abs';
+      // 跟着页面语言而不是浏览器 locale：界面已经切到中文了，
+      // 下面这行还按系统 locale 显示会很割裂
+      abs.textContent = d.toLocaleString(lang);
+      el.appendChild(abs);
+    }
+    // 健康的 Runner 上这 5 行全是「—」，占掉三栏网格的一大半
+    const PROBE_ROW_IDS = ['vProbeErrorTypeRow', 'vProbeSuggestionRow', 'vProbeCheckCmdRow', 'vProbeFixCmdRow', 'vProbeErrorRow'];
+    function setProbeRowsVisible(on) {
+      PROBE_ROW_IDS.forEach(function(id) {
+        const row = document.getElementById(id);
+        if (row) row.style.display = on ? '' : 'none';
+      });
+    }
     // 超过这个长度的值挤在三分之一栏里会折成一条细柱，不如铺满一行
     const WIDE_ROW_CHARS = 40;
     function setRowWide(rowId, text) {
@@ -748,6 +793,7 @@
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
             document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
             const probeError = resolveProbeError(data);
+            setProbeRowsVisible(!!probeError);
             document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
             document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
             currentProbeCheckCommand = probeError ? resolveProbeCheckCommand(data) : '';
@@ -765,7 +811,7 @@
             setRowWide('vProbeFixCmdRow', probeError ? resolveProbeFixCommand(data) : '');
             setRowWide('vProbeErrorRow', probeError);
             setRowWide('vRegistrationMessageRow', data.registration_message);
-            document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
+            renderTimestamp(document.getElementById('vRegistrationCheckedAt'), data.registration_checked_at);
             var gh = data.registered_on_github;
             var ghEl = document.getElementById('vRegisteredOnGitHub');
             var ghLink = document.getElementById('vGitHubLink');
@@ -790,7 +836,7 @@
             if (data.github_busy === true) busyEl.textContent = t('modal.gh_busy');
             else if (data.github_busy === false) busyEl.textContent = t('modal.gh_idle');
             else busyEl.textContent = t('modal.gh_busy_unknown');
-            document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
+            renderTimestamp(document.getElementById('vGitHubCheckAt'), data.github_check_at);
             const startStopSpan = document.getElementById('modalStartStopSpan');
             const startBtn = document.getElementById('modalStartBtnFooter');
             const stopBtn = document.getElementById('modalStopBtnFooter');
