@@ -40,7 +40,7 @@ docker network create runner-net 2>/dev/null || true
 docker compose up -d
 ```
 
-Open http://localhost:8080. The default image tag is the stable release (e.g. v1.6.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
+Open http://localhost:8080. The default image tag is the stable release (e.g. v1.7.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
 
 Two copy-and-go deployments live in [`examples/deploy/`](examples/deploy/): `standalone/` (single container, runner processes inside the Manager — `docker run` or Compose) and `fleet/` (one container per runner, image and toolchain caches shared, build caches isolated).
 

@@ -361,7 +361,7 @@ func loadI18n(lang string) (map[string]string, error) {
 //
 // 从 main 里拆出来是为了能整体测试。单独测 csrfGuardMiddleware 只能证明这个函数
 // 判得对，证明不了它真的挂在了写接口前面，而「中间件写好了但没挂上」恰恰是这类
-// 防护最典型的失效方式——v1.6.0 把鉴权、路由表、监听地址拆出来也是同一个理由。
+// 防护最典型的失效方式——v1.6.0 把鉴权、路由表、监听地址拆出来也是同一个理由。 version-check-ignore
 func newEchoServer() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true

@@ -17,7 +17,7 @@ En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](g
 go build -o runner-manager ./cmd/runner-manager
 
 # Avec version (pour /version et débogage)
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # Construire uniquement le Runner Agent (mode conteneur)
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ go run ./cmd/runner-manager
 
 ## API HTTP
 
-Avec Basic Auth, toutes les requêtes sauf `/health` doivent inclure `Authorization: Basic <base64(user:password)>` dans l'en-tête.
+Avec Basic Auth, toutes les requêtes sauf `/health` et `/ready` doivent inclure `Authorization: Basic <base64(user:password)>` dans l'en-tête.
 
 | Chemin | Méthode | Description |
 |--------|---------|-------------|
@@ -59,6 +59,8 @@ Avec Basic Auth, toutes les requêtes sauf `/health` doivent inclure `Authorizat
 | `/api/runners` | POST | Ajoute un runner (installation et enregistrement optionnels). En cas de conflit de nom, renvoie **409** avec `conflicts` et `suggested_name` au lieu de renommer silencieusement ; envoyez `auto_rename: true` pour l'ancien comportement. |
 | `/api/runners/:name/recreate` | POST | Supprime et recrée le conteneur du runner avec la configuration actuelle (mode conteneur uniquement). Interrompt un job en cours ; un conteneur arrêté est de toute façon recréé automatiquement au démarrage si ses paramètres de création ont divergé. |
 | `/api/runner-precheck` | GET | Pré-vérification d'un nom avant l'ajout : `?name=&path=`. Renvoie `available`, un `suggested_name` et les `conflicts` détectés (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), chacun avec `level` (`error`/`warn`), `message`, `detail` et un `fix_command` optionnel. En lecture seule ; l'interface l'appelle pendant la saisie. |
+| `/api/runner-rows` | GET | Rend uniquement le `<tbody>` de la liste, à partir du même fragment de template que le premier rendu. L'interface l'interroge pour rafraîchir la liste sur place. |
+| `/static/*` | GET, HEAD | Feuille de style et script embarqués (`//go:embed`). Les URL portent une empreinte de contenu (`?v=<hash>`) : les requêtes avec empreinte sont mises en cache longtemps, les autres revalident. `HEAD` est enregistré avec `GET` pour qu'une sonde ou un proxy ne reçoive pas un 405. |
 
 ### Requêtes intersites (CSRF)
 

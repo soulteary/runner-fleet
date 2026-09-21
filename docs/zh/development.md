@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ go run ./cmd/runner-manager
 
 ## HTTP API
 
-启用 Basic Auth 时，除 `/health` 外，请求需在 Header 中携带 `Authorization: Basic <base64(user:password)>`。
+启用 Basic Auth 时，除 `/health`、`/ready` 外，请求需在 Header 中携带 `Authorization: Basic <base64(user:password)>`。
 
 | 路径 | 方法 | 说明 |
 |------|------|------|
@@ -59,6 +59,8 @@ go run ./cmd/runner-manager
 | `/api/runners` | POST | 添加 Runner（可选安装并注册）。名称冲突时返回 **409**，带 `conflicts` 与 `suggested_name`，不再静默改名；需要旧的自动加后缀行为可传 `auto_rename: true`。 |
 | `/api/runners/:name/recreate` | POST | 按当前配置删除并重建 Runner 容器（仅容器模式）。会中断正在跑的 Job——已停止的容器在「启动」时若发现创建参数不一致，本就会自动重建。 |
 | `/api/runner-precheck` | GET | 添加前的名称预检：`?name=&path=`。返回 `available`、`suggested_name` 与冲突列表 `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`），每条含 `level`（`error`/`warn`）、`message`、`detail` 与可选的 `fix_command`。只读，界面在输入时会实时调用。 |
+| `/api/runner-rows` | GET | 只渲染列表的 `<tbody>`，用的是首屏那份模板片段。界面轮询它来原地刷新列表。 |
+| `/static/*` | GET、HEAD | 内嵌的样式表与脚本（`//go:embed`）。地址带内容指纹（`?v=<hash>`）：带指纹的长缓存，不带的只许协商缓存。`HEAD` 与 `GET` 一并注册，免得探活脚本或代理吃到 405。 |
 
 ### 跨站请求（CSRF）
 

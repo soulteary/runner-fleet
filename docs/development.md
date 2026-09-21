@@ -17,7 +17,7 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ Listens on `:8080`, http://localhost:8080. Basic Auth for debug: `BASIC_AUTH_PAS
 
 ## HTTP API
 
-With Basic Auth, all requests except `/health` must include `Authorization: Basic <base64(user:password)>` in the header.
+With Basic Auth, all requests except `/health` and `/ready` must include `Authorization: Basic <base64(user:password)>` in the header.
 
 | Path | Method | Description |
 |------|--------|-------------|
@@ -60,6 +60,8 @@ With Basic Auth, all requests except `/health` must include `Authorization: Basi
 | `/api/runners/:name` | DELETE | Remove a runner: stop it, deregister it from GitHub when a PAT is available, delete its install directory, drop it from the config. The response carries `github_deregistered` and a `message` that states what happened on the GitHub side. |
 | `/api/runners/:name/recreate` | POST | Remove and recreate the runner container with the current config (container mode only). Interrupts a job running on it — starting a stopped container already recreates it automatically when its create parameters drifted. |
 | `/api/runner-precheck` | GET | Pre-flight a name before adding: `?name=&path=`. Returns `available`, a `suggested_name` and the `conflicts` found (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), each with `level` (`error`/`warn`), `message`, `detail` and an optional `fix_command`. Read-only; the Web UI calls it while you type. |
+| `/api/runner-rows` | GET | Renders only the runner list's `<tbody>`, from the same template fragment the first paint uses. The Web UI polls it to refresh the list in place. |
+| `/static/*` | GET, HEAD | Embedded stylesheet and script (`//go:embed`). URLs carry a content fingerprint (`?v=<hash>`): fingerprinted requests cache long, unfingerprinted ones revalidate. `HEAD` is registered alongside `GET` so a probe or a proxy does not collect a 405. |
 
 ### Cross-site requests (CSRF)
 

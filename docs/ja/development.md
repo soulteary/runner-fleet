@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # バージョン付き（/version とデバッグ用）
-go build -ldflags "-X main.Version=1.6.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent のみビルド（コンテナモード用）
 go build -o runner-agent ./cmd/runner-agent
@@ -44,7 +44,7 @@ go run ./cmd/runner-manager
 
 ## HTTP API
 
-Basic Auth 有効時、`/health` 以外のリクエストには Header に `Authorization: Basic <base64(user:password)>` が必要です。
+Basic Auth 有効時、`/health` と `/ready` 以外のリクエストには Header に `Authorization: Basic <base64(user:password)>` が必要です。
 
 | パス | メソッド | 説明 |
 |------|----------|------|
@@ -59,6 +59,8 @@ Basic Auth 有効時、`/health` 以外のリクエストには Header に `Auth
 | `/api/runners` | POST | Runner を追加（任意でインストールと登録）。名前が衝突した場合は黙って改名せず **409** を返し、`conflicts` と `suggested_name` を含めます。従来の自動リネームが必要なら `auto_rename: true` を送ってください。 |
 | `/api/runners/:name/recreate` | POST | 現在の設定で Runner コンテナを削除して作り直します（コンテナモードのみ）。実行中の Job は中断されます。停止中のコンテナは「開始」時に作成パラメータの不一致を検出して自動で作り直されます。 |
 | `/api/runner-precheck` | GET | 追加前の名前チェック: `?name=&path=`。`available`、`suggested_name`、検出した `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`）を返します。各項目は `level`（`error`/`warn`）、`message`、`detail`、任意の `fix_command` を持ちます。読み取り専用で、画面は入力中に随時呼び出します。 |
+| `/api/runner-rows` | GET | 一覧の `<tbody>` だけを、初回描画と同じテンプレート断片からレンダリングします。画面はこれをポーリングして一覧をその場で更新します。 |
+| `/static/*` | GET, HEAD | 埋め込みのスタイルシートとスクリプト（`//go:embed`）。URL は内容のフィンガープリント（`?v=<hash>`）を持ち、付きは長期キャッシュ、無しは再検証になります。死活監視やプロキシが 405 を受け取らないよう、`HEAD` も `GET` と併せて登録しています。 |
 
 ### クロスサイトリクエスト（CSRF）
 
