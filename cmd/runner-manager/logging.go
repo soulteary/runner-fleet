@@ -81,7 +81,9 @@ func parseLogFormat(v string) logkit.Format {
 func requestLogger() echo.MiddlewareFunc {
 	cfg := logkit.DefaultMiddlewareConfig()
 	cfg.Logger = logkit.Default()
-	// 探针每几秒打一次，进日志只会把真正有用的行淹掉
-	cfg.SkipPaths = []string{"/health", "/ready"}
+	// 探针与抓取每几秒一次，进日志只会把真正有用的行淹掉。
+	// metricsPath 是本 PR 新增的 /metrics——Prometheus 默认 15s 抓一次，
+	// 不跳过的话请求日志里绝大多数行都是它。
+	cfg.SkipPaths = []string{"/health", "/ready", metricsPath}
 	return echo.WrapMiddleware(logkit.Middleware(cfg))
 }

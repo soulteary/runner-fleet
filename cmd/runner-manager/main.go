@@ -278,9 +278,10 @@ func basicAuthMiddleware() (echo.MiddlewareFunc, string) {
 		expectedUser = "admin"
 	}
 	return middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
-		// /health 供 Ingress / K8s 探针使用，必须免鉴权
+		// /health 与 /ready 供 Ingress / K8s 探针使用，必须免鉴权：
+		// 探针配置里通常带不了 Basic Auth 凭据
 		Skipper: func(c echo.Context) bool {
-			return c.Path() == "/health"
+			return c.Path() == "/health" || c.Path() == "/ready"
 		},
 		Validator: func(username, password string, c echo.Context) (bool, error) {
 			// 定长比较：用 == 会让比对耗时随匹配前缀长度变化。
@@ -317,6 +318,7 @@ func newEchoServer() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover(), requestLogger(), middleware.Secure())
+	e.Use(metricsMiddleware())
 	e.HTTPErrorHandler = httpErrorHandler
 	// 放在鉴权之前：跨站请求无论带不带凭据，都该在这里就结束
 	trusted := trustedOrigins()
@@ -337,7 +339,10 @@ func newEchoServer() *echo.Echo {
 // registerRoutes 挂载全部路由
 func registerRoutes(e *echo.Echo) {
 	e.GET("/health", handler.Health)
+	e.GET("/ready", handler.Ready)
 	e.GET("/version", handler.VersionInfo)
+	// 不在 Skipper 里，因此配了 Basic Auth 后 /metrics 同样需要凭据
+	e.GET(metricsPath, metricsHandler())
 	e.GET("/", handler.Index)
 	e.GET("/api/runners", handler.ListRunners)
 	e.GET("/api/runners/:name", handler.GetRunner)
