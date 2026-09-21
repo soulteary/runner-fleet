@@ -134,5 +134,17 @@
   "autorefresh.label": "自动刷新（15 秒）",
   "autorefresh.updated": "已更新 {{time}}",
   "autorefresh.failed": "刷新失败，稍后重试",
-  "autorefresh.paused": "自动刷新已关闭"
+  "autorefresh.paused": "自动刷新已关闭",
+  "filter.all": "全部",
+  "filter.running": "运行中",
+  "filter.stopped": "已停止",
+  "filter.new": "未注册",
+  "filter.problem": "需处理",
+  "filter.drift": "配置已变",
+  "filter.search_placeholder": "搜索名称或目标",
+  "filter.clear": "清除",
+  "filter.showing": "显示 {{shown}} / {{total}}",
+  "filter.no_match": "没有符合当前筛选条件的 Runner。",
+  "page.lang_label": "界面语言",
+  "modal.label_drift": "配置差异"
 }
