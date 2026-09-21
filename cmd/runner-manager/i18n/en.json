@@ -130,5 +130,15 @@
   "precheck.blocked": "Conflicts found — rename or clean up first, then submit again",
   "badge.drift": "config changed",
   "btn.recreate": "Recreate",
-  "confirm_recreate": "Recreate the container for {{name}} with the current config?\n\nThe old container is removed and a new one is created. A job running on it right now will be interrupted."
+  "confirm_recreate": "Recreate the container for {{name}} with the current config?\n\nThe old container is removed and a new one is created. A job running on it right now will be interrupted.",
+  "filter.all": "All",
+  "filter.running": "Running",
+  "filter.stopped": "Stopped",
+  "filter.new": "Unregistered",
+  "filter.problem": "Needs attention",
+  "filter.drift": "Config changed",
+  "filter.search_placeholder": "Search name or target",
+  "filter.clear": "Clear",
+  "filter.showing": "Showing {{shown}} of {{total}}",
+  "filter.no_match": "No runners match the current filter."
 }

@@ -130,5 +130,15 @@
   "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre",
   "badge.drift": "config modifiée",
   "btn.recreate": "Recréer",
-  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu."
+  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu.",
+  "filter.all": "Tous",
+  "filter.running": "En cours",
+  "filter.stopped": "Arrêtés",
+  "filter.new": "Non enregistrés",
+  "filter.problem": "À traiter",
+  "filter.drift": "Config modifiée",
+  "filter.search_placeholder": "Rechercher par nom ou cible",
+  "filter.clear": "Effacer",
+  "filter.showing": "{{shown}} sur {{total}} affichés",
+  "filter.no_match": "Aucun runner ne correspond au filtre actuel."
 }

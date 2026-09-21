@@ -130,5 +130,15 @@
   "precheck.blocked": "충돌이 있습니다. 이름을 바꾸거나 정리한 뒤 다시 제출하세요",
   "badge.drift": "설정 변경됨",
   "btn.recreate": "컨테이너 재생성",
-  "confirm_recreate": "현재 설정으로 {{name}}의 컨테이너를 다시 만들까요?\n\n기존 컨테이너를 삭제하고 새로 만듭니다. 실행 중인 Job이 있으면 중단됩니다."
+  "confirm_recreate": "현재 설정으로 {{name}}의 컨테이너를 다시 만들까요?\n\n기존 컨테이너를 삭제하고 새로 만듭니다. 실행 중인 Job이 있으면 중단됩니다.",
+  "filter.all": "전체",
+  "filter.running": "실행 중",
+  "filter.stopped": "중지됨",
+  "filter.new": "미등록",
+  "filter.problem": "확인 필요",
+  "filter.drift": "설정 변경됨",
+  "filter.search_placeholder": "이름 또는 대상 검색",
+  "filter.clear": "지우기",
+  "filter.showing": "{{total}}개 중 {{shown}}개 표시",
+  "filter.no_match": "현재 필터와 일치하는 Runner가 없습니다."
 }

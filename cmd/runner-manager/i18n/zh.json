@@ -130,5 +130,15 @@
   "precheck.blocked": "存在冲突，请先改名或清理后再提交",
   "badge.drift": "配置已变更",
   "btn.recreate": "重建容器",
-  "confirm_recreate": "按当前配置重建 {{name}} 的容器？\n\n会先删除旧容器再新建。若上面正在跑 Job，会被中断。"
+  "confirm_recreate": "按当前配置重建 {{name}} 的容器？\n\n会先删除旧容器再新建。若上面正在跑 Job，会被中断。",
+  "filter.all": "全部",
+  "filter.running": "运行中",
+  "filter.stopped": "已停止",
+  "filter.new": "未注册",
+  "filter.problem": "需处理",
+  "filter.drift": "配置已变",
+  "filter.search_placeholder": "搜索名称或目标",
+  "filter.clear": "清除",
+  "filter.showing": "显示 {{shown}} / {{total}}",
+  "filter.no_match": "没有符合当前筛选条件的 Runner。"
 }

@@ -130,5 +130,15 @@
   "precheck.blocked": "Konflikte gefunden — bitte erst umbenennen oder aufräumen, dann erneut senden",
   "badge.drift": "Konfig geändert",
   "btn.recreate": "Neu erstellen",
-  "confirm_recreate": "Container von {{name}} mit der aktuellen Konfiguration neu erstellen?\n\nDer alte Container wird entfernt und ein neuer erstellt. Ein darauf laufender Job wird abgebrochen."
+  "confirm_recreate": "Container von {{name}} mit der aktuellen Konfiguration neu erstellen?\n\nDer alte Container wird entfernt und ein neuer erstellt. Ein darauf laufender Job wird abgebrochen.",
+  "filter.all": "Alle",
+  "filter.running": "Laufend",
+  "filter.stopped": "Gestoppt",
+  "filter.new": "Nicht registriert",
+  "filter.problem": "Zu prüfen",
+  "filter.drift": "Konfig geändert",
+  "filter.search_placeholder": "Nach Name oder Ziel suchen",
+  "filter.clear": "Zurücksetzen",
+  "filter.showing": "{{shown}} von {{total}} angezeigt",
+  "filter.no_match": "Kein Runner entspricht dem aktuellen Filter."
 }
