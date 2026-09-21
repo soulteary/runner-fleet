@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/labstack/echo/v4"
-	health "github.com/soulteary/health-kit/v3"
+	health "github.com/soulteary/health-kit/v4"
 	"github.com/soulteary/runner-fleet/internal/config"
 )
 
