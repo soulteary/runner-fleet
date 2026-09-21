@@ -191,6 +191,8 @@ pointeur à sa seule nullité, un pointeur vers `false` est donc vrai. Utilisez 
 - `make build-all` : Build du Manager et de l'Agent.
 - `make test` : Lancer les tests.
 - `make test-race` : Lancer les tests avec le détecteur de data races (ce que fait la CI).
+- `make lint` : Lancer golangci-lint sur `./...` — la même étape que le Lint du job Test en CI.
+- `make check` : Tout ce que la CI vérifie, en une cible — gofmt, vet, lint, tests `-race` et les deux scripts de cohérence. À lancer avant de pousser.
 - `make run` : Build puis exécution du Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop` : Build et exécution de l'image Manager ; voir [Guide d'utilisation](guide.md).
 - `make docker-build-runner` : Build de l'image Runner pour le mode conteneur (`Dockerfile.runner`, tag par défaut dans `RUNNER_IMAGE`).

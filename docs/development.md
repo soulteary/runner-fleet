@@ -181,6 +181,8 @@ pointer to `false` is true. Use the `GitHubYes` / `GitHubNo` / `GitHubUnknown` h
 - `make build-all`: Build Manager and Agent.
 - `make test`: Run tests.
 - `make test-race`: Run tests with the race detector (what CI runs).
+- `make lint`: Run golangci-lint over `./...` — the same step CI's Test job runs.
+- `make check`: Everything CI checks, in one target — gofmt, vet, lint, `-race` tests and both consistency scripts. Run this before pushing.
 - `make run`: Build then run Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager image build and run; see [User Guide](guide.md).
 - `make docker-build-runner`: Build Runner image for container mode (`Dockerfile.runner`, default tag in `RUNNER_IMAGE`).
