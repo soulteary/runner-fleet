@@ -7,6 +7,7 @@ require (
 	github.com/soulteary/cli-kit v1.9.0
 	github.com/soulteary/health-kit/v3 v3.0.0
 	github.com/soulteary/i18n-kit/v3 v3.0.0
+	github.com/soulteary/logger-kit/v3 v3.0.0
 	github.com/soulteary/secure-kit v1.6.0
 	github.com/soulteary/version-kit/v3 v3.0.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -14,12 +15,14 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/redis/go-redis/v9 v9.22.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
