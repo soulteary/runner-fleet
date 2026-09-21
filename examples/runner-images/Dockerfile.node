@@ -25,8 +25,14 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 全局包装到 /usr/local，属主保持 root 即可（Job 只读取不写入）；
-# 但 npm 的用户级缓存目录要归 app，否则首次 npm install 会因无权限失败
+# npm 缓存显式挪出 $HOME，并且要归 app，否则首次 npm install 会因无权限失败。
+#
+# 这里是 /home/app/.npm 而不是默认的 $HOME/.npm，因为容器模式下 app 的 HOME 是 /runner
+# —— Manager 建容器时把宿主机目录挂在这里，缓存放进去就成了每个 Runner 各一份、
+# 还占着宿主机的 Runner 目录。/home/app 在挂载点之外，落在镜像层里，同一个 daemon 上
+# 所有 Runner 容器共用这一份（overlayfs），Job 的写入走 copy-on-write 互不污染——
+# 与 examples/deploy/fleet/Dockerfile.runner-cached 里共享工具链缓存是同一个思路。
+# 别「顺手」改回 $HOME/.npm。
 ENV NPM_CONFIG_CACHE=/home/app/.npm
 RUN install -d -o 1001 -g 1001 /home/app/.npm
 
