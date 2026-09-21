@@ -295,11 +295,12 @@ func Index(c echo.Context) error {
 	}
 	tjson, _ := json.Marshal(T)
 	return c.Render(http.StatusOK, "index.html", map[string]any{
-		"Runners": list,
-		"Config":  cfg,
-		"T":       T,
-		"Lang":    lang,
-		"TJSON":   template.JS(tjson),
+		"Runners":      list,
+		"Config":       cfg,
+		"T":            T,
+		"Lang":         lang,
+		"TJSON":        template.JS(tjson),
+		"AssetVersion": AssetVersion,
 	})
 }
 

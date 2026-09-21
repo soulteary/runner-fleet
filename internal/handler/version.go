@@ -15,6 +15,9 @@ var (
 	Commit string
 	// BuildDate 构建时间（RFC3339）
 	BuildDate string
+	// AssetVersion 内嵌静态资源的内容指纹，拼进页面里 /static/*.css|js 的 ?v=。
+	// 由 main 在启动时算好赋进来。
+	AssetVersion string
 )
 
 // BuildInfo 按当前的 Version/Commit/BuildDate 组装一份版本信息。

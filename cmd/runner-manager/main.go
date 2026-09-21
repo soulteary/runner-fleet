@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +35,9 @@ var templateFS embed.FS
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
+//go:embed static/app.css static/app.js
+var staticFS embed.FS
+
 // 三者均由构建时 -ldflags "-X main.Xxx=..." 注入。
 // Commit/BuildDate 未注入时为空，version-kit 会把它们从输出里省掉。
 var (
@@ -39,6 +45,47 @@ var (
 	Commit    string
 	BuildDate string
 )
+
+// assetVersion 是内嵌静态资源的内容指纹，拼进 /static/app.css?v= 里。
+// 用内容哈希而不是 Version：dev 构建的版本号恒为 "dev"，改完样式刷新页面
+// 拿到的还会是缓存里的旧文件。内容一变指纹就变，浏览器自然会去取新的。
+func assetVersion() string {
+	h := fnv.New64a()
+	entries, err := staticFS.ReadDir("static")
+	if err != nil {
+		return "dev"
+	}
+	// ReadDir 按文件名排序，因此同样的内容每次得到同样的指纹
+	for _, e := range entries {
+		b, err := staticFS.ReadFile("static/" + e.Name())
+		if err != nil {
+			continue
+		}
+		_, _ = h.Write([]byte(e.Name()))
+		_, _ = h.Write(b)
+	}
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
+// staticHandler 提供内嵌的 /static 资源。
+// 带 ?v=（页面自己拼的那种）就长缓存——地址里已经有内容指纹，内容变了地址也会变；
+// 直接敲地址不带 v 的则只许协商缓存，免得手工请求拿到一份再也刷不掉的副本。
+func staticHandler() echo.HandlerFunc {
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		panic(err)
+	}
+	srv := http.StripPrefix("/static", http.FileServer(http.FS(sub)))
+	return func(c echo.Context) error {
+		if c.QueryParam("v") != "" {
+			c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			c.Response().Header().Set("Cache-Control", "no-cache")
+		}
+		srv.ServeHTTP(c.Response(), c.Request())
+		return nil
+	}
+}
 
 type templateRenderer struct {
 	templates *template.Template
@@ -65,6 +112,7 @@ func main() {
 	flag.Parse()
 
 	handler.Version = Version
+	handler.AssetVersion = assetVersion()
 	handler.Commit = Commit
 	handler.BuildDate = BuildDate
 
@@ -344,6 +392,10 @@ func registerRoutes(e *echo.Echo) {
 	// 不在 Skipper 里，因此配了 Basic Auth 后 /metrics 同样需要凭据
 	e.GET(metricsPath, metricsHandler())
 	e.GET("/", handler.Index)
+	// HEAD 一并注册：只挂 GET 的话，探活脚本或代理对静态资源发 HEAD 会吃到 405
+	staticH := staticHandler()
+	e.GET("/static/*", staticH)
+	e.HEAD("/static/*", staticH)
 	e.GET("/api/runners", handler.ListRunners)
 	e.GET("/api/runners/:name", handler.GetRunner)
 	e.POST("/api/runners", handler.AddRunner)
