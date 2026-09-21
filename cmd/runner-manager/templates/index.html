@@ -273,6 +273,28 @@
     .reg-ok { color: var(--success); font-size: 12px; }
     .reg-err { color: var(--danger); font-size: 12px; }
     .probe-err { color: var(--danger); font-size: 12px; }
+    /* 暗色背景上浏览器默认的焦点框几乎看不见，键盘用户会彻底迷路 */
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* 悬停提示：原先这些信息只挂在 title 上，键盘和触屏根本拿不到——
+       而「漂移了什么」恰恰是决定要不要点「重建」的依据。
+       默认态用 clip-path 裁掉而不是 display:none：后者会把文本一并从无障碍树里
+       摘掉，读屏器就什么也读不到了。 */
+    .has-tip { position: relative; }
+    .has-tip .tip {
+      position: absolute; left: 0; top: calc(100% + 6px); z-index: 60;
+      width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+      padding: 0; border: 0; border-radius: 6px;
+      background: var(--bg); color: var(--text);
+      font-size: 12px; font-weight: 400; line-height: 1.5;
+      text-align: left; white-space: normal; word-break: break-word;
+    }
+    .has-tip:hover .tip, .has-tip:focus .tip, .has-tip:focus-within .tip {
+      width: max-content; max-width: 360px; height: auto;
+      overflow: visible; clip-path: none;
+      padding: 8px 10px; border: 1px solid var(--border);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
     .github-yes { color: var(--success); }
     .github-no { color: var(--warn); }
     .github-unknown { color: var(--muted); }
@@ -281,7 +303,8 @@
 <body>
   <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
     <h1 style="margin: 0;">{{index .T "page.h1"}}</h1>
-    <select id="langSelect" style="padding: 6px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer;">
+    <label class="sr-only" for="langSelect">{{index .T "page.lang_label"}}</label>
+    <select id="langSelect" aria-label="{{index .T "page.lang_label"}}" style="padding: 6px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer;">
       <option value="en" {{if eq .Lang "en"}}selected{{end}}>English</option>
       <option value="zh" {{if eq .Lang "zh"}}selected{{end}}>中文</option>
       <option value="fr" {{if eq .Lang "fr"}}selected{{end}}>Français</option>
@@ -291,6 +314,7 @@
     </select>
   </div>
 
+  <main>
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">{{index .T "runner_list.hint"}}</p>
@@ -370,11 +394,14 @@
     </div>
   </div>
 
+  </main>
+
   <div id="runnerModal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-header">
         <h3 id="modalTitle">{{index .T "modal.title"}}</h3>
-        <button type="button" class="modal-close" id="modalClose">&times;</button>
+        {{/* &times; 对读屏器读作「times」，必须另给可访问名 */}}
+        <button type="button" class="modal-close" id="modalClose" aria-label="{{index .T "modal.btn_close"}}">&times;</button>
       </div>
       <div class="modal-body">
         <div id="modalView">
@@ -386,6 +413,7 @@
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
+          <div class="row" id="vDriftRow" style="display:none"><label>{{index .T "modal.label_drift"}}</label><div class="val" id="vDrift"></div></div>
           <div class="row" id="vProbeErrorTypeRow"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
           <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
           <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
@@ -765,6 +793,27 @@
       if (data && data.probe && data.probe.type) return data.probe.type;
       return 'unknown';
     }
+    // ===== 弹窗的键盘可达性 =====
+    // 此前弹窗没有 role/aria-modal，焦点也不受约束：Tab 会一路跑到弹窗背后的表格和
+    // 表单上，读屏器把背景内容和弹窗混着念；关掉之后焦点落回 <body>，键盘用户得从
+    // 页面开头一路 Tab 回原来的位置。
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    let lastFocused = null;
+    function focusablesIn(root) {
+      // offsetParent 为 null 即当前不可见（弹窗里大量按钮是按状态 display:none 的），
+      // 把它们算进去会让 Tab 停在看不见的地方
+      return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), function(el) {
+        return el.offsetParent !== null;
+      });
+    }
+    function trapTab(e, root) {
+      if (e.key !== 'Tab') return;
+      const items = focusablesIn(root);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     const modal = document.getElementById('runnerModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalView = document.getElementById('modalView');
@@ -810,6 +859,8 @@
     }
 
     function openModal(mode, name) {
+      // 记在展示之前：一旦弹窗抢走焦点就问不出用户原来站在哪了
+      if (!modal.classList.contains('show')) lastFocused = document.activeElement;
       modalMsg.style.display = 'none';
       if (mode === 'view') {
         modalTitle.textContent = t('modal.view_title');
@@ -829,6 +880,10 @@
             document.getElementById('vTarget').textContent = data.target || '';
             document.getElementById('vLabels').textContent = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
             document.getElementById('vInstallDir').textContent = data.install_dir || '';
+            var driftRow = document.getElementById('vDriftRow');
+            document.getElementById('vDrift').textContent = data.container_drift || '';
+            driftRow.style.display = data.container_drift ? '' : 'none';
+            setRowWide('vDriftRow', data.container_drift);
             var jdbRow = document.getElementById('vJobDockerBackendRow');
             var jdbEl = document.getElementById('vJobDockerBackend');
             if (data.job_docker_backend) {
@@ -839,7 +894,7 @@
             }
             document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
             document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
-            document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
+            document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy has-tip" tabindex="0" role="note">' + escapeHtml(t('badge.busy')) + '<span class="tip">' + escapeHtml(t('badge.busy_title')) + '</span></span>' : '';
             const probeError = resolveProbeError(data);
             setProbeRowsVisible(!!probeError);
             document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
@@ -925,15 +980,22 @@
           .catch(() => { modalMsg.textContent = t('msg.load_failed'); modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
       }
       modal.classList.add('show');
+      // 焦点送进弹窗，否则 Tab 仍从页面开头走，读屏器也还停在背景内容上
+      const firstInModal = focusablesIn(modal)[0];
+      if (firstInModal) firstInModal.focus();
     }
 
     function closeModal() {
       modal.classList.remove('show');
+      // 焦点还给打开它的那个按钮；元素可能已随自动刷新被换掉，所以先确认还在文档里
+      if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+      lastFocused = null;
     }
 
     document.getElementById('modalClose').addEventListener('click', closeModal);
     document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modal.addEventListener('keydown', (e) => trapTab(e, modal));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
 
     document.getElementById('modalEditBtn').addEventListener('click', () => {
@@ -1206,19 +1268,19 @@
             {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
             {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
                  指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
-            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
-            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+            {{if .GitHubBusyYes}}<span class="badge busy has-tip" tabindex="0" role="note">{{index $.T "badge.busy"}}<span class="tip">{{index $.T "badge.busy_title"}}</span></span>{{end}}
+            {{if .ContainerDrift}}<span class="badge drift has-tip" tabindex="0" role="note">{{index $.T "badge.drift"}}<span class="tip">{{.ContainerDrift}}</span></span>{{end}}
+            {{if .Probe}}<br><span class="probe-err has-tip" tabindex="0" role="note">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}<span class="tip">{{.Probe.Error}}</span></span>{{end}}
           </td>
           {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
             {{if .RegistrationMessage}}
               {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
-                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+                {{/* 提示里仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行的 GitHub ✓ 交代 */}}
+                <a class="reg-ok github-link has-tip" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">{{index $.T "reg.registered"}}<span class="tip">{{.RegistrationMessage}}</span></a>
               {{else}}
-                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}} has-tip" tabindex="0" role="note">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}<span class="tip">{{.RegistrationMessage}}</span></span>
               {{end}}
             {{else}}
               <span class="github-unknown">—</span>
@@ -1230,7 +1292,7 @@
             {{else if .GitHubNo}}
               <br><span class="github-no">{{index $.T "github.no"}}</span>
             {{else if .GitHubCheckAt}}
-              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
+              <br><span class="github-unknown has-tip" tabindex="0" role="note">{{index $.T "github.failed"}}<span class="tip">{{.GitHubCheckError}}</span></span>
             {{else if .RegistrationMessage}}
               <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
             {{end}}
@@ -1243,7 +1305,7 @@
             <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
             <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
             {{end}}
-            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
+            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}">{{index $.T "btn.recreate"}}</button>{{end}}
             <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
             <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
             <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>

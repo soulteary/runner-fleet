@@ -144,5 +144,7 @@
   "filter.search_placeholder": "Rechercher par nom ou cible",
   "filter.clear": "Effacer",
   "filter.showing": "{{shown}} sur {{total}} affichés",
-  "filter.no_match": "Aucun runner ne correspond au filtre actuel."
+  "filter.no_match": "Aucun runner ne correspond au filtre actuel.",
+  "page.lang_label": "Langue de l'interface",
+  "modal.label_drift": "Écart de configuration"
 }
