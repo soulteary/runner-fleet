@@ -142,6 +142,8 @@
   "filter.clear": "Clear",
   "filter.showing": "Showing {{shown}} of {{total}}",
   "filter.no_match": "No runners match the current filter.",
+  "page.lang_label": "Interface language",
+  "modal.label_drift": "Config drift",
   "btn.working": "Working…",
   "toast.dismiss": "Dismiss",
   "toast.view_detail": "View details",

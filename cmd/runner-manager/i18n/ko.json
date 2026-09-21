@@ -142,6 +142,8 @@
   "filter.clear": "지우기",
   "filter.showing": "{{total}}개 중 {{shown}}개 표시",
   "filter.no_match": "현재 필터와 일치하는 Runner가 없습니다.",
+  "page.lang_label": "인터페이스 언어",
+  "modal.label_drift": "설정 차이",
   "btn.working": "처리 중…",
   "toast.dismiss": "닫기",
   "toast.view_detail": "자세히 보기",

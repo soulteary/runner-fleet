@@ -142,6 +142,8 @@
   "filter.clear": "清除",
   "filter.showing": "显示 {{shown}} / {{total}}",
   "filter.no_match": "没有符合当前筛选条件的 Runner。",
+  "page.lang_label": "界面语言",
+  "modal.label_drift": "配置差异",
   "btn.working": "处理中…",
   "toast.dismiss": "知道了",
   "toast.view_detail": "查看详情",

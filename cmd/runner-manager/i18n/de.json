@@ -142,6 +142,8 @@
   "filter.clear": "Zurücksetzen",
   "filter.showing": "{{shown}} von {{total}} angezeigt",
   "filter.no_match": "Kein Runner entspricht dem aktuellen Filter.",
+  "page.lang_label": "Oberflächensprache",
+  "modal.label_drift": "Konfigurationsabweichung",
   "btn.working": "Läuft…",
   "toast.dismiss": "Schließen",
   "toast.view_detail": "Details anzeigen",

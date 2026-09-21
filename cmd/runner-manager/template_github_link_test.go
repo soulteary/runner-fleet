@@ -46,6 +46,7 @@ func TestIndexTemplate_GitHubIndicatorsLinkToSettingsPage(t *testing.T) {
 
 // 「已注册」变成链接之后，原来挂在它上面的注册结果原文不能丢——
 // 那一格真正的诊断信息就是它，注册失败时尤其要看得到。
+// 载体已从 title 换成 .tip：title 键盘和触屏都拿不到，而这条恰恰是排查要看的。
 func TestIndexTemplate_RegisteredLinkKeepsRegistrationMessageTooltip(t *testing.T) {
 	msg := "注册失败：A runner exists with the same name，请先删除同名 Runner"
 	html := renderIndex(t, runner.RunnerInfo{
@@ -55,8 +56,16 @@ func TestIndexTemplate_RegisteredLinkKeepsRegistrationMessageTooltip(t *testing.
 		RegisteredOnGitHub:  boolPtr(true), GitHubCheckAt: "2026-09-20T09:00:00Z",
 		GitHubURL: runner.GitHubSettingsURL("repo", "o/r"),
 	})
-	if !strings.Contains(html, `title="`+msg+`"`) {
-		t.Fatal("「已注册」链接应保留注册结果原文作为 title")
+	if !strings.Contains(html, `<span class="tip">`+msg+`</span>`) {
+		t.Fatal("「已注册」链接应保留注册结果原文（.tip）")
+	}
+	// 提示必须挂在那个链接自己身上，否则悬停/聚焦时根本不会出来
+	i := strings.Index(html, `class="reg-ok github-link has-tip"`)
+	if i < 0 {
+		t.Fatal("「已注册」链接缺少 has-tip")
+	}
+	if !strings.Contains(html[i:i+len(msg)+400], `<span class="tip">`+msg+`</span>`) {
+		t.Fatal("注册结果原文没有挂在「已注册」链接内部")
 	}
 }
 
