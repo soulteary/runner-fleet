@@ -8,7 +8,7 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 
 ## Anforderungen
 
-- Go 1.26 (abgestimmt auf [go.mod](../../go.mod)).
+- Go 1.27 (abgestimmt auf [go.mod](../../go.mod)).
 
 ## Build
 

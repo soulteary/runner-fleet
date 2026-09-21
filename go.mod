@@ -1,6 +1,6 @@
 module github.com/soulteary/runner-fleet
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/labstack/echo/v4 v4.15.0

@@ -8,7 +8,7 @@ En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](g
 
 ## Prérequis
 
-- Go 1.26 (en cohérence avec [go.mod](../../go.mod)).
+- Go 1.27 (en cohérence avec [go.mod](../../go.mod)).
 
 ## Build
 
