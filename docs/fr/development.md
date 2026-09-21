@@ -194,7 +194,7 @@ pointeur à sa seule nullité, un pointeur vers `false` est donc vrai. Utilisez 
 - `make test` : Lancer les tests.
 - `make test-race` : Lancer les tests avec le détecteur de data races (ce que fait la CI).
 - `make lint` : Lancer golangci-lint sur `./...` — la même étape que le Lint du job Test en CI.
-- `make check` : Tout ce que la CI vérifie, en une cible — gofmt, vet, lint, tests `-race` et les deux scripts de cohérence. À lancer avant de pousser.
+- `make check` : Tout ce que la CI vérifie, en une cible — gofmt, vet, lint, tests `-race` et les deux vérifications de cohérence. À lancer avant de pousser.
 - `make run` : Build puis exécution du Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop` : Build et exécution de l'image Manager ; voir [Guide d'utilisation](guide.md).
 - `make docker-build-runner` : Build de l'image Runner pour le mode conteneur (`Dockerfile.runner`, tag par défaut dans `RUNNER_IMAGE`).
@@ -242,21 +242,31 @@ Quelques conventions à connaître avant d'enrichir la suite :
 
 ## Publication
 
-Les références de version dans la doc et les exemples doivent correspondre au tag d'image par défaut dans `internal/config/config.go`. La CI le vérifie via `scripts/check-version-consistency.sh` ; exécutez-le localement avant d'ouvrir une PR de release :
+Les références de version dans la doc et les exemples doivent correspondre au tag d'image par défaut dans `internal/config/config.go`. La CI le vérifie via `ci-recipes runner-fleet check-version-consistency` ; exécutez-le localement avant d'ouvrir une PR de release :
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+Les deux vérifications viennent de [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes), qui
+remplace le shell de CI propre à chaque dépôt par un binaire Go testé ; ce dépôt ne fournit que
+`scripts/ci-recipes.conf`. Installez la version épinglée par la CI :
+
+```bash
+make install-ci-recipes
+```
+
+L'épingle n'existe que dans `.github/workflows/ci-consistency.yml` ; le Makefile la lit depuis là.
 
 Si une ligne cite légitimement une ancienne version (notes de release, instructions de mise à niveau), ajoutez le marqueur `version-check-ignore` sur cette ligne pour l'ignorer.
 
-Les traductions sont vérifiées de la même façon. `scripts/check-docs-structure.sh` compare la
+Les traductions sont vérifiées de la même façon. `ci-recipes runner-fleet check-docs-structure` compare la
 séquence des niveaux de titre de chaque `docs/<lang>/*.md` à son original anglais — le texte des
 titres est censé différer, la structure non — de sorte qu'une section ajoutée en anglais et
 oubliée dans les cinq traductions fait échouer la PR au lieu de passer inaperçue :
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← Retour à la doc](README.md)
