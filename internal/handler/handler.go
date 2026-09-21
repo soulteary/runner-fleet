@@ -262,11 +262,6 @@ func writeRegistrationResult(installDir string, success bool, message string) {
 	_ = os.WriteFile(p, b, 0644)
 }
 
-// Health 健康检查，供负载均衡或 K8s 探针使用
-func Health(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
 // VersionInfo 返回版本信息（未注入时返回 dev）
 func VersionInfo(c echo.Context) error {
 	v := Version

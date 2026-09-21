@@ -275,7 +275,7 @@ func TestCSRFGuardLetsSameOriginThrough(t *testing.T) {
 // 读接口不受影响，/health 也要一直可探活
 func TestReadRoutesUnaffectedByCSRFGuard(t *testing.T) {
 	t.Setenv("TRUSTED_ORIGINS", "")
-	for _, path := range []string{"/health", "/version"} {
+	for _, path := range []string{"/health", "/ready", "/version"} {
 		t.Run(path, func(t *testing.T) {
 			got := serveThroughRealServer(t, http.MethodGet, path, map[string]string{
 				"Sec-Fetch-Site": "cross-site",

@@ -48,7 +48,8 @@ Avec Basic Auth, toutes les requêtes sauf `/health` doivent inclure `Authorizat
 
 | Chemin | Méthode | Description |
 |--------|---------|-------------|
-| `/health` | GET | Retourne `{"status":"ok"}` ; pour sondes Ingress/K8s ; toujours sans authentification. |
+| `/health` | GET | Liveness. Retourne `{"status":"ok","service":"runner-fleet"}` ; toujours 200 tant que le processus tourne, sans vérification de dépendance ; toujours sans authentification. |
+| `/ready` | GET | Readiness. Même forme de corps ; 503 si la configuration ne peut être chargée ou si le répertoire de base des runners est absent ou non inscriptible. Pour la `readinessProbe` K8s ; également sans authentification, et n'indique jamais quelle vérification a échoué. |
 | `/version` | GET | Retourne `{"version":"..."}`. |
 | `/api/runners` | GET | Liste des runners. En mode conteneur, en cas d'échec de sonde retourne `status=unknown` avec `probe` structuré (`error/type/suggestion/check_command/fix_command`). |
 | `/api/runners/:name` | GET | Détails d'un runner. Même `probe` en cas d'échec de sonde en mode conteneur. |
