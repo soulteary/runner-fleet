@@ -10,6 +10,8 @@
 
 ## 1. 배포 (Docker)
 
+- **Linux 전용**, `linux/amd64`와 `linux/arm64`. Runner가 실행 중인지는 `/proc`의 프로세스 테이블에서 읽습니다. 다른 OS에서는 모든 Runner가 "실행 중 아님"으로 보고되므로 시작·중지도 자동 복구도 동작할 수 없습니다. 배포된 이미지는 이 두 아키텍처를 지원합니다.
+- **화면은 번역되었지만 메시지는 아닙니다.** UI 껍데기는 6개 언어이지만 서버가 돌려주는 것——API 메시지, 토스트, 로그 줄——은 현재 모두 중국어입니다. 자가 점검 로그 줄에는 `[preflight …]` 접두사가 붙어 중국어를 몰라도 찾을 수 있지만 본문은 중국어입니다. 알려진 한계이며 번역이 덜 된 것이 아닙니다.
 - 이미지는 **Ubuntu** 기반이며 .NET Core 6.0 의존성이 포함되어 있습니다. **UID 1001**로 실행되며, 호스트에 마운트된 디렉터리는 해당 사용자가 쓸 수 있어야 합니다(예: `chown 1001:1001 config runners`).
 - 시작 후 약 15초 뒤에 등록되었지만 중지된 Runner가 자동으로 시작되며, 5분마다 주기적으로 검사합니다.
 
@@ -135,12 +137,56 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.agent_port` | 컨테이너 내 Agent 포트 | `8081` |
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind`일 때 DinD 호스트명 | `runner-dind` |
+| `runners.docker_gid` | `job_docker_backend=host-socket`일 때 Runner 컨테이너에 추가하는 호스트 docker 그룹 GID. 비우거나 `0`이면 `docker.sock`에서 자동 탐지 | 비움(자동 탐지) |
 | `runners.volume_host_path` | 컨테이너 모드에서 runners의 호스트 절대 경로(필수) | 비움 |
+| `runners.items[].name` | 표시 이름이자 설치 디렉터리 이름이며, 컨테이너 모드에서는 컨테이너 이름. 고유하며 생성 후 변경 불가 | 필수 |
+| `runners.items[].path` | `base_path` 아래 하위 디렉터리. 비우면 `name` 사용 | 비움(= `name`) |
+| `runners.items[].target_type` | `org` 또는 `repo` | 필수 |
+| `runners.items[].target` | 조직 이름 또는 `owner/repo` | 필수 |
+| `runners.items[].labels` | 사용자 정의 라벨. workflow의 `runs-on`이 이것으로 선택 | 비움 |
 | `runners.items[].container_image` | Runner별 이미지 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 | `runners.items[].job_docker_backend` | Runner별 Docker 백엔드 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 | `runners.resources` | Runner 컨테이너 리소스 상한(`cpus` / `memory` / `memory_swap` / `pids_limit`), `docker create`로 전달하며 시작 시 `docker update`로 기존 컨테이너에도 적용 | 비움(무제한) |
 
-일부 필드는 환경 변수로 덮어쓸 수 있음(`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` 등). 전체 컨테이너 시 `.env`만 수정하면 됨. `.env.example` 참조.
+위 표에서 컨테이너 배포가 바꿔야 하는 필드는 모두 환경 변수로도 줄 수 있어, 전체 컨테이너 구성은 `.env`만 건드리면 됩니다 — 아래 [환경 변수](#환경-변수) 참조.
+
+### 환경 변수
+
+시작할 때 한 번만 읽으므로 바꾸면 Manager를 재시작해야 합니다. 두 이름이 같은 설정을 가리키는
+경우 표의 순서대로 읽으므로, 둘 다 설정하면 **뒤쪽**이 이깁니다.
+
+| 변수 | 덮어쓰는 항목 | 기본값 / 참고 |
+|---|---|---|
+| `MANAGER_PORT`, `SERVER_PORT` | `server.port` | `8080`. compose는 컨테이너 안의 `SERVER_PORT`를 고정하고 `MANAGER_PORT`를 거기에 매핑하므로, 공개 포트와 수신 포트가 달라도 됩니다 |
+| `SERVER_ADDR` | `server.addr` | 비움(모든 인터페이스) |
+| `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`, 이미지 안에서는 `/app/runners` |
+| `CONTAINER_MODE` | `runners.container_mode` | `false`. `true`와 `1`만 읽습니다: 이 변수는 컨테이너 모드를 **켤 수만 있고 끌 수는 없습니다**. 값 하나를 잘못 써서 배포 형태가 조용히 바뀌지 않도록 하기 위함입니다 |
+| `RUNNER_IMAGE`, `CONTAINER_IMAGE` | `runners.container_image` | 미설정 시 `MANAGER_IMAGE`에서 유도(`:v1.7.1` → `:v1.7.1-runner`), 그다음 `FLEET_IMAGE_TAG` |
+| `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
+| `VOLUME_HOST_PATH`, `RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | 비움. 컨테이너 모드에서는 필수 |
+| `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
+| `DOCKER_GID` | `runners.docker_gid` | 비움 = `docker.sock`에서 탐지 |
+
+다음 항목들은 설정 파일에 대응 항목이 없습니다:
+
+| 변수 | 역할 | 기본값 |
+|---|---|---|
+| `BASIC_AUTH_PASSWORD` | 설정하면 Basic 인증이 켜집니다 | 비움(인증 없음) |
+| `BASIC_AUTH_USER` | Basic 인증 사용자 이름 | `admin` |
+| `TRUSTED_ORIGINS` | 교차 사이트 검사를 면제할 출처(쉼표 구분). [4. 보안 및 검증](#4-보안-및-검증) 참조 | 비움 |
+| `LOG_LEVEL` | `trace` / `debug` / `info` / `warn` / `error` | `info` |
+| `LOG_FORMAT` | 사람이 읽으면 `console`, ELK나 Loki로 보내면 `json`. 모르는 값은 시작을 실패시키지 않고 `console`로 되돌아갑니다 | `console` |
+| `DOCKER_HOST` | **Manager 자신**이 사용하는 Docker 데몬. 컨테이너 모드에는 호스트 socket이 필요합니다 — DinD를 가리키면 Runner 컨테이너를 만들지 못합니다 | `unix:///var/run/docker.sock` |
+| `MANAGER_IMAGE` | compose가 받아오는 Manager 이미지. Runner 이미지도 여기서 유도됩니다 | 릴리스 tag |
+| `FLEET_IMAGE_TAG` | 다른 무엇도 정하지 않을 때 기본 Runner 이미지의 tag | `v1.7.1` |
+
+`scripts/install-runner.sh`는 추가로 `RUNNER_VERSION`, `RUNNER_SHA256`,
+`RUNNER_FORCE_REINSTALL`을 읽습니다 — [자동 설치 및 등록](#자동-설치-및-등록) 참조.
+
+Runner 컨테이너 안의 Agent는 `AGENT_TOKEN`, `AGENT_PORT`, `RUNNER_INSTALL_DIR`을 읽습니다.
+셋 다 Manager가 컨테이너를 만들 때 주입하며, 손으로 설정하는 것은 일반적인 배포에 포함되지
+않습니다.
+
 
 **검증**: 중복 이름 불가. 컨테이너 모드에서는 컨테이너 이름 충돌을 검사합니다. `job_docker_backend`는 `dind`/`host-socket`/`none`만 허용. 컨테이너 모드에서 컨테이너 `base_path` 사용 시 `volume_host_path` 필수. `job_docker_backend`를 생략하면 `dind`. 백엔드 변경 후 **중지된** 컨테이너는 다음 시작 시 자동으로 재생성되고, **실행 중인** 컨테이너는 "설정 변경됨"으로 표시되며 해당 행의 "컨테이너 재생성"으로 즉시 적용됩니다 — 위의 "설정 변경과 컨테이너 재생성" 참고.
 
@@ -186,5 +232,50 @@ runners:
 **민감한 파일**: config/config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
 
 **Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
+
+---
+
+## 5. 운영
+
+### 프로브
+
+| 경로 | 용도 |
+|---|---|
+| `GET /health` | 라이브니스. 프로세스가 살아 있는 한 200이며 의존성 검사는 전혀 하지 않습니다 — 설정이 깨졌거나 마운트를 쓸 수 없어도 200입니다. K8s `livenessProbe`용: 재시작은 멈춘 프로세스에 대한 올바른 답이고, 잘못된 설정에 대한 틀린 답입니다 |
+| `GET /ready` | 레디니스. 설정을 읽을 수 없거나 `runners.base_path`가 없거나 쓸 수 없으면 503 — 실제로 쓰기 프로브를 하므로 `/health`가 보지 못하는 디렉터리 소유자 문제를 잡아냅니다. K8s `readinessProbe`용이며, 배포를 바꾼 뒤 확인할 것은 이쪽입니다 |
+
+Basic 인증을 켜도 이 둘은 인증 없이 남습니다. 프로브는 자격 증명을 지닐 수 없기 때문입니다.
+둘 다 *어느* 검사가 실패했는지는 말하지 않습니다. 그것은 로그에 있습니다.
+
+### 메트릭
+
+`GET /metrics`는 Prometheus 텍스트를 제공합니다 — 라우트별 호출량과 지연. `path` 라벨은 요청
+URL이 아니라 Echo의 라우트 템플릿(`/api/runners/:name`)이므로, Runner가 많아져도 라벨 값이
+그만큼 늘지 않습니다.
+
+프로브와 달리 Basic 인증이 켜져 있으면 `/metrics`는 **인증이 필요합니다**. 모든 엔드포인트의
+호출량을 드러내는 운영 데이터이며 `/api`보다 더 공개될 이유가 없기 때문입니다. 스크레이프
+작업을 그에 맞게 설정하세요:
+
+```yaml
+scrape_configs:
+  - job_name: runner-fleet
+    static_configs:
+      - targets: ['runner-manager:8080']
+    basic_auth:
+      username: admin
+      password: <BASIC_AUTH_PASSWORD>
+```
+
+### 버전과 로그
+
+`GET /version`은 버전만 돌려줍니다. 빌드 세부 정보는 일부러 넣지 않았습니다: `go_version`이
+있으면 누구든 공개된 Go 런타임 CVE를 당신이 실행 중인 정확한 런타임에 연결할 수 있습니다.
+`runner-manager -version`은 commit, 빌드 일시, Go 버전, 플랫폼을 출력하지만, 이쪽은 호스트에서
+실행되며 외부에 노출되지 않습니다.
+
+로그는 `LOG_LEVEL`과 `LOG_FORMAT`으로 제어합니다. ELK나 Loki로 보낼 때는 `LOG_FORMAT=json`.
+시작 자가 점검은 항목마다 한 줄을 쓰며 각 줄 앞에 `[preflight …]`가 붙습니다 —
+[문제 해결](#문제-해결) 전반에서 쓰는 grep 앵커가 바로 이것입니다.
 
 [← 프로젝트 홈으로](../../README.md)

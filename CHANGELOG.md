@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The user guide now has an **Environment variables** section listing every variable the code reads: the nine that override a config field (including the two aliases `CONTAINER_IMAGE` and `RUNNERS_VOLUME_HOST_PATH`, which previously existed only in the source), the eight with no config-file counterpart (`LOG_LEVEL`, `LOG_FORMAT`, `TRUSTED_ORIGINS`, `FLEET_IMAGE_TAG` and the rest), the three read by `install-runner.sh`, and the three the Agent reads inside a runner container. The guide used to say only "some fields can be overridden … see `.env.example`" — a file that is Chinese only and was itself missing three of them.
+- A new **Operations** section covers `/health` vs `/ready` (and why a readiness probe is the one to check after a deployment change — it write-probes the runners directory, which `/health` cannot see), `/metrics` with a ready-to-paste Prometheus scrape job including the `basic_auth` block it needs, `/version`, and the log variables. All four endpoints were documented only in the contributor doc.
+- The configuration table gained the six fields it was missing: `runners.docker_gid` and all five `runners.items[]` basics (`name`, `path`, `target_type`, `target`, `labels`). Writing `config.yaml` by hand previously meant reading `config.yaml.example` or the struct tags.
+- The guide and README now state the two things worth knowing before choosing this tool: it is **Linux only** on `linux/amd64` and `linux/arm64` (runner liveness comes from `/proc`), and the UI shell is translated into six languages while server-side messages and logs are currently Chinese only. The second is a known boundary, and saying so beats leaving it to look like an unfinished translation.
+- Two more consistency checks, both verified by mutation. `envvars_test.go` requires every environment variable the code reads to appear in all six guides; `configfields_test.go` does the same for the 24 `yaml` fields in `config.go`. Both match on identifier boundaries rather than substrings — the first version used `strings.Contains`, and lengthening a variable name by one letter in a translation left the test green.
+
 ### Fixed
 
 - The quick start could not be copy-pasted. `chown 1001:1001 config runners` ran *before* `mkdir -p runners`, so the first command always exited 1 with `cannot access 'runners'`, `runners` was then chowned a second time, and `sudo` was missing throughout — the form in `examples/deploy/README.md` was right all along and the other three places were not. Fixed in all six guides, the root README and `docker-compose.yml`.

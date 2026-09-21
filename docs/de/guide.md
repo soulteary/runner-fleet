@@ -10,6 +10,8 @@ Bereitstellung, Konfiguration, Hinzufügen von Runnern und Sicherheit werden hie
 
 ## 1. Bereitstellung (Docker)
 
+- **Nur Linux**, `linux/amd64` und `linux/arm64`. Ob ein Runner läuft, wird über `/proc` aus der Prozesstabelle gelesen; auf jedem anderen Betriebssystem meldet sich jeder Runner als „läuft nicht", womit Start/Stopp und der Selbstheilungslauf nicht funktionieren können. Die veröffentlichten Images decken diese beiden Architekturen ab.
+- **Die Oberfläche ist übersetzt, die Meldungen sind es nicht.** Die UI-Hülle gibt es in sechs Sprachen, aber alles, was der Server zurückgibt — API-Meldungen, Toasts und Logzeilen — ist derzeit nur auf Chinesisch. Selbsttest-Logzeilen tragen das Präfix `[preflight …]`, damit man sie ohne Chinesischkenntnisse findet, ihr Text ist jedoch chinesisch. Eine bekannte Grenze, keine unfertige Übersetzung.
 - Das Image basiert auf **Ubuntu** mit .NET Core 6.0-Abhängigkeiten; läuft unter **UID 1001** – gemountete Host-Verzeichnisse müssen für diesen Benutzer schreibbar sein (z. B. `chown 1001:1001 config runners`).
 - Etwa 15 Sekunden nach dem Start werden registrierte, aber gestoppte Runner automatisch gestartet; periodische Prüfung alle 5 Minuten.
 
@@ -135,12 +137,57 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.agent_port` | Agent-Port im Container | `8081` |
 | `runners.job_docker_backend` | Docker in Jobs: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | DinD-Hostname bei `job_docker_backend=dind` | `runner-dind` |
+| `runners.docker_gid` | Docker-Gruppen-GID des Hosts, die Runner-Containern bei `job_docker_backend=host-socket` hinzugefügt wird; leer oder `0` ermittelt sie aus `docker.sock` | leer (automatisch) |
 | `runners.volume_host_path` | Absoluter Host-Pfad zu runners im Containermodus (erforderlich) | leer |
+| `runners.items[].name` | Anzeigename; zugleich Name des Installationsverzeichnisses und im Containermodus des Containers. Eindeutig und nach dem Anlegen nicht mehr änderbar | erforderlich |
+| `runners.items[].path` | Unterverzeichnis unter `base_path`; leer verwendet `name` | leer (= `name`) |
+| `runners.items[].target_type` | `org` oder `repo` | erforderlich |
+| `runners.items[].target` | Organisationsname oder `owner/repo` | erforderlich |
+| `runners.items[].labels` | Eigene Labels; das `runs-on` eines Workflows wählt danach aus | leer |
 | `runners.items[].container_image` | Image-Override pro Runner (Containermodus); leer = globaler Wert | leer |
 | `runners.items[].job_docker_backend` | Docker-Backend-Override pro Runner (Containermodus); leer = globaler Wert | leer |
 | `runners.resources` | Ressourcenlimits der Runner-Container (`cpus` / `memory` / `memory_swap` / `pids_limit`), an `docker create` durchgereicht und beim Start via `docker update` auch auf bestehende Container angewendet | leer (unbegrenzt) |
 
-Einige Felder können per Umgebungsvariable überschrieben werden (`MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND` usw.), sodass Full-Container nur über `.env` läuft; siehe `.env.example`.
+Jedes Feld oben, das eine Container-Bereitstellung ändern muss, kann auch aus der Umgebung kommen, sodass ein Vollcontainer-Setup nur `.env` berührt — siehe [Umgebungsvariablen](#umgebungsvariablen) unten.
+
+### Umgebungsvariablen
+
+Werden einmal beim Start gelesen; eine Änderung erfordert einen Neustart des Managers. Wo zwei
+Namen dieselbe Einstellung betreffen, werden sie in der Reihenfolge der Tabelle gelesen — sind
+beide gesetzt, gewinnt also die **zweite**.
+
+| Variable | Überschreibt | Standard / Hinweis |
+|---|---|---|
+| `MANAGER_PORT`, `SERVER_PORT` | `server.port` | `8080`. Compose fixiert `SERVER_PORT` im Container und bildet `MANAGER_PORT` darauf ab, sodass der veröffentlichte Port vom Lauschport abweichen darf |
+| `SERVER_ADDR` | `server.addr` | leer (alle Schnittstellen) |
+| `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`; im Image `/app/runners` |
+| `CONTAINER_MODE` | `runners.container_mode` | `false`. Nur `true` und `1` werden gelesen: diese Variable schaltet den Containermodus **ein, niemals aus**, damit ein versehentlicher Wert die Form einer Bereitstellung nicht stillschweigend ändert |
+| `RUNNER_IMAGE`, `CONTAINER_IMAGE` | `runners.container_image` | Nicht gesetzt: abgeleitet aus `MANAGER_IMAGE` (`:v1.7.1` → `:v1.7.1-runner`), sonst aus `FLEET_IMAGE_TAG` |
+| `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
+| `VOLUME_HOST_PATH`, `RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | leer; im Containermodus erforderlich |
+| `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
+| `DOCKER_GID` | `runners.docker_gid` | leer = aus `docker.sock` ermitteln |
+
+Diese haben keine Entsprechung in der Konfigurationsdatei:
+
+| Variable | Wirkung | Standard |
+|---|---|---|
+| `BASIC_AUTH_PASSWORD` | Setzen aktiviert Basic Auth | leer (keine Auth) |
+| `BASIC_AUTH_USER` | Benutzername für Basic Auth | `admin` |
+| `TRUSTED_ORIGINS` | Kommagetrennte Ursprünge, die von der Cross-Site-Prüfung ausgenommen sind; siehe [4. Sicherheit und Validierung](#4-sicherheit-und-validierung) | leer |
+| `LOG_LEVEL` | `trace` / `debug` / `info` / `warn` / `error` | `info` |
+| `LOG_FORMAT` | `console` für Menschen, `json` für ELK oder Loki; ein unbekannter Wert fällt auf `console` zurück, statt den Start zu verhindern | `console` |
+| `DOCKER_HOST` | Welchen Docker-Daemon der **Manager selbst** nutzt. Der Containermodus braucht den Host-Socket — auf DinD gerichtet scheitert das Anlegen von Runnern | `unix:///var/run/docker.sock` |
+| `MANAGER_IMAGE` | Welches Manager-Image Compose zieht; davon wird das Runner-Image abgeleitet | der Release-Tag |
+| `FLEET_IMAGE_TAG` | Tag des Standard-Runner-Images, wenn nichts anderes ihn bestimmt | `v1.7.1` |
+
+`scripts/install-runner.sh` liest zusätzlich `RUNNER_VERSION`, `RUNNER_SHA256` und
+`RUNNER_FORCE_REINSTALL` — siehe [Automatische Installation und Registrierung](#automatische-installation-und-registrierung).
+
+Im Runner-Container liest der Agent `AGENT_TOKEN`, `AGENT_PORT` und `RUNNER_INSTALL_DIR`. Alle
+drei setzt der Manager beim Anlegen des Containers; sie von Hand zu setzen gehört zu keiner
+normalen Bereitstellung.
+
 
 **Validierung**: Keine doppelten Namen; Containermodus prüft auf Container-Namenskonflikte. `job_docker_backend` erlaubt nur `dind`/`host-socket`/`none`; im Containermodus mit Container-`base_path` ist `volume_host_path` erforderlich. Fehlendes `job_docker_backend` bedeutet `dind`. Nach einer Backend-Änderung wird ein **gestoppter** Container beim nächsten Start neu aufgebaut, ein **laufender** wird als "Konfiguration geändert" markiert und die Schaltfläche "Neu erstellen" in der Zeile wendet die Änderung sofort an — siehe oben "Konfigurationsänderungen und Neuaufbau von Containern".
 
@@ -186,5 +233,51 @@ Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 **Sensible Dateien**: config/config.yaml und .env stehen in `.gitignore`. Für `.github_check_token` jedes Runners `chmod 600` verwenden; `**/.github_check_token` zu `.gitignore` hinzufügen, wenn unter Versionskontrolle.
 
 **Berechtigungen der Runner-Verzeichnisse**: Das Installationsverzeichnis jedes Runners wird mit 0700 angelegt. `config.sh` schreibt dort `.credentials_rsaparams` hinein — den privaten RSA-Schlüssel, mit dem sich der Runner bei GitHub ausweist — und actions/runner setzt für diese Dateien keine Unix-Rechte. Der Modus des Verzeichnisses ist damit das Einzige, was andere lokale Benutzer auf dem Host davon abhält, den Schlüssel zu lesen und den Runner zu übernehmen. **Von älteren Versionen angelegte Verzeichnisse sind weiterhin 0755.** Der Startup-Selbsttest (`docker compose logs runner-manager | grep '\[preflight'`) benennt sie und gibt das passende `chmod 700` aus. Er ändert nichts von selbst: Bei abweichenden UIDs (Manager als root, Container als app(1001)) würde das Verschärfen eine laufende Installation zerstören — bitte erst prüfen.
+
+---
+
+## 5. Betrieb
+
+### Probes
+
+| Pfad | Zweck |
+|---|---|
+| `GET /health` | Liveness. 200, solange der Prozess läuft, ohne jede Abhängigkeitsprüfung — bleibt 200, auch wenn die Konfiguration kaputt oder der Mount unbrauchbar ist. Für einen K8s-`livenessProbe`: ein Neustart ist die richtige Antwort auf einen hängenden Prozess und die falsche auf eine fehlerhafte Konfiguration |
+| `GET /ready` | Readiness. 503, wenn die Konfiguration nicht geladen werden kann oder `runners.base_path` fehlt bzw. nicht beschreibbar ist — es schreibt tatsächlich eine Testdatei und erkennt damit den Verzeichnis-Eigentümerfehler, den `/health` nicht sieht. Für einen K8s-`readinessProbe` und der richtige Endpunkt nach einer Änderung an der Bereitstellung |
+
+Beide bleiben ohne Authentifizierung, auch wenn Basic Auth aktiv ist, denn ein Probe trägt keine
+Zugangsdaten. Keiner von beiden nennt, *welche* Prüfung fehlschlug; das steht im Log.
+
+### Metriken
+
+`GET /metrics` liefert Prometheus-Text — Aufrufvolumen und Latenz je Route. Das Label `path` ist
+Echos Routenvorlage (`/api/runners/:name`), nicht die Anfrage-URL, sodass aus einer Flotte von
+Runnern keine Flotte von Labelwerten wird.
+
+Anders als die Probes **erfordert** `/metrics` Authentifizierung, sobald Basic Auth aktiv ist: es
+legt das Aufrufvolumen jedes Endpunkts offen — Betriebsdaten, die keinen Grund haben,
+öffentlicher zu sein als `/api`. Den Scrape-Job entsprechend konfigurieren:
+
+```yaml
+scrape_configs:
+  - job_name: runner-fleet
+    static_configs:
+      - targets: ['runner-manager:8080']
+    basic_auth:
+      username: admin
+      password: <BASIC_AUTH_PASSWORD>
+```
+
+### Version und Logs
+
+`GET /version` gibt die Version zurück und sonst nichts. Build-Details fehlen bewusst:
+`go_version` ließe jeden eine veröffentlichte CVE der Go-Laufzeit der exakten Laufzeit zuordnen,
+die Sie betreiben. `runner-manager -version` gibt Commit, Build-Datum, Go-Version und Plattform
+aus — das läuft auf dem Host und ist nicht exponiert.
+
+`LOG_LEVEL` und `LOG_FORMAT` steuern das Log; setzen Sie `LOG_FORMAT=json`, wenn es nach ELK oder
+Loki geht. Der Startup-Selbsttest schreibt eine Zeile je Punkt, jeweils mit dem Präfix
+`[preflight …]` — dieses Präfix ist der Grep-Anker, der in der gesamten
+[Fehlerbehebung](#fehlerbehebung) verwendet wird.
 
 [← Zurück zur Projektstartseite](../../README.md)
