@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/soulteary/cli-kit/env"
+	"github.com/soulteary/cli-kit/validator"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,9 +25,18 @@ const DefaultRunnerImageRepo = "ghcr.io/soulteary/runner-fleet"
 // DefaultJobDockerBackend 未配置 job_docker_backend 时的默认后端
 const DefaultJobDockerBackend = "dind"
 
+// JobDockerBackends 是 job_docker_backend 的全部合法取值。
+// 提成包级变量而不是散在 Validate 里的局部 map：全局配置与 items[] 两处都要校验，
+// 错误信息也由它拼出来，改动一处即可，不会出现「多了一个取值但报错还是老三样」。
+var JobDockerBackends = []string{"dind", "host-socket", "none"}
+
 // DefaultRunnerContainerImage 返回默认 Runner 容器镜像（未配置 container_image 时使用）。
 // Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.6.0；镜像名为 {repo}:{tag}-runner。
 func DefaultRunnerContainerImage() string {
+	// 这里刻意不改写成 env.GetTrimmed("FLEET_IMAGE_TAG", "v1.6.0")：
+	// scripts/check-version-consistency.sh 用正则 `tag = "vX.Y.Z"` 从本文件里取
+	// 全仓库的基准版本号，换成函数调用后那条正则匹配不到，脚本会直接以
+	// 「无法解析默认镜像 tag」失败。保持这个字面形状。
 	tag := strings.TrimSpace(os.Getenv("FLEET_IMAGE_TAG"))
 	if tag == "" {
 		tag = "v1.6.0"
@@ -36,7 +47,7 @@ func DefaultRunnerContainerImage() string {
 // containerImageFromManagerImage 从 MANAGER_IMAGE 推导 Runner 镜像（image:tag -> image:tag-runner）。
 // 无 tag 时返回 image:latest-runner；空或解析失败时返回空字符串。
 func containerImageFromManagerImage() string {
-	raw := strings.TrimSpace(os.Getenv("MANAGER_IMAGE"))
+	raw := env.GetTrimmed("MANAGER_IMAGE", "")
 	if raw == "" {
 		return ""
 	}
@@ -54,48 +65,45 @@ func containerImageFromManagerImage() string {
 // applyEnvOverrides 用环境变量覆盖配置字段（仅当 env 非空时覆盖）。
 // 应在 Load 中默认值处理之后、Validate 之前调用。
 func applyEnvOverrides(c *Config) {
-	if v := strings.TrimSpace(os.Getenv("MANAGER_PORT")); v != "" {
-		if port, err := strconv.Atoi(v); err == nil && port > 0 {
-			c.Server.Port = port
+	// env.GetTrimmed 的语义与这里要的完全一致：变量未设置、或 trim 后为空时返回传入的原值。
+	// 于是「只在环境变量非空时覆盖」不必再逐个写成 if 块，读起来就是一张覆盖表。
+	//
+	// 同一字段出现两个变量名时，顺序即优先级——后一行覆盖前一行。
+	c.Server.Addr = env.GetTrimmed("SERVER_ADDR", c.Server.Addr)
+	c.Runners.BasePath = env.GetTrimmed("RUNNERS_BASE_PATH", c.Runners.BasePath)
+	c.Runners.ContainerImage = env.GetTrimmed("RUNNER_IMAGE", c.Runners.ContainerImage)
+	c.Runners.ContainerImage = env.GetTrimmed("CONTAINER_IMAGE", c.Runners.ContainerImage)
+	c.Runners.ContainerNetwork = env.GetTrimmed("CONTAINER_NETWORK", c.Runners.ContainerNetwork)
+	c.Runners.VolumeHostPath = env.GetTrimmed("VOLUME_HOST_PATH", c.Runners.VolumeHostPath)
+	c.Runners.VolumeHostPath = env.GetTrimmed("RUNNERS_VOLUME_HOST_PATH", c.Runners.VolumeHostPath)
+
+	// 端口刻意不用 env.GetInt：它不做 trim，而 .env 与 compose 的 environment 里
+	// 带一个尾随空格是常事，那样 MANAGER_PORT=9090 会被静默丢弃、继续听 8080。
+	// 这里仍按原样「trim 后再解析」，范围校验交给 Validate——在这里悄悄忽略一个
+	// 越界端口，比让它一路走到 Validate 报出明确错误更难排查。
+	for _, key := range []string{"MANAGER_PORT", "SERVER_PORT"} {
+		if v := env.GetTrimmed(key, ""); v != "" {
+			if port, err := strconv.Atoi(v); err == nil && port > 0 {
+				c.Server.Port = port
+			}
 		}
 	}
-	if v := strings.TrimSpace(os.Getenv("SERVER_PORT")); v != "" {
-		if port, err := strconv.Atoi(v); err == nil && port > 0 {
-			c.Server.Port = port
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("SERVER_ADDR")); v != "" {
-		c.Server.Addr = v
-	}
-	if v := strings.TrimSpace(os.Getenv("RUNNERS_BASE_PATH")); v != "" {
-		c.Runners.BasePath = v
-	}
-	if v := strings.TrimSpace(strings.ToLower(os.Getenv("CONTAINER_MODE"))); v == "true" || v == "1" {
-		c.Runners.ContainerMode = true
-	}
-	if v := strings.TrimSpace(os.Getenv("RUNNER_IMAGE")); v != "" {
-		c.Runners.ContainerImage = v
-	}
-	if v := strings.TrimSpace(os.Getenv("CONTAINER_IMAGE")); v != "" {
-		c.Runners.ContainerImage = v
-	}
-	if v := strings.TrimSpace(os.Getenv("CONTAINER_NETWORK")); v != "" {
-		c.Runners.ContainerNetwork = v
-	}
-	if v := strings.TrimSpace(strings.ToLower(os.Getenv("JOB_DOCKER_BACKEND"))); v != "" {
-		c.Runners.JobDockerBackend = v
-	}
-	if v := strings.TrimSpace(os.Getenv("DOCKER_GID")); v != "" {
+	if v := env.GetTrimmed("DOCKER_GID", ""); v != "" {
 		if gid, err := strconv.Atoi(v); err == nil && gid >= 0 {
 			c.Runners.DockerGID = gid
 		}
 	}
-	if v := strings.TrimSpace(os.Getenv("VOLUME_HOST_PATH")); v != "" {
-		c.Runners.VolumeHostPath = v
+
+	// 同样不用 env.GetBool：它走 strconv.ParseBool，既不 trim，也会让
+	// CONTAINER_MODE=false 反过来关掉配置文件里已开启的容器模式。
+	// 这个变量从来只能开、不能关，保持原样，免得一次部署改动静默换掉运行形态。
+	if v := strings.ToLower(env.GetTrimmed("CONTAINER_MODE", "")); v == "true" || v == "1" {
+		c.Runners.ContainerMode = true
 	}
-	if v := strings.TrimSpace(os.Getenv("RUNNERS_VOLUME_HOST_PATH")); v != "" {
-		c.Runners.VolumeHostPath = v
+	if v := normalizeJobDockerBackend(env.GetTrimmed("JOB_DOCKER_BACKEND", "")); v != "" {
+		c.Runners.JobDockerBackend = v
 	}
+
 	// 容器模式且未设 container_image 时，优先从 MANAGER_IMAGE 推导
 	if c.Runners.ContainerMode && strings.TrimSpace(c.Runners.ContainerImage) == "" {
 		if derived := containerImageFromManagerImage(); derived != "" {
@@ -387,18 +395,22 @@ func Validate(c *Config) error {
 	seen := make(map[string]bool)
 	seenContainerNames := make(map[string]string)
 	seenInstallPaths := make(map[string]string)
-	validBackend := map[string]bool{
-		"dind":        true,
-		"host-socket": true,
-		"none":        true,
-	}
 	jobBackend := normalizeJobDockerBackend(c.Runners.JobDockerBackend)
 	if jobBackend == "" {
 		jobBackend = DefaultJobDockerBackend
 		c.Runners.JobDockerBackend = jobBackend
 	}
-	if !validBackend[jobBackend] {
-		return fmt.Errorf("runners.job_docker_backend 仅支持 dind/host-socket/none，当前为 %q", c.Runners.JobDockerBackend)
+	if validator.ValidateEnumCaseInsensitive(jobBackend, JobDockerBackends) != nil {
+		return fmt.Errorf("runners.job_docker_backend 仅支持 %s，当前为 %q",
+			strings.Join(JobDockerBackends, "/"), c.Runners.JobDockerBackend)
+	}
+	// Port 为 0 表示「没写」，由 Load 填默认值，这里不管；非 0 才校验范围。
+	// 原先各处只要求 > 0，于是 MANAGER_PORT=70000 能一路写进配置，直到
+	// ListenAndServe 才以一句不提配置项的 "invalid port" 失败。
+	if c.Server.Port != 0 {
+		if err := validator.ValidatePort(c.Server.Port); err != nil {
+			return fmt.Errorf("server.port 需在 1-65535 之间，当前为 %d（也可能来自 MANAGER_PORT/SERVER_PORT）", c.Server.Port)
+		}
 	}
 	if err := c.Runners.Resources.Validate(); err != nil {
 		return err
@@ -442,8 +454,9 @@ func Validate(c *Config) error {
 		}
 		itemBackend := normalizeJobDockerBackend(item.JobDockerBackend)
 		itemImage := strings.TrimSpace(item.ContainerImage)
-		if itemBackend != "" && !validBackend[itemBackend] {
-			return fmt.Errorf("runners.items[%d].job_docker_backend 仅支持 dind/host-socket/none，当前为 %q", i, item.JobDockerBackend)
+		if itemBackend != "" && validator.ValidateEnumCaseInsensitive(itemBackend, JobDockerBackends) != nil {
+			return fmt.Errorf("runners.items[%d].job_docker_backend 仅支持 %s，当前为 %q",
+				i, strings.Join(JobDockerBackends, "/"), item.JobDockerBackend)
 		}
 		if !c.Runners.ContainerMode {
 			// 与 runners.volume_host_path 的处理一致：容器模式专属字段不允许在非容器模式下设置，
