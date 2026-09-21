@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "(masqué par défaut, cliquez sur \"Afficher la commande de correction\")",
   "confirm_remove": "Retirer \"{{name}}\" de la config ?",
   "confirm_reveal_fix": "La commande de correction peut avoir des effets secondaires. Afficher ?",
-  "confirm_show_fix_cmd": "Afficher la commande de correction (effets secondaires) ? Exécutez d'abord la commande de vérification.",
   "msg.check_cmd_copied": "Commande de vérification copiée",
   "msg.copy_failed": "Échec de la copie, copiez manuellement",
   "msg.fix_cmd_copied": "Commande de correction copiée",
@@ -114,9 +113,7 @@
   "msg.action_done": "Action terminée",
   "probe.alert_type": "Type d'erreur de sonde : ",
   "probe.alert_suggestion": "Suggestion : ",
-  "probe.alert_check_cmd": "Commande de vérification : ",
   "probe.alert_error": "Erreur de sonde : ",
-  "probe.alert_fix_cmd": "Commande de correction : ",
   "precheck.checking": "Vérification des conflits…",
   "precheck.ok": "Nom disponible",
   "precheck.name_taken": "Un runner portant ce nom existe déjà : {{detail}}",
@@ -130,5 +127,12 @@
   "precheck.blocked": "Conflits détectés — renommez ou nettoyez avant de soumettre",
   "badge.drift": "config modifiée",
   "btn.recreate": "Recréer",
-  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu."
+  "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu.",
+  "btn.working": "En cours…",
+  "toast.dismiss": "Fermer",
+  "toast.view_detail": "Voir les détails",
+  "toast.reload_list": "Actualiser la liste",
+  "confirm.title": "Confirmation",
+  "confirm.ok": "Confirmer",
+  "confirm.cancel": "Annuler"
 }

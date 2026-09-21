@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "（デフォルトで非表示、「修正コマンドを表示」をクリック）",
   "confirm_remove": "設定から \"{{name}}\" を削除しますか？",
   "confirm_reveal_fix": "修正コマンドには副作用がある場合があります。表示しますか？",
-  "confirm_show_fix_cmd": "修正コマンドを表示しますか（副作用あり）？先にチェックコマンドを実行して確認してください。",
   "msg.check_cmd_copied": "チェックコマンドをコピーしました",
   "msg.copy_failed": "コピーに失敗しました。手動でコピーしてください",
   "msg.fix_cmd_copied": "修正コマンドをコピーしました",
@@ -114,9 +113,7 @@
   "msg.action_done": "操作が完了しました",
   "probe.alert_type": "プローブエラー種別：",
   "probe.alert_suggestion": "推奨：",
-  "probe.alert_check_cmd": "チェックコマンド：",
   "probe.alert_error": "プローブエラー：",
-  "probe.alert_fix_cmd": "修正コマンド：",
   "precheck.checking": "競合を確認しています…",
   "precheck.ok": "この名前は使用できます",
   "precheck.name_taken": "同名の Runner がすでに存在します: {{detail}}",
@@ -130,5 +127,12 @@
   "precheck.blocked": "競合があります。名前を変えるか整理してから送信してください",
   "badge.drift": "設定変更あり",
   "btn.recreate": "コンテナ再作成",
-  "confirm_recreate": "現在の設定で {{name}} のコンテナを再作成しますか？\n\n既存のコンテナを削除して作り直します。実行中の Job があれば中断されます。"
+  "confirm_recreate": "現在の設定で {{name}} のコンテナを再作成しますか？\n\n既存のコンテナを削除して作り直します。実行中の Job があれば中断されます。",
+  "btn.working": "処理中…",
+  "toast.dismiss": "閉じる",
+  "toast.view_detail": "詳細を見る",
+  "toast.reload_list": "一覧を再読み込み",
+  "confirm.title": "確認",
+  "confirm.ok": "実行",
+  "confirm.cancel": "キャンセル"
 }
