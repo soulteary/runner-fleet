@@ -131,6 +131,10 @@
   "badge.drift": "config modifiée",
   "btn.recreate": "Recréer",
   "confirm_recreate": "Recréer le conteneur de {{name}} avec la configuration actuelle ?\n\nL'ancien conteneur est supprimé et un nouveau est créé. Un job en cours dessus sera interrompu.",
+  "autorefresh.label": "Actualisation auto (15 s)",
+  "autorefresh.updated": "Mis à jour à {{time}}",
+  "autorefresh.failed": "Échec de l'actualisation, nouvelle tentative",
+  "autorefresh.paused": "Actualisation auto désactivée",
   "page.lang_label": "Langue de l'interface",
   "modal.label_drift": "Écart de configuration"
 }
