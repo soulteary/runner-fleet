@@ -244,6 +244,10 @@
     .toast .toast-msg { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
     .toast .toast-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .confirm-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; }
+    /* 只用来取样式的小按钮。不要复用 .btn-view / .btn-del 这些：它们同时是行内
+       操作的行为选择器，套上去会被当成行操作绑上监听。 */
+    .btn-neutral { padding: 4px 10px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+    .btn-neutral:hover { color: var(--text); border-color: var(--text); }
     /* 请求在途时按钮置灰，避免连点发出两次启停 */
     button:disabled { opacity: 0.55; cursor: not-allowed; }
     .github-yes { color: var(--success); }
@@ -468,14 +472,14 @@
       (actions || []).forEach(function(a) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'btn-view';
+        b.className = 'btn-neutral';
         b.textContent = a.label;
         b.addEventListener('click', function() { dismissToast(el); a.onClick(); });
         bar.appendChild(b);
       });
       const close = document.createElement('button');
       close.type = 'button';
-      close.className = 'btn-del';
+      close.className = 'btn-neutral';
       close.textContent = t('toast.dismiss');
       close.addEventListener('click', function() { dismissToast(el); });
       bar.appendChild(close);
