@@ -663,6 +663,9 @@ async function refreshRows() {
     // 再判一次：请求在途的这段时间里用户可能已经打开弹窗或关掉了自动刷新
     if (!refreshPaused()) {
       runnerRowsBody.innerHTML = html;
+      // 换回来的是一整批新行，筛选状态不会跟着过来——不重筛的话，
+      // 每 15 秒筛掉的行就会自己冒回来
+      applyFilter();
       refreshStatusEl.className = 'refresh-status';
       refreshStatusEl.textContent = fillVars(t('autorefresh.updated'), { time: new Date().toLocaleTimeString() });
     }
@@ -686,5 +689,85 @@ if (!autoRefreshToggle.checked) refreshStatusEl.textContent = t('autorefresh.pau
 // 标签页切回来时立刻补一次，不用干等下一个周期
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRows(); });
 refreshTimer = setInterval(refreshRows, REFRESH_MS);
+// ===== 概览统计与筛选 =====
+// 这是个 fleet 管理器，但列表此前是平铺的：20 台以上只能靠 Ctrl+F 找，
+// 也看不出「几台在跑、几台挂了」。筹码既是统计，也是筛选入口。
+const PREDICATES = {
+  all: function() { return true; },
+  running: function(r) { return r.running; },
+  stopped: function(r) { return r.status === 'installed' && !r.running; },
+  new: function(r) { return r.status === 'new'; },
+  // 异常：目录没了、状态查不出来、或探测失败——这三种都得有人去看一眼
+  problem: function(r) { return r.status === 'missing' || r.status === 'unknown' || r.probe; },
+  drift: function(r) { return r.drift; }
+};
+const statsEl = document.getElementById('listStats');
+const searchEl = document.getElementById('runnerSearch');
+const filterCountEl = document.getElementById('filterCount');
+const filterClearBtn = document.getElementById('filterClearBtn');
+let activeFilter = 'all';
+
+function readRows() {
+  return Array.prototype.map.call(document.querySelectorAll('tr[data-name]'), function(tr) {
+    return {
+      tr: tr,
+      name: (tr.dataset.name || '').toLowerCase(),
+      target: (tr.dataset.target || '').toLowerCase(),
+      status: tr.dataset.status || '',
+      running: tr.dataset.running === '1',
+      drift: tr.dataset.drift === '1',
+      probe: tr.dataset.probe === '1'
+    };
+  });
+}
+
+function applyFilter() {
+  const rows = readRows();
+  const q = (searchEl.value || '').trim().toLowerCase();
+  const pred = PREDICATES[activeFilter] || PREDICATES.all;
+  let shown = 0;
+  rows.forEach(function(r) {
+    const hit = pred(r) && (!q || r.name.indexOf(q) >= 0 || r.target.indexOf(q) >= 0);
+    r.tr.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  // 计数始终按全部算，不跟着当前筛选走：否则点进「需处理」之后其余筹码
+  // 全变成 0，就再也看不出全局了
+  statsEl.querySelectorAll('.stat-chip').forEach(function(chip) {
+    const n = rows.filter(PREDICATES[chip.dataset.filter] || PREDICATES.all).length;
+    chip.querySelector('.n').textContent = n;
+    chip.classList.toggle('has', n > 0);
+    // 数量为 0 的筹码收起来，免得小规模部署下摆一排空筹码；
+    // 当前选中的那个即便归零也要留着，否则筛完就找不到退出的入口
+    chip.style.display = (n > 0 || chip.dataset.filter === 'all' || chip.dataset.filter === activeFilter) ? '' : 'none';
+  });
+  const filtering = activeFilter !== 'all' || q !== '';
+  filterCountEl.textContent = filtering ? fillVars(t('filter.showing'), { shown: shown, total: rows.length }) : '';
+  filterClearBtn.style.display = filtering ? 'inline-block' : 'none';
+  // 每次重新取：这一行住在 runnerRows 片段里，自动刷新会把它整个换掉，
+  // 加载时存下来的那个引用刷新之后就指向一个已经离开文档的节点了
+  const noMatchRow = document.getElementById('noMatchRow');
+  if (noMatchRow) noMatchRow.style.display = (rows.length > 0 && shown === 0) ? '' : 'none';
+}
+
+function setActiveChip(name) {
+  activeFilter = name;
+  statsEl.querySelectorAll('.stat-chip').forEach(function(c) { c.classList.toggle('active', c.dataset.filter === name); });
+}
+statsEl.addEventListener('click', function(e) {
+  const chip = e.target.closest('.stat-chip');
+  if (!chip) return;
+  setActiveChip(chip.dataset.filter);
+  applyFilter();
+});
+searchEl.addEventListener('input', applyFilter);
+filterClearBtn.addEventListener('click', function() {
+  searchEl.value = '';
+  setActiveChip('all');
+  applyFilter();
+  searchEl.focus();
+});
+applyFilter();
+
 document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
 document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));

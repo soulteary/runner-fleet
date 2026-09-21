@@ -33,32 +33,35 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 缺任何一项就直接失败，不再只报一条 warning 然后跳过后续 step。
+      # 原先的写法是：清单缺一项 → 置一个 false 输出 → 下面每个 step 的 if 都不成立
+      # → job 全绿收场，只留一条 warning。也就是说 push 一个 v* tag 上来，release 建好了、
+      # tag 也在了，GHCR 上却没有新镜像，而没有任何东西是红的——README 正让用户照那个
+      # tag 起服务。这个 fail-open 是给「仓库里还没有完整源码」的骨架期准备的（原来的提示
+      # 语就是「请先提交完整源码再构建」），那个前提早就不成立：清单里每一项都是核心路径。
+      #
+      # 清单本身是构建上下文的契约。把其中任何一项改名或移走时（例如把
+      # scripts/install-runner.sh 的逻辑挪进 internal/runner），必须同时改这里。
       - name: Verify build context (Dockerfile.runner 所需源码齐全)
-        id: verify
         run: |
-          set -e
+          set -eu
           MISSING=""
-          [ ! -f go.mod ] && MISSING="${MISSING} go.mod"
-          [ ! -f go.sum ] && MISSING="${MISSING} go.sum"
-          [ ! -f cmd/runner-agent/main.go ] && MISSING="${MISSING} cmd/runner-agent/main.go"
-          MISSING="${MISSING# }"
-          if [ -z "$MISSING" ]; then
-            echo "has_go_source=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_go_source=false" >> $GITHUB_OUTPUT
-            echo "::warning::Runner 构建所需文件缺失（${MISSING}），跳过构建。请确认已提交并推送 go.mod、go.sum、cmd/ 等完整源码到本仓库后再构建。"
+          for f in go.mod go.sum cmd/runner-agent/main.go; do
+            [ -f "$f" ] || MISSING="${MISSING} ${f}"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Runner 构建所需文件缺失（${MISSING# }），构建上下文不完整。"
+            exit 1
           fi
+          echo "构建上下文完整。"
 
       - name: Set up QEMU
-        if: steps.verify.outputs.has_go_source == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: steps.verify.outputs.has_go_source == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: steps.verify.outputs.has_go_source == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -66,7 +69,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute canonical image name (lowercase)
-        if: steps.verify.outputs.has_go_source == 'true'
         id: vars
         shell: bash
         run: |
@@ -76,14 +78,12 @@ jobs:
           echo "canonical=${CANONICAL_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Get version for build
-        if: steps.verify.outputs.has_go_source == 'true'
         id: version
         run: |
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract Docker metadata (tags, labels)
-        if: steps.verify.outputs.has_go_source == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -98,7 +98,6 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Prepare Runner tags (same image, tag suffix -runner)
-        if: steps.verify.outputs.has_go_source == 'true'
         id: runner-tags
         run: |
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
@@ -114,7 +113,6 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Runner image (container mode)
-        if: steps.verify.outputs.has_go_source == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ github.workspace }}

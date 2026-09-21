@@ -179,7 +179,7 @@ PAT가 없으면 등록 해제를 할 수 없습니다. GitHub는 PAT 아니면 
 - `make test`: 테스트 실행.
 - `make test-race`: 레이스 검출기와 함께 테스트 실행(CI가 돌리는 것).
 - `make lint`: `./...`에 golangci-lint 실행. CI Test job의 Lint 단계와 동일.
-- `make check`: CI가 확인하는 것을 한 타깃에 모음 — gofmt, vet, lint, `-race` 테스트, 두 개의 일관성 스크립트. 푸시 전에 실행.
+- `make check`: CI가 확인하는 것을 한 타깃에 모음 — gofmt, vet, lint, `-race` 테스트, 두 개의 일관성 검사. 푸시 전에 실행.
 - `make run`: Manager 빌드 후 실행.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager 이미지 빌드 및 실행. [사용 가이드](guide.md) 참조.
 - `make docker-build-runner`: 컨테이너 모드용 Runner 이미지 빌드(`Dockerfile.runner`, 기본 태그는 `RUNNER_IMAGE`).
@@ -220,20 +220,30 @@ CI에서 돕니다. 로컬에서 돌릴 수 없다면 `go run`으로 부르는 `
 
 ## 릴리스
 
-문서와 예제의 버전 참조는 `internal/config/config.go`의 기본 이미지 태그와 일치해야 합니다. CI는 `scripts/check-version-consistency.sh`로 검사합니다. 릴리스 PR을 열기 전에 로컬에서 실행하세요:
+문서와 예제의 버전 참조는 `internal/config/config.go`의 기본 이미지 태그와 일치해야 합니다. CI는 `ci-recipes runner-fleet check-version-consistency`로 검사합니다. 릴리스 PR을 열기 전에 로컬에서 실행하세요:
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+두 검사는 [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes)가 제공합니다. 저장소별 CI 셸을
+테스트된 하나의 Go 바이너리로 대체하며, 이 저장소는 `scripts/ci-recipes.conf`만 제공합니다.
+CI가 고정한 버전을 설치하세요:
+
+```bash
+make install-ci-recipes
+```
+
+고정값은 `.github/workflows/ci-consistency.yml` 한 곳에만 있고, Makefile이 그곳에서 읽습니다.
 
 이전 버전을 정당하게 인용하는 줄(릴리스 노트, 업그레이드 안내)에는 `version-check-ignore` 마커를 붙입니다.
 
-번역본에도 같은 장치가 있습니다. `scripts/check-docs-structure.sh`는 각 `docs/<lang>/*.md`의
+번역본에도 같은 장치가 있습니다. `ci-recipes runner-fleet check-docs-structure`는 각 `docs/<lang>/*.md`의
 제목 레벨 시퀀스를 영어 원본과 비교합니다 — 제목 문구는 달라야 하지만 구조는 달라서는 안 됩니다.
 영어판에 절을 추가하고 5개 번역이 따라가지 않으면 조용히 묻히는 대신 그 자리에서 PR이 실패합니다:
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← 문서로 돌아가기](README.md)

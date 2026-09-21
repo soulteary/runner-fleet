@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{index .T "page.title"}}</title>
+  {{/* 内联 SVG 图标：不必为一个 16px 的图新增静态路由和二进制资源，
+       也省掉每次加载都要吃的一个 /favicon.ico 404 */}}
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161b22'/%3E%3Crect x='7' y='8' width='18' height='4.5' rx='2.25' fill='%2358a6ff'/%3E%3Crect x='7' y='14' width='18' height='4.5' rx='2.25' fill='%233fb950'/%3E%3Crect x='7' y='20' width='18' height='4.5' rx='2.25' fill='%238b949e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}">
 </head>
 <body>
@@ -22,24 +25,39 @@
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p class="card-hint">{{index .T "runner_list.hint"}}</p>
+    <div class="list-stats" id="listStats">
+      <button type="button" class="stat-chip active" data-filter="all">{{index .T "filter.all"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip running" data-filter="running">{{index .T "filter.running"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip" data-filter="stopped">{{index .T "filter.stopped"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip" data-filter="new">{{index .T "filter.new"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip problem" data-filter="problem">{{index .T "filter.problem"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip drift" data-filter="drift">{{index .T "filter.drift"}}<span class="n">0</span></button>
+    </div>
+    <div class="filter-row">
+      <input type="search" id="runnerSearch" placeholder="{{index .T "filter.search_placeholder"}}" aria-label="{{index .T "filter.search_placeholder"}}">
+      <button type="button" id="filterClearBtn" class="btn-neutral" style="display:none">{{index .T "filter.clear"}}</button>
+      <span class="filter-count" id="filterCount" aria-live="polite"></span>
+    </div>
     <div class="list-toolbar">
       <label class="autorefresh"><input type="checkbox" id="autoRefreshToggle" checked>{{index .T "autorefresh.label"}}</label>
       <span id="refreshStatus" class="refresh-status" aria-live="polite"></span>
     </div>
+    <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>{{index .T "runner_list.table.name"}}</th>
           <th>{{index .T "runner_list.table.target"}}</th>
-          <th>{{index .T "runner_list.table.status"}}</th>
+          <th class="col-status">{{index .T "runner_list.table.status"}}</th>
           {{if .Config.Runners.ContainerMode}}<th>{{index .T "runner_list.table.docker_backend"}}</th>{{end}}
           <th>{{index .T "runner_list.table.reg_github"}}</th>
           <th>{{index .T "runner_list.table.install_dir"}}</th>
-          <th></th>
+          <th class="col-actions"></th>
         </tr>
       </thead>
       <tbody id="runnerRowsBody">{{template "runnerRows" .}}</tbody>
     </table>
+    </div>
   </div>
 
   <div class="card">
@@ -145,10 +163,13 @@
      GitHubYes/GitHubNo 这类三态判断不必在 JS 里再写一遍。 */}}
 {{define "runnerRows"}}
         {{range .Runners}}
-        <tr>
+        {{/* 筛选与计数读这些属性，而不是去解析单元格里的可见文本——那些文本是
+             按语言翻译过的，换一种语言筛选就会失灵。属性写在片段里，自动刷新
+             换回来的行才同样带着它们。 */}}
+        <tr data-name="{{.Name}}" data-target="{{.TargetType}}: {{.Target}}" data-status="{{.Status}}" data-running="{{if .Running}}1{{else}}0{{end}}" data-drift="{{if .ContainerDrift}}1{{else}}0{{end}}" data-probe="{{if .Probe}}1{{else}}0{{end}}">
           <td>{{.Name}}</td>
           <td>{{.TargetType}}: {{.Target}}</td>
-          <td>
+          <td class="col-status">
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
             {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
@@ -183,7 +204,7 @@
             {{end}}
           </td>
           <td class="path">{{.InstallDir}}</td>
-          <td>
+          <td class="col-actions">
             {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
             {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
             {{if eq .Status "unknown"}}
@@ -200,4 +221,5 @@
         {{if not .Runners}}
         <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" class="cell-empty">{{index .T "runner_list.empty"}}</td></tr>
         {{end}}
+        <tr id="noMatchRow" style="display:none"><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" class="cell-empty">{{index .T "filter.no_match"}}</td></tr>
 {{end}}

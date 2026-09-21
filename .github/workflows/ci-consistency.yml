@@ -7,31 +7,75 @@ on:
   pull_request:
     branches: [main, master, develop]
 
+env:
+  GO_VERSION: "1.27.0"
+  # 两个检查由 soulteary/ci-recipes 的 runner-fleet recipe 提供，本仓库只出
+  # scripts/ci-recipes.conf（基准路径与正则、ignore 标记、扫描 pathspec、文档语言与
+  # 文件列表）。这里是版本的唯一来源：Makefile 的 check target 用 sed 从本文件读它，
+  # 不再各钉一个——两处各钉一个却忘了同步，就是本地绿、CI 红的那个老口子。
+  #
+  # 钉的是 module 伪版本而不是短 SHA：伪版本是精确的模块版本，proxy 按版本号不可变地
+  # 从缓存里服务它；短 SHA 要回仓库里解析，commit 一旦不可达（比如被 squash 合并孤立）
+  # 就取不到了。这个伪版本对应 ci-recipes main 上合入 runner-fleet recipe 的那个合并提交。
+  # ci-recipes 发出 tag 之后换成 tag。
+  #
+  # 行尾的 version-check-ignore 是必需的：这是 ci-recipes 的模块版本，不是本仓库的版本号，
+  # 而版本号一致性检查只认「一个 vX.Y.Z 字面量」。换成 tag 之后同样需要，这一点跟 tag 无关。
+  CI_RECIPES_VERSION: "v0.0.0-20260921094536-68dc8a7f1123"  # version-check-ignore
+
+# 两个 job 各自装一遍 ci-recipes。合成一个 job 能省掉一次安装，但也会把 PR 上两个检查
+# 的名字合成一个——分支保护里按名字要求的必需检查会当场对不上。两个 job 本来并行，
+# 墙钟时间不变，多花的只是 runner 分钟数。
 jobs:
   version:
     name: Version consistency
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install ci-recipes
+        run: |
+          set -eu
+          go install "github.com/soulteary/ci-recipes/cmd/ci-recipes@${CI_RECIPES_VERSION}"
+          # setup-go 只保证 GOROOT/bin 在 PATH 上，go install 的产物落在 GOPATH/bin。
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # 文档与示例里的版本号必须跟代码里的默认镜像 tag 一致。
       # v1.0.1 / v1.1.0 / v1.1.1 三次发布都漏了同步，照 README 部署会拉到  version-check-ignore
       # 落后三个版本的镜像；这一步让下次漏改直接在 PR 上失败。
       - name: Check version references are in sync
-        run: sh scripts/check-version-consistency.sh
+        run: ci-recipes runner-fleet check-version-consistency
 
   docs:
     name: Docs structure consistency
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install ci-recipes
+        run: |
+          set -eu
+          go install "github.com/soulteary/ci-recipes/cmd/ci-recipes@${CI_RECIPES_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # 五种译文的 development.md 曾整整落后一个版本（v1.5.1/v1.6.0 新增的四节一节没跟上），  version-check-ignore
       # 而没有任何东西会因此报错——译文语法完好，站点照常渲染。界面的 i18n 早有测试盯着
       # 六种语言的键集，文档这一半一直没有；这一步补上。
       - name: Check translated docs match the English section structure
-        run: sh scripts/check-docs-structure.sh
+        run: ci-recipes runner-fleet check-docs-structure

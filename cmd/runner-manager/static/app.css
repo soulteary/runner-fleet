@@ -1,4 +1,7 @@
 :root {
+  /* 纯暗色界面必须声明：否则 select 展开的原生下拉面板、滚动条、
+     自动填充背景仍按亮色渲染，和页面对不上 */
+  color-scheme: dark;
   --bg: #0d1117;
   --card: #161b22;
   --border: #30363d;
@@ -19,6 +22,10 @@ body {
   line-height: 1.5;
 }
 h1 { font-size: 1.5rem; margin: 0 0 24px; color: var(--text); }
+@media (max-width: 620px) {
+  body { padding: 16px; }
+  .card { padding: 16px; }
+}
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .card {
@@ -29,7 +36,12 @@ a:hover { text-decoration: underline; }
   margin-bottom: 20px;
 }
 .card h2 { margin: 0 0 16px; font-size: 1.1rem; }
+/* 全文此前唯一一处 overflow 在 .modal 上，主表（容器模式下 7 列）在窄屏
+   会直接溢出撑破页面。滚动条给到容器，表头与内容一起横向滚。 */
+.table-wrap { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
+/* 状态徽章与操作按钮换行后既难点又难认，宁可让容器横向滚 */
+.col-status, .col-actions { white-space: nowrap; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; }
 .badge {
@@ -152,6 +164,24 @@ form button:hover { opacity: 0.9; }
 .list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
 .refresh-status { color: var(--muted); font-size: 12px; }
 .refresh-status.err { color: var(--warn); }
+/* 概览与筛选：这是 fleet 管理器，20 台以上时没有搜索就只能靠 Ctrl+F 找 */
+.list-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.stat-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.stat-chip:hover { color: var(--text); border-color: var(--text); }
+.stat-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(88, 166, 255, 0.12); }
+/* 数字等宽，筛选时计数跳动不会把筹码宽度带得一跳一跳 */
+.stat-chip .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 只有真的有异常/漂移时才染色，0 的时候不必抢注意力 */
+.stat-chip.running.has .n { color: var(--success); }
+.stat-chip.problem.has .n { color: var(--danger); }
+.stat-chip.drift.has .n { color: var(--warn); }
+.filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.filter-row input[type="search"] { flex: 1 1 240px; max-width: 320px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+.filter-count { color: var(--muted); font-size: 12px; }
+/* 只用来取样式的小按钮。不要复用 .btn-view / .btn-del 这些：它们同时是行内
+   操作的行为选择器，套上去会被当成行操作绑上监听，点一下就误开查看弹窗。 */
+.btn-neutral { padding: 4px 10px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.btn-neutral:hover { color: var(--text); border-color: var(--text); }
 .parse-box {
   margin-bottom: 20px;
   padding-bottom: 20px;
