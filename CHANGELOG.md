@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The README claimed `Delete` removes a runner "from config (does not delete disk)". It does delete the disk: `RemoveRunnerByName` calls `os.RemoveAll` on the install directory, guarded to paths under `runners.base_path`. The claim existed only in the README, described an irreversible operation, and was the opposite of the behaviour rather than merely stale. The correct semantics — stop, deregister from GitHub when a PAT is present, delete the install directory including `_work` and its caches — are now in all six guides.
+- `examples/deploy/README.md` ended by sending every reader to `docs/zh/guide.md`, so anyone arriving from the English README was handed Chinese docs and then pointed back at Chinese docs. It now names the English guide alongside the Chinese one.
+
+### Changed
+
+- The README is 49 lines instead of 66. `Features` (seven bullets) duplicated `Highlights` except for the delete claim above, and `Use cases` was three bullets of positioning with no technical content; both are gone, and `Highlights` is consolidated from eight bullets to seven. What remains is what the page is for: what this is, why you would pick it, a 30-second start, and where the real documentation lives.
+- The quick-start block is the one technical duplication left between the README and the guide, and it is now checked rather than remembered. `quickstart_test.go` compares the command lines in both (not the comments — those are translated in the guide and English in the README). This is the drift that shipped a broken copy-paste before: the two copies disagreed, one of them failed on the first command, and nothing went red.
+
+### Added
+
+- The docs index in all six languages now lists the deployment examples and the custom runner images, marked `(中文)` so nobody follows the link to find out. `ci-recipes-migration.md` and `docs-improvement-plan.md` were reachable from no Markdown link at all; both are now linked from the Releasing section of all six `development.md`, described for what they are — maintainer notes about build decisions, deliberately untranslated.
+
 ### Added
 
 - The user guide now has an **Environment variables** section listing every variable the code reads: the nine that override a config field (including the two aliases `CONTAINER_IMAGE` and `RUNNERS_VOLUME_HOST_PATH`, which previously existed only in the source), the eight with no config-file counterpart (`LOG_LEVEL`, `LOG_FORMAT`, `TRUSTED_ORIGINS`, `FLEET_IMAGE_TAG` and the rest), the three read by `install-runner.sh`, and the three the Agent reads inside a runner container. The guide used to say only "some fields can be overridden … see `.env.example`" — a file that is Chinese only and was itself missing three of them.

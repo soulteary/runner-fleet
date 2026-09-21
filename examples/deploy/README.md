@@ -171,4 +171,4 @@ GitHub Actions 的「缓存」不是一件东西，三类缓存归属不同，�
   `host-socket` 下所有 Job 的镜像与构建产物都堆在宿主机 daemon 上：
   `docker image prune -f && docker builder prune -f`。Runner 自己的目录（`_work` 与 HOME 缓存）也会长大。
 
-其余部署与配置说明见 [使用指南](../../docs/zh/guide.md)。
+其余部署与配置说明见 [使用指南](../../docs/zh/guide.md)（English: [User Guide](../../docs/guide.md)）。

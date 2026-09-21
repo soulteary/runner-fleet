@@ -292,4 +292,11 @@ Schnellstart-Block des Handbuchs gegen ein lokal gebautes Image aus und fragt da
 ab, denn ein dokumentiertes Vorgehen, das niemand ausführt, ist ein Vorgehen, von dem niemand
 weiß, dass es kaputt ist.
 
+Neben dieser Datei liegen zwei Notizen für Maintainer, bewusst ohne Übersetzung, denn beide
+halten eine Build-Entscheidung fest und kein Produktverhalten:
+[CI-Shell nach ci-recipes migrieren](../ci-recipes-migration.md) ist das Audit hinter dem Umzug —
+welche Shell-Flächen dorthin gehörten, die vier Defekte, die die Portierung behob, und was sie
+kostete — und [der Plan zur Dokumentationsverbesserung](../docs-improvement-plan.md) ist das
+Audit, aus dem diese Prüfungen hervorgingen, samt Stand und offenen Punkten.
+
 [← Zurück zur Dokumentation](README.md)

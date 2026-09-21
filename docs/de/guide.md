@@ -216,6 +216,8 @@ runners:
 
 **Namenskonflikt-Prüfung**: Während der Eingabe fragt das Formular `/api/runner-precheck` und zeigt vor dem Absenden, was schiefgehen würde — ein Runner dieses Namens existiert bereits, der Name ergibt denselben Containernamen wie ein anderer, das Installationsverzeichnis ist belegt, ein übrig gebliebenes Verzeichnis enthält bereits einen registrierten Runner (`.runner`), oder auf dem Host existiert noch ein Container dieses Namens. Blockierendes wird rot angezeigt, mit einem Vorschlagsnamen zum Übernehmen; Warnungen (ein nicht leeres Verzeichnis wird weiterverwendet) lassen sich übergehen. Trotzdem Absenden lehnt der Server mit **409** und denselben Konflikten ab — das frühere stille Anhängen eines Zufallssuffixes entfällt (bei Bedarf `auto_rename: true`).
 
+**Einen Runner löschen**: Er wird gestoppt, bei vorhandenem PAT in seinem Verzeichnis von GitHub abgemeldet, und **sein Installationsverzeichnis wird gelöscht** — nur wenn dieses Verzeichnis unter `runners.base_path` liegt, damit ein falsch konfigurierter Pfad kein Systemverzeichnis mitnimmt. `_work` und die darin liegenden Caches gehen ebenfalls verloren; danach ist nichts wiederherstellbar.
+
 Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 
 ---

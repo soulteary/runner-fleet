@@ -291,4 +291,11 @@ est sortie sans que rien dans l'arbre ne pointe vers elle. Le job `Quick start r
 localement puis demande `GET /ready` : une procédure documentée que personne n'exécute est une
 procédure dont personne ne sait qu'elle est cassée.
 
+Deux notes de mainteneur vivent à côté de ce fichier et ne sont volontairement pas traduites,
+car toutes deux consignent une décision de build et non un comportement du produit :
+[Migration du shell CI vers ci-recipes](../ci-recipes-migration.md) est l'audit derrière ce
+déplacement — quelles surfaces shell y avaient leur place, les quatre défauts que le portage a
+corrigés, et ce qu'il a coûté — et [le plan d'amélioration de la documentation](../docs-improvement-plan.md)
+est l'audit dont ces vérifications sont issues, avec ce qui est fait et ce qui reste ouvert.
+
 [← Retour à la doc](README.md)

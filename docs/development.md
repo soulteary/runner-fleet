@@ -275,4 +275,11 @@ one release went out with nothing in the tree pointing at it. The `Quick start r
 asks for `GET /ready`, because a documented procedure that nobody runs is a procedure nobody
 knows is broken.
 
+Two maintainer notes live next to this file and are deliberately untranslated, because both
+record a build decision rather than product behaviour:
+[Migrating CI shell to ci-recipes](ci-recipes-migration.md) is the audit behind the move — which
+shell surfaces belonged there, the four defects the port fixed, and what it cost — and
+[the documentation improvement plan](docs-improvement-plan.md) is the audit these checks came
+out of, with what is done and what is still open.
+
 [← Back to docs](README.md)

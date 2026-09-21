@@ -6,6 +6,8 @@
 
 - **[User Guide](guide.md)** — Deployment, configuration, adding runners, security & troubleshooting
 - **[Development & Build](development.md)** — Build, API, Makefile
+- **[Deployment examples](../examples/deploy/)** (中文) — Single-container and multi-container setups, which caches are shared and which isolated, and the deployment pitfalls
+- **[Custom runner images](../examples/runner-images/)** (中文) — Layering Android / Node toolchains onto the stock runner image
 - **[Changelog](../CHANGELOG.md)** — Release history and upgrade notes
 
 [← Back to project home](../README.md)
