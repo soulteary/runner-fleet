@@ -12,7 +12,12 @@ import (
 
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
-	"gopkg.in/yaml.v3"
+	// go.yaml.in/yaml/v3 是 gopkg.in/yaml.v3 的延续：同一份代码、同一套 API、同样的
+	// yaml 包名与 struct tag，而后者停在 2022 年的最后一版不再发布。换过来之后
+	// Marshal 的输出逐字节未变（满配、空配、config.yaml.example 往返三种都比过），
+	// 所以线上已有的 config.yaml 不需要动一个字节。i18n-kit 的 yamlloader 同期做的
+	// 是同一件事。
+	"go.yaml.in/yaml/v3"
 )
 
 // mu 保护配置文件的读写，避免并发写导致覆盖
