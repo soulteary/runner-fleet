@@ -312,9 +312,13 @@ func TestShortRandomSuffix(t *testing.T) {
 		if len(s) == 0 {
 			t.Fatal("后缀不能为空")
 		}
-		// 会被拼进容器名与目录名，只能是 [a-z0-9]
+		// 会被拼进容器名与目录名，只能是 [a-z0-9]。
+		// 用白名单而不是两段区间比较：区间写法要么是 staticcheck 会挑的
+		// 「!a && !b」（QF1001），要么是反过来的四段不等式，两种都不如
+		// 直接照抄 shortRandomSuffix 里那一串字符看得明白。
+		const allowed = "abcdefghijklmnopqrstuvwxyz0123456789"
 		for _, r := range s {
-			if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') {
+			if !strings.ContainsRune(allowed, r) {
 				t.Fatalf("后缀含非法字符 %q: %s", r, s)
 			}
 		}

@@ -192,6 +192,8 @@ Helfer `GitHubYes` / `GitHubNo` / `GitHubUnknown` auf `RunnerInfo`.
 - `make build-all`: Manager und Agent bauen.
 - `make test`: Tests ausführen.
 - `make test-race`: Tests mit Race-Detector ausführen (das, was die CI tut).
+- `make lint`: golangci-lint über `./...` ausführen — derselbe Schritt wie Lint im Test-Job der CI.
+- `make check`: Alles, was die CI prüft, in einem Ziel — gofmt, vet, lint, `-race`-Tests und beide Konsistenz-Skripte. Vor dem Push ausführen.
 - `make run`: Manager bauen und ausführen.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager-Image bauen und ausführen; siehe [Benutzerhandbuch](guide.md).
 - `make docker-build-runner`: Runner-Image für Containermodus bauen (`Dockerfile.runner`, Standard-Tag in `RUNNER_IMAGE`).

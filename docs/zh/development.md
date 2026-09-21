@@ -164,6 +164,8 @@ Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsapara
 - `make build-all`：同时构建 Manager 与 Agent。
 - `make test`：运行测试。
 - `make test-race`：带竞态检测跑测试（CI 跑的就是这个）。
+- `make lint`：对 `./...` 跑 golangci-lint，与 CI 里 Test job 的 Lint 那一步对应。
+- `make check`：把 CI 会跑的检查收在一个目标里——gofmt、vet、lint、`-race` 测试与两个一致性脚本。推之前跑它。
 - `make run`：先 build 再运行 Manager。
 - `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [使用指南](guide.md)。
 - `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。

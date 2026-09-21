@@ -12,10 +12,11 @@ DOCKER_GID ?= 999
 EXAMPLE ?= android
 IMAGE   ?= runner-fleet-$(EXAMPLE)-runner:dev
 
-.PHONY: build build-agent build-all test test-race run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
+.PHONY: build build-agent build-all test test-race lint check run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
 
 help:
-	@echo "targets: build build-agent build-all test test-race run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
+	@echo "targets: build build-agent build-all test test-race lint check run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
+	@echo "  check: 提交前跑这一个——CI 会跑的检查都在里面"
 	@echo "  docker-build-runner-example: 构建自定义 Runner 镜像示例，如"
 	@echo "    make docker-build-runner-example EXAMPLE=android IMAGE=your-registry/android-runner:1"
 
@@ -34,6 +35,38 @@ test:
 # 出问题时普通 go test 是静默通过的，提交前至少跑一次。
 test-race:
 	go test -race ./...
+
+# 与 CI 里 Test job 的 Lint 那一步对应。范围取 ./...，是两个 workflow
+# （./cmd/runner-manager/... ./internal/... 与 ./cmd/runner-agent/... ./internal/...）
+# 的并集再大一点，本地过了 CI 必过。
+#
+# 不钉版本：CI 用的是 version: latest，这边钉死反而会两头判得不一样。
+GOLANGCI_LINT ?= golangci-lint
+
+lint:
+	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || { \
+		echo "未找到 $(GOLANGCI_LINT)。安装："; \
+		echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"; \
+		echo '装好后确认 $$(go env GOPATH)/bin 在 PATH 上。'; \
+		exit 1; \
+	}
+	$(GOLANGCI_LINT) run --max-same-issues=100000 ./...
+
+# 提交前跑这一个。CI 会跑的检查都收在这里，不必每次凭记忆拼清单——
+# 漏掉的那一项永远是本地绿、CI 红的那一项（上一次漏的正是 lint）。
+check:
+	@out=$$(gofmt -l ./cmd ./internal); \
+	if [ -n "$$out" ]; then \
+		echo "以下文件未格式化，请运行 gofmt -w ./cmd ./internal:"; \
+		echo "$$out"; \
+		exit 1; \
+	fi
+	go vet ./...
+	$(MAKE) lint
+	go test -race ./...
+	sh scripts/check-version-consistency.sh
+	sh scripts/check-docs-structure.sh
+	@echo "全部检查通过"
 
 run: build
 	./$(BINARY)

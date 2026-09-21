@@ -176,6 +176,8 @@ PAT가 없으면 등록 해제를 할 수 없습니다. GitHub는 PAT 아니면 
 - `make build-all`: Manager와 Agent 빌드.
 - `make test`: 테스트 실행.
 - `make test-race`: 레이스 검출기와 함께 테스트 실행(CI가 돌리는 것).
+- `make lint`: `./...`에 golangci-lint 실행. CI Test job의 Lint 단계와 동일.
+- `make check`: CI가 확인하는 것을 한 타깃에 모음 — gofmt, vet, lint, `-race` 테스트, 두 개의 일관성 스크립트. 푸시 전에 실행.
 - `make run`: Manager 빌드 후 실행.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager 이미지 빌드 및 실행. [사용 가이드](guide.md) 참조.
 - `make docker-build-runner`: 컨테이너 모드용 Runner 이미지 빌드(`Dockerfile.runner`, 기본 태그는 `RUNNER_IMAGE`).
