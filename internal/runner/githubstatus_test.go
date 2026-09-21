@@ -11,23 +11,33 @@ func ptr(b bool) *bool { return &b }
 // 三态要能原样存回来：查不出答案必须区别于「查出来是没有」
 func TestGitHubStatus_RoundTripsThreeStates(t *testing.T) {
 	cases := []struct {
-		name     string
-		write    *bool
-		writeErr string
+		name      string
+		write     *bool
+		writeBusy *bool
+		writeErr  string
 	}{
-		{name: "已登记", write: ptr(true)},
-		{name: "确实没登记", write: ptr(false)},
-		{name: "查不出来", write: nil, writeErr: "GitHub 返回 401：令牌无效或已过期"},
+		{name: "已登记且空闲", write: ptr(true), writeBusy: ptr(false)},
+		{name: "已登记且忙碌", write: ptr(true), writeBusy: ptr(true)},
+		{name: "确实没登记", write: ptr(false), writeBusy: nil},
+		{name: "查不出来", write: nil, writeBusy: nil, writeErr: "GitHub 返回 401：令牌无效或已过期"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := WriteGitHubStatus(dir, tc.write, tc.writeErr); err != nil {
+			if err := WriteGitHubStatus(dir, tc.write, tc.writeBusy, tc.writeErr); err != nil {
 				t.Fatal(err)
 			}
-			got, at, gotErr := readGitHubStatus(dir)
+			got, gotBusy, at, gotErr := readGitHubStatus(dir)
 			if at == "" {
 				t.Fatal("应记录检查时间")
+			}
+			switch {
+			case tc.writeBusy == nil && gotBusy != nil:
+				t.Fatalf("忙碌状态写入未知，读回 %v", *gotBusy)
+			case tc.writeBusy != nil && gotBusy == nil:
+				t.Fatalf("忙碌状态写入 %v，读回未知", *tc.writeBusy)
+			case tc.writeBusy != nil && *gotBusy != *tc.writeBusy:
+				t.Fatalf("忙碌状态写入 %v，读回 %v", *tc.writeBusy, *gotBusy)
 			}
 			switch {
 			case tc.write == nil && got != nil:
@@ -57,9 +67,13 @@ func TestGitHubStatus_ReadsLegacyFormat(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, GitHubStatusFile), []byte(legacy.body), 0644); err != nil {
 			t.Fatal(err)
 		}
-		got, at, gotErr := readGitHubStatus(dir)
+		got, gotBusy, at, gotErr := readGitHubStatus(dir)
 		if got == nil || *got != legacy.want {
 			t.Fatalf("老格式 %s 应读出 %v，得到 %v", legacy.body, legacy.want, got)
+		}
+		// 老文件里没有 busy 字段：那是「不知道」，不能当成「不忙」
+		if gotBusy != nil {
+			t.Fatalf("老格式没有 busy 字段，应读成未知，得到 %v", *gotBusy)
 		}
 		if at != "2026-01-01T00:00:00Z" || gotErr != "" {
 			t.Fatalf("老格式读出 at=%q err=%q", at, gotErr)
@@ -69,9 +83,9 @@ func TestGitHubStatus_ReadsLegacyFormat(t *testing.T) {
 
 // 没有文件 = 从未检查，和「查过但失败」不同：后者有检查时间
 func TestGitHubStatus_MissingFileIsNeverChecked(t *testing.T) {
-	got, at, gotErr := readGitHubStatus(t.TempDir())
-	if got != nil || at != "" || gotErr != "" {
-		t.Fatalf("没有状态文件时应一概为空，得到 %v/%q/%q", got, at, gotErr)
+	got, gotBusy, at, gotErr := readGitHubStatus(t.TempDir())
+	if got != nil || gotBusy != nil || at != "" || gotErr != "" {
+		t.Fatalf("没有状态文件时应一概为空，得到 %v/%v/%q/%q", got, gotBusy, at, gotErr)
 	}
 }
 
@@ -93,6 +107,26 @@ func TestRunnerInfo_GitHubTriStateHelpers(t *testing.T) {
 			if info.GitHubYes() != tc.yes || info.GitHubNo() != tc.no || info.GitHubUnknown() != tc.unknown {
 				t.Fatalf("yes/no/unknown = %v/%v/%v，期望 %v/%v/%v",
 					info.GitHubYes(), info.GitHubNo(), info.GitHubUnknown(), tc.yes, tc.no, tc.unknown)
+			}
+		})
+	}
+}
+
+// GitHubBusy 也是 *bool，模板里写 {{if .GitHubBusy}} 会把「空闲」显示成「忙碌中」
+func TestRunnerInfo_GitHubBusyHelper(t *testing.T) {
+	cases := []struct {
+		name string
+		v    *bool
+		want bool
+	}{
+		{"忙碌", ptr(true), true},
+		{"空闲", ptr(false), false},
+		{"未知", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (RunnerInfo{GitHubBusy: tc.v}).GitHubBusyYes(); got != tc.want {
+				t.Fatalf("GitHubBusyYes() = %v，期望 %v", got, tc.want)
 			}
 		})
 	}

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The runner config dialog lays its fields out in three columns instead of one. Seventeen fields stacked in a 480px-wide box meant scrolling to read one runner's configuration; the box is now 960px and the short fields sit in a three-column grid, which on a healthy runner cuts the dialog from 810px tall to 492px. The long ones — suggestion, check and fix commands, probe error, registration result — take the full width only when they actually hold something, because pinning them open unconditionally left five full-width rows each showing a single `—` in the common case, which is exactly the space the three columns were meant to save. Two columns below 900px, one below 620px. The grid lives in the stylesheet and the show/hide code sets `display` to `''` rather than `'block'`, since an inline `block` silently overrides `display: grid` and collapses the whole thing back to one column.
+- "Registered" and "GitHub ✓" in the runner list, and "Shown on GitHub" in the dialog, link to that target's Runners settings page on GitHub in a new tab. The address is assembled in Go from a hardcoded `https://github.com` prefix with each path segment escaped, so a target cannot change the scheme; the dialog sets it via the anchor's `href` property rather than building HTML, because `escapeHtml` guards the HTML context and would not stop a `javascript:` URL in an attribute. A target that does not produce a trustworthy address renders as plain text instead — a link that 404s is harder to diagnose than no link. The "Registered" link keeps the registration result as its tooltip, which is the real diagnostic in that cell.
+- A "Busy" badge for runners GitHub reports as running a job, in the list and as its own row in the config dialog. It reads the `busy` field already returned by the runner list API, so it costs no extra request and rides the same optional per-runner PAT. It is three-valued for the same reason the registration status is: a runner that was not found, or a check that failed, is recorded as unknown rather than idle. Because it shares the visibility check's roughly five-minute cadence it can lag by up to that much, which the badge's tooltip says outright.
+
 ## [1.6.0] - 2026-09-20
 
 ### Security
