@@ -195,7 +195,7 @@ Helfer `GitHubYes` / `GitHubNo` / `GitHubUnknown` auf `RunnerInfo`.
 - `make test`: Tests ausführen.
 - `make test-race`: Tests mit Race-Detector ausführen (das, was die CI tut).
 - `make lint`: golangci-lint über `./...` ausführen — derselbe Schritt wie Lint im Test-Job der CI.
-- `make check`: Alles, was die CI prüft, in einem Ziel — gofmt, vet, lint, `-race`-Tests und beide Konsistenz-Skripte. Vor dem Push ausführen.
+- `make check`: Alles, was die CI prüft, in einem Ziel — gofmt, vet, lint, `-race`-Tests und beide Konsistenzprüfungen. Vor dem Push ausführen.
 - `make run`: Manager bauen und ausführen.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager-Image bauen und ausführen; siehe [Benutzerhandbuch](guide.md).
 - `make docker-build-runner`: Runner-Image für Containermodus bauen (`Dockerfile.runner`, Standard-Tag in `RUNNER_IMAGE`).
@@ -242,22 +242,32 @@ Ein paar Konventionen, die vor Erweiterungen der Suite hilfreich sind:
 
 ## Release
 
-Versionsangaben in Doku und Beispielen müssen dem Standard-Image-Tag in `internal/config/config.go` entsprechen. CI prüft das über `scripts/check-version-consistency.sh`; lokal vor einer Release-PR ausführen:
+Versionsangaben in Doku und Beispielen müssen dem Standard-Image-Tag in `internal/config/config.go` entsprechen. CI prüft das über `ci-recipes runner-fleet check-version-consistency`; lokal vor einer Release-PR ausführen:
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+Beide Prüfungen kommen aus [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes), das die
+CI-Shell einzelner Repositories durch eine getestete Go-Binary ersetzt; dieses Repository liefert nur
+`scripts/ci-recipes.conf`. Installiere die in der CI gepinnte Version:
+
+```bash
+make install-ci-recipes
+```
+
+Der Pin steht nur in `.github/workflows/ci-consistency.yml`; das Makefile liest ihn von dort.
 
 Zeilen, die bewusst eine ältere Version nennen (Release Notes, Upgrade-Hinweise), mit dem Marker `version-check-ignore` versehen.
 
-Für die Übersetzungen gibt es dieselbe Absicherung. `scripts/check-docs-structure.sh` vergleicht
+Für die Übersetzungen gibt es dieselbe Absicherung. `ci-recipes runner-fleet check-docs-structure` vergleicht
 die Abfolge der Überschriftenebenen jeder `docs/<lang>/*.md` mit dem englischen Original — der
 Text der Überschriften soll sich unterscheiden, die Struktur nicht — sodass ein im Englischen
 ergänzter Abschnitt, der in den fünf Übersetzungen fehlt, die PR scheitern lässt, statt
 unbemerkt zu bleiben:
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← Zurück zur Dokumentation](README.md)
