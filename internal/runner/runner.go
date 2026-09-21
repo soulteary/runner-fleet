@@ -51,6 +51,8 @@ type RunnerInfo struct {
 	RegisteredOnGitHub    *bool      `json:"registered_on_github"`         // cron 通过 GitHub API 检查是否在 GitHub 显示，nil 表示未检查或查不到答案
 	GitHubCheckAt         string     `json:"github_check_at"`              // 最近一次 GitHub 检查时间
 	GitHubCheckError      string     `json:"github_check_error,omitempty"` // 查不到答案时的原因（令牌过期、限流、网络不通等）
+	GitHubBusy            *bool      `json:"github_busy,omitempty"`        // GitHub 侧该 Runner 是否正在跑 Job，nil 表示不知道（没查、没查到、或没配 PAT）
+	GitHubURL             string     `json:"github_url,omitempty"`         // 该目标在 GitHub 上的 Actions Runners 设置页，target 非法时为空
 }
 
 // GitHubYes / GitHubNo / GitHubUnknown 供模板判断三态。
@@ -64,6 +66,11 @@ func (r RunnerInfo) GitHubNo() bool { return r.RegisteredOnGitHub != nil && !*r.
 
 // GitHubUnknown 表示这次检查没能得出答案（与「从未检查」由 GitHubCheckAt 区分）
 func (r RunnerInfo) GitHubUnknown() bool { return r.RegisteredOnGitHub == nil }
+
+// GitHubBusyYes 表示上次查询时 GitHub 说它正在跑 Job。
+// 和上面三个同理：GitHubBusy 是 *bool，模板里写 {{if .GitHubBusy}} 会把
+// 指向 false 的指针也当成真，于是「空闲」显示成「忙碌中」。
+func (r RunnerInfo) GitHubBusyYes() bool { return r.GitHubBusy != nil && *r.GitHubBusy }
 
 // ProbeInfo 为容器探测失败的结构化信息。
 type ProbeInfo struct {
@@ -100,7 +107,8 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 		}
 		info.Status, info.Running = getStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.RegisteredOnGitHub, info.GitHubBusy, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.GitHubURL = GitHubSettingsURL(item.TargetType, item.Target)
 		return info
 	}
 	return nil
@@ -135,7 +143,8 @@ func List(cfg *config.Config) []RunnerInfo {
 		}
 		info.Status = diskStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.RegisteredOnGitHub, info.GitHubBusy, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.GitHubURL = GitHubSettingsURL(item.TargetType, item.Target)
 		list = append(list, info)
 		dirs = append(dirs, installDir)
 	}
@@ -224,33 +233,35 @@ func readRegistrationResult(installDir string) (message, at string) {
 // registered 为 nil 表示没有结论——要么从未查过（checkAt 也为空），
 // 要么查过但没查出来（checkAt 非空，checkErr 说明原因）。
 // 老版本写下的文件里 registered 是普通 bool，反序列化成非 nil 指针，语义不变。
-func readGitHubStatus(installDir string) (registered *bool, checkAt, checkErr string) {
+func readGitHubStatus(installDir string) (registered, busy *bool, checkAt, checkErr string) {
 	b, err := os.ReadFile(filepath.Join(installDir, GitHubStatusFile))
 	if err != nil {
-		return nil, "", ""
+		return nil, nil, "", ""
 	}
 	var v struct {
 		Registered *bool  `json:"registered"`
+		Busy       *bool  `json:"busy"`
 		LastCheck  string `json:"last_check"`
 		Error      string `json:"error"`
 	}
 	if json.Unmarshal(b, &v) != nil {
-		return nil, "", ""
+		return nil, nil, "", ""
 	}
-	return v.Registered, v.LastCheck, v.Error
+	return v.Registered, v.Busy, v.LastCheck, v.Error
 }
 
 // WriteGitHubStatus 由 cron 调用，写入 GitHub 检查结果到 runner 目录
 // WriteGitHubStatus 记录一次 GitHub 查询的结论。
 // registered 为 nil 表示这次没查出答案，checkErr 说明原因；
 // 「查不出来」不可以写成 false——那会在界面上变成一句确定的「未显示」。
-func WriteGitHubStatus(installDir string, registered *bool, checkErr string) error {
+func WriteGitHubStatus(installDir string, registered, busy *bool, checkErr string) error {
 	p := filepath.Join(installDir, GitHubStatusFile)
 	body := struct {
 		Registered *bool  `json:"registered"`
+		Busy       *bool  `json:"busy,omitempty"`
 		LastCheck  string `json:"last_check"`
 		Error      string `json:"error,omitempty"`
-	}{Registered: registered, LastCheck: time.Now().Format(time.RFC3339), Error: checkErr}
+	}{Registered: registered, Busy: busy, LastCheck: time.Now().Format(time.RFC3339), Error: checkErr}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err

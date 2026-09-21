@@ -35,10 +35,12 @@ var apiBase = "https://api.github.com"
 
 // ghRunner 与 GitHub API 返回结构一致
 type ghRunner struct {
-	ID     int64  `json:"id"`
-	Name   string `json:"name"`
-	OS     string `json:"os"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	OS   string `json:"os"`
+	// Status 为 online / offline；Busy 为 true 表示 GitHub 正在往它派发的 Job 里跑东西
 	Status string `json:"status"`
+	Busy   bool   `json:"busy"`
 }
 
 type ghRunnersResponse struct {
@@ -62,8 +64,8 @@ func Run(cfg *config.Config) {
 		if token == "" {
 			continue
 		}
-		registered, reason := checkOne(client, token, item.TargetType, item.Target, item.Name)
-		_ = runner.WriteGitHubStatus(installDir, registered, reason)
+		registered, busy, reason := checkOne(client, token, item.TargetType, item.Target, item.Name)
+		_ = runner.WriteGitHubStatus(installDir, registered, busy, reason)
 	}
 }
 
@@ -76,20 +78,27 @@ func TokenForRunner(installDir string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// checkOne 返回该 runner 是否已在 GitHub 登记；无法判定时返回 nil 与原因说明
-func checkOne(client *http.Client, token, targetType, target, runnerName string) (*bool, string) {
+// checkOne 返回该 runner 是否已在 GitHub 登记、以及它是否正在跑 Job；
+// 无法判定时 registered 为 nil 并带上原因说明。
+//
+// busy 只在「确实找到了这个 Runner」时才有值。没找到、或压根没查成，
+// busy 都是 nil——那是「不知道」，不是「不忙」。把前者写成 false，
+// 界面上就会对一个根本没查到的 Runner 打包票说它空闲。
+func checkOne(client *http.Client, token, targetType, target, runnerName string) (registered, busy *bool, reason string) {
 	runners, err := listRunners(context.Background(), client, token, targetType, target)
 	if err != nil {
-		return nil, err.Error()
+		return nil, nil, err.Error()
 	}
 	found := false
 	for _, r := range runners {
 		if r.Name == runnerName {
 			found = true
+			b := r.Busy
+			busy = &b
 			break
 		}
 	}
-	return &found, ""
+	return &found, busy, ""
 }
 
 // listRunners 列出目标下的全部 Runner，自动翻页。
