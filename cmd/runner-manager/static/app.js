@@ -1,7 +1,7 @@
 // Runner Fleet 管理界面。
 //
 // 这份文件从 templates/index.html 的 <script> 块里拆出来：原先 CSS、HTML、JS
-// 挤在一个 1019 行的 Go 模板里，编辑器没有语法高亮，浏览器也没法缓存。
+// 挤在一个上千行的 Go 模板里，编辑器没有语法高亮，浏览器也没法缓存。
 // 拆出来之后它不再过 Go 模板，{{name}} 这类占位符可以直接写成字面量，
 // 不必再写成 {{"{{"}}name{{"}}"}} 去躲模板的分隔符。
 //
@@ -275,6 +275,49 @@ document.getElementById('addMsgClose').addEventListener('click', function() {
   document.getElementById('addMsgWrap').style.display = 'none';
   location.reload();
 });
+// 「上次检查于 2026-09-21T09:00:00Z」这种原样输出的 RFC3339，得在脑子里换算
+// 成「多久以前」才有用——而这一栏真正要回答的就是「检查是不是卡住了」。
+// 相对时间交给 Intl.RelativeTimeFormat：复数和各语言说法它自己处理，
+// 不必为此再铺一套六种语言的文案。
+function relativeTime(d, lang) {
+  if (typeof Intl === 'undefined' || !Intl.RelativeTimeFormat) return '';
+  try {
+    const rtf = new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' });
+    const diff = (d.getTime() - Date.now()) / 1000;
+    const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+    for (let i = 0; i < units.length; i++) {
+      if (Math.abs(diff) >= units[i][1]) return rtf.format(Math.round(diff / units[i][1]), units[i][0]);
+    }
+    return rtf.format(Math.round(diff), 'second');
+  } catch (_) {
+    return '';
+  }
+}
+// 相对时间放主行，准确时刻放下面一行小字：前者回答「是不是卡住了」，
+// 后者用来和日志对时间。解析不了就原样显示，别把信息弄丢。
+function renderTimestamp(el, iso) {
+  el.textContent = '';
+  if (!iso) { el.textContent = '—'; return; }
+  const lang = document.documentElement.lang || 'en';
+  const d = new Date(iso);
+  const rel = isNaN(d.getTime()) ? '' : relativeTime(d, lang);
+  if (!rel) { el.textContent = iso; return; }
+  el.appendChild(document.createTextNode(rel));
+  const abs = document.createElement('span');
+  abs.className = 'ts-abs';
+  // 跟着页面语言而不是浏览器 locale：界面已经切到中文了，
+  // 下面这行还按系统 locale 显示会很割裂
+  abs.textContent = d.toLocaleString(lang);
+  el.appendChild(abs);
+}
+// 健康的 Runner 上这 5 行全是「—」，占掉三栏网格的一大半
+const PROBE_ROW_IDS = ['vProbeErrorTypeRow', 'vProbeSuggestionRow', 'vProbeCheckCmdRow', 'vProbeFixCmdRow', 'vProbeErrorRow'];
+function setProbeRowsVisible(on) {
+  PROBE_ROW_IDS.forEach(function(id) {
+    const row = document.getElementById(id);
+    if (row) row.style.display = on ? '' : 'none';
+  });
+}
 // 超过这个长度的值挤在三分之一栏里会折成一条细柱，不如铺满一行
 const WIDE_ROW_CHARS = 40;
 function setRowWide(rowId, text) {
@@ -383,6 +426,7 @@ function openModal(mode, name) {
         document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
         document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
         const probeError = resolveProbeError(data);
+        setProbeRowsVisible(!!probeError);
         document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
         document.getElementById('vProbeSuggestion').textContent = probeError ? resolveProbeSuggestion(data) : '—';
         currentProbeCheckCommand = probeError ? resolveProbeCheckCommand(data) : '';
@@ -400,7 +444,7 @@ function openModal(mode, name) {
         setRowWide('vProbeFixCmdRow', probeError ? resolveProbeFixCommand(data) : '');
         setRowWide('vProbeErrorRow', probeError);
         setRowWide('vRegistrationMessageRow', data.registration_message);
-        document.getElementById('vRegistrationCheckedAt').textContent = data.registration_checked_at || '—';
+        renderTimestamp(document.getElementById('vRegistrationCheckedAt'), data.registration_checked_at);
         var gh = data.registered_on_github;
         var ghEl = document.getElementById('vRegisteredOnGitHub');
         var ghLink = document.getElementById('vGitHubLink');
@@ -425,7 +469,7 @@ function openModal(mode, name) {
         if (data.github_busy === true) busyEl.textContent = t('modal.gh_busy');
         else if (data.github_busy === false) busyEl.textContent = t('modal.gh_idle');
         else busyEl.textContent = t('modal.gh_busy_unknown');
-        document.getElementById('vGitHubCheckAt').textContent = data.github_check_at || '—';
+        renderTimestamp(document.getElementById('vGitHubCheckAt'), data.github_check_at);
         const startStopSpan = document.getElementById('modalStartStopSpan');
         const startBtn = document.getElementById('modalStartBtnFooter');
         const stopBtn = document.getElementById('modalStopBtnFooter');
@@ -519,24 +563,32 @@ document.getElementById('modalSaveBtn').addEventListener('click', async () => {
   }
 });
 
-document.querySelectorAll('.btn-view').forEach(btn => {
-  btn.addEventListener('click', () => openModal('view', btn.getAttribute('data-name')));
-});
-document.querySelectorAll('.btn-edit').forEach(btn => {
-  btn.addEventListener('click', () => openModal('edit', btn.getAttribute('data-name')));
-});
-
-document.querySelectorAll('.btn-del').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const name = btn.getAttribute('data-name');
-    if (!name || !confirm(t('confirm_remove').replace('{{name}}', name))) return;
-    try {
-      const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
-      const data = await r.json().catch(() => ({}));
-      if (r.ok) location.reload();
-      else alert(data.message || r.statusText);
-    } catch (e) { alert(e.message); }
-  });
+async function removeRunner(name) {
+  if (!name || !confirm(t('confirm_remove').replace('{{name}}', name))) return;
+  try {
+    const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) location.reload();
+    else alert(data.message || r.statusText);
+  } catch (e) { alert(e.message); }
+}
+// 行内按钮走事件委托而不是逐个 addEventListener：自动刷新会整体替换 <tbody>，
+// 直接绑在按钮上的监听在第一次刷新之后就全部失效了。
+const runnerRowsBody = document.getElementById('runnerRowsBody');
+runnerRowsBody.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-name]');
+  if (!btn || !runnerRowsBody.contains(btn)) return;
+  const name = btn.getAttribute('data-name');
+  if (!name) return;
+  if (btn.classList.contains('btn-view')) openModal('view', name);
+  else if (btn.classList.contains('btn-edit')) openModal('edit', name);
+  else if (btn.classList.contains('btn-del')) removeRunner(name);
+  else if (btn.classList.contains('btn-start')) runnerAction(name, 'start');
+  else if (btn.classList.contains('btn-stop')) runnerAction(name, 'stop');
+  // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
+  else if (btn.classList.contains('btn-recreate')) {
+    if (confirm(fillVars(t('confirm_recreate'), { name: name }))) runnerAction(name, 'recreate');
+  }
 });
 
 async function runnerAction(name, action) {
@@ -583,21 +635,56 @@ copyFixBtn.addEventListener('click', async () => {
   const ok = await copyCommandText(currentProbeFixCommand);
   alert(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'));
 });
-document.querySelectorAll('.btn-start').forEach(btn => {
-  if (btn.id === 'modalStartBtnFooter') return;
-  btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'start'));
+// ===== 列表自动刷新 =====
+// 「忙碌中」和「GitHub ✓」本来就是后台约 5 分钟一次的检查结果，页面不刷新
+// 就永远看不到它们变化，这两列在日常使用中等于是死的。
+// 拉的是 /api/runner-rows 渲染好的 <tbody> 片段（和首屏同一个模板），
+// 而不是 /api/runners 的 JSON 自己拼行——行里 GitHubYes/GitHubNo 这类三态
+// 判断在 JS 里重写一遍，正是最容易把「空闲」显示成「忙碌中」的地方。
+const REFRESH_MS = 15000;
+const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+const refreshStatusEl = document.getElementById('refreshStatus');
+let refreshTimer = null;
+let refreshing = false;
+
+function refreshPaused() {
+  // 弹窗开着时刷新没意义（用户看的是弹窗里的数据）；标签页不可见时也不必打扰
+  // 服务端——容器模式下每刷新一次都要对每台 runner 做一次 docker inspect。
+  return !autoRefreshToggle.checked || document.hidden || modal.classList.contains('show');
+}
+
+async function refreshRows() {
+  if (refreshing || refreshPaused()) return;
+  refreshing = true;
+  try {
+    const r = await fetch('/api/runner-rows', { headers: { 'Accept': 'text/html' } });
+    if (!r.ok) throw new Error(r.statusText);
+    const html = await r.text();
+    // 再判一次：请求在途的这段时间里用户可能已经打开弹窗或关掉了自动刷新
+    if (!refreshPaused()) {
+      runnerRowsBody.innerHTML = html;
+      refreshStatusEl.className = 'refresh-status';
+      refreshStatusEl.textContent = fillVars(t('autorefresh.updated'), { time: new Date().toLocaleTimeString() });
+    }
+  } catch (_) {
+    refreshStatusEl.className = 'refresh-status err';
+    refreshStatusEl.textContent = t('autorefresh.failed');
+  } finally {
+    refreshing = false;
+  }
+}
+
+autoRefreshToggle.addEventListener('change', function() {
+  try { localStorage.setItem('runnerFleetAutoRefresh', this.checked ? '1' : '0'); } catch (_) {}
+  if (this.checked) { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = ''; refreshRows(); }
+  else { refreshStatusEl.className = 'refresh-status'; refreshStatusEl.textContent = t('autorefresh.paused'); }
 });
-document.querySelectorAll('.btn-stop').forEach(btn => {
-  if (btn.id === 'modalStopBtnFooter') return;
-  btn.addEventListener('click', () => runnerAction(btn.getAttribute('data-name'), 'stop'));
-});
-// 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
-document.querySelectorAll('.btn-recreate').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const name = btn.getAttribute('data-name');
-    if (!name || !confirm(fillVars(t('confirm_recreate'), { name: name }))) return;
-    runnerAction(name, 'recreate');
-  });
-});
+try {
+  if (localStorage.getItem('runnerFleetAutoRefresh') === '0') autoRefreshToggle.checked = false;
+} catch (_) {}
+if (!autoRefreshToggle.checked) refreshStatusEl.textContent = t('autorefresh.paused');
+// 标签页切回来时立刻补一次，不用干等下一个周期
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRows(); });
+refreshTimer = setInterval(refreshRows, REFRESH_MS);
 document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
 document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));

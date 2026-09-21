@@ -133,6 +133,8 @@ form button:hover { opacity: 0.9; }
 .github-link:hover { text-decoration: none; opacity: 0.85; }
 .modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 .modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+/* 相对时间下面再给出准确时刻：前者回答「是不是卡住了」，后者用于对日志 */
+.modal-body .row .val .ts-abs { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .modal-body input, .modal-body select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 4px; }
 .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
 .modal-footer button { margin-right: 8px; }
@@ -145,6 +147,11 @@ form button:hover { opacity: 0.9; }
 .msg-wrap-actions .btn-close-msg { padding: 6px 14px; font-size: 13px; background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .msg-wrap-actions .btn-close-msg:hover { color: var(--text); border-color: var(--text); }
 .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.list-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.list-toolbar .autorefresh { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
+.list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
+.refresh-status { color: var(--muted); font-size: 12px; }
+.refresh-status.err { color: var(--warn); }
 .parse-box {
   margin-bottom: 20px;
   padding-bottom: 20px;

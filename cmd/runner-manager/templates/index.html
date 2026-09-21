@@ -22,6 +22,10 @@
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p class="card-hint">{{index .T "runner_list.hint"}}</p>
+    <div class="list-toolbar">
+      <label class="autorefresh"><input type="checkbox" id="autoRefreshToggle" checked>{{index .T "autorefresh.label"}}</label>
+      <span id="refreshStatus" class="refresh-status" aria-live="polite"></span>
+    </div>
     <table>
       <thead>
         <tr>
@@ -34,64 +38,7 @@
           <th></th>
         </tr>
       </thead>
-      <tbody>
-        {{range .Runners}}
-        <tr>
-          <td>{{.Name}}</td>
-          <td>{{.TargetType}}: {{.Target}}</td>
-          <td>
-            <span class="badge {{.Status}}">{{.Status}}</span>
-            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
-            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
-                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
-            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
-            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
-          </td>
-          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
-          <td>
-            {{if .RegistrationMessage}}
-              {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
-                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
-              {{else}}
-                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
-              {{end}}
-            {{else}}
-              <span class="github-unknown">—</span>
-            {{end}}
-            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
-                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
-            {{if .GitHubYes}}
-              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
-            {{else if .GitHubNo}}
-              <br><span class="github-no">{{index $.T "github.no"}}</span>
-            {{else if .GitHubCheckAt}}
-              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
-            {{else if .RegistrationMessage}}
-              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
-            {{end}}
-          </td>
-          <td class="path">{{.InstallDir}}</td>
-          <td>
-            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
-            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
-            {{if eq .Status "unknown"}}
-            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
-            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
-            {{end}}
-            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
-            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
-            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
-            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
-          </td>
-        </tr>
-        {{end}}
-        {{if not .Runners}}
-        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" class="cell-empty">{{index .T "runner_list.empty"}}</td></tr>
-        {{end}}
-      </tbody>
+      <tbody id="runnerRowsBody">{{template "runnerRows" .}}</tbody>
     </table>
   </div>
 
@@ -152,7 +99,7 @@
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
-          <div class="row"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
+          <div class="row" id="vProbeErrorTypeRow"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
           <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
           <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
           <div class="row" id="vProbeFixCmdRow"><label>{{index .T "modal.label_fix_cmd"}}</label><div class="val"><button type="button" id="vRevealFixCmdBtn" class="btn-reveal-fix" style="display:none">{{index .T "modal.btn_reveal_fix"}}</button><button type="button" id="vCopyFixCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeFixCommand"></span></div></div>
@@ -192,3 +139,65 @@
   <script src="/static/app.js?v={{.AssetVersion}}" defer></script>
 </body>
 </html>
+
+{{/* runnerRows：列表的 <tbody> 内容。首屏由页面直接展开，自动刷新时由
+     /api/runner-rows 单独渲染同一个片段——两条路径共用一份行渲染逻辑，
+     GitHubYes/GitHubNo 这类三态判断不必在 JS 里再写一遍。 */}}
+{{define "runnerRows"}}
+        {{range .Runners}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.TargetType}}: {{.Target}}</td>
+          <td>
+            <span class="badge {{.Status}}">{{.Status}}</span>
+            {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
+            {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
+                 指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
+            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
+            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
+            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+          </td>
+          {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
+          <td>
+            {{if .RegistrationMessage}}
+              {{if and (eq .Status "installed") .GitHubURL}}
+                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
+                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+              {{else}}
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+              {{end}}
+            {{else}}
+              <span class="github-unknown">—</span>
+            {{end}}
+            {{/* 三态要用 GitHubYes/GitHubNo：{{if .RegisteredOnGitHub}} 对指针只看是否为 nil，
+                 指向 false 的指针同样为真，「GitHub 上没有它」会被渲染成「GitHub ✓」 */}}
+            {{if .GitHubYes}}
+              <br>{{if .GitHubURL}}<a class="github-yes github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{index $.T "github.open_title"}}">{{index $.T "github.yes"}}</a>{{else}}<span class="github-yes">{{index $.T "github.yes"}}</span>{{end}}
+            {{else if .GitHubNo}}
+              <br><span class="github-no">{{index $.T "github.no"}}</span>
+            {{else if .GitHubCheckAt}}
+              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
+            {{else if .RegistrationMessage}}
+              <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
+            {{end}}
+          </td>
+          <td class="path">{{.InstallDir}}</td>
+          <td>
+            {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
+            {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
+            {{if eq .Status "unknown"}}
+            <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
+            <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
+            {{end}}
+            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
+            <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
+            <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
+            <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>
+          </td>
+        </tr>
+        {{end}}
+        {{if not .Runners}}
+        <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" class="cell-empty">{{index .T "runner_list.empty"}}</td></tr>
+        {{end}}
+{{end}}

@@ -130,5 +130,9 @@
   "precheck.blocked": "Konflikte gefunden — bitte erst umbenennen oder aufräumen, dann erneut senden",
   "badge.drift": "Konfig geändert",
   "btn.recreate": "Neu erstellen",
-  "confirm_recreate": "Container von {{name}} mit der aktuellen Konfiguration neu erstellen?\n\nDer alte Container wird entfernt und ein neuer erstellt. Ein darauf laufender Job wird abgebrochen."
+  "confirm_recreate": "Container von {{name}} mit der aktuellen Konfiguration neu erstellen?\n\nDer alte Container wird entfernt und ein neuer erstellt. Ein darauf laufender Job wird abgebrochen.",
+  "autorefresh.label": "Auto-Aktualisierung (15 s)",
+  "autorefresh.updated": "Aktualisiert um {{time}}",
+  "autorefresh.failed": "Aktualisierung fehlgeschlagen, wird wiederholt",
+  "autorefresh.paused": "Auto-Aktualisierung aus"
 }

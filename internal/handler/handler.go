@@ -272,11 +272,12 @@ func ListRunners(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"runners": list})
 }
 
-// Index 管理界面首页；容器模式下用容器内 Agent 状态覆盖
-func Index(c echo.Context) error {
+// viewData 装配模板要用的数据。首页和 runnerRows 片段渲染的是同一批字段，
+// 两处各抄一遍迟早会漏掉其中一个（比如容器模式的状态覆盖），所以收在一起。
+func viewData(c echo.Context) (map[string]any, error) {
 	cfg, err := getConfig(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	list := runner.List(cfg)
 	if cfg.Runners.ContainerMode {
@@ -294,14 +295,35 @@ func Index(c echo.Context) error {
 		T = make(map[string]string)
 	}
 	tjson, _ := json.Marshal(T)
-	return c.Render(http.StatusOK, "index.html", map[string]any{
+	return map[string]any{
 		"Runners":      list,
 		"Config":       cfg,
 		"T":            T,
 		"Lang":         lang,
 		"TJSON":        template.JS(tjson),
 		"AssetVersion": AssetVersion,
-	})
+	}, nil
+}
+
+// Index 管理界面首页；容器模式下用容器内 Agent 状态覆盖
+func Index(c echo.Context) error {
+	data, err := viewData(c)
+	if err != nil {
+		return err
+	}
+	return c.Render(http.StatusOK, "index.html", data)
+}
+
+// RunnerRows 只渲染列表的 <tbody> 片段，供界面定时刷新时整体替换。
+// 走服务端片段而不是让 JS 拿 /api/runners 的 JSON 自己拼行，是因为行里那几处
+// 三态判断（GitHubYes/GitHubNo、GitHubBusyYes）指针为 false 时也非 nil，
+// 在 JS 里重写一遍正是最容易把「空闲」显示成「忙碌中」的地方。
+func RunnerRows(c echo.Context) error {
+	data, err := viewData(c)
+	if err != nil {
+		return err
+	}
+	return c.Render(http.StatusOK, "runnerRows", data)
 }
 
 // AddRunnerRequest 添加 runner 请求。

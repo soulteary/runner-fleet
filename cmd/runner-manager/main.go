@@ -397,6 +397,7 @@ func registerRoutes(e *echo.Echo) {
 	e.GET("/static/*", staticH)
 	e.HEAD("/static/*", staticH)
 	e.GET("/api/runners", handler.ListRunners)
+	e.GET("/api/runner-rows", handler.RunnerRows)
 	e.GET("/api/runners/:name", handler.GetRunner)
 	e.POST("/api/runners", handler.AddRunner)
 	// 静态路径，放在 /api/runners/:name 之外，避免与名为 check 的 Runner 抢路由
