@@ -162,12 +162,13 @@ func TestIndexTemplate_BusyBadgeOnlyWhenBusy(t *testing.T) {
 
 // 查看态要真的是三栏。样式表里少了这条，弹窗就退回一长条竖排，
 // 而模板渲染得出来的 HTML 是一样的——只能直接断言样式。
+// 样式与脚本已从 index.html 拆到 static/，断言跟着挪，意图不变。
 func TestIndexTemplate_ViewIsThreeColumnGrid(t *testing.T) {
-	b, err := templateFS.ReadFile("templates/index.html")
+	cssBytes, err := staticFS.ReadFile("static/app.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	css := string(b)
+	css := string(cssBytes)
 	for _, want := range []string{
 		"#modalView { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));",
 		"#modalView .row.span-all { grid-column: 1 / -1; }",
@@ -176,11 +177,16 @@ func TestIndexTemplate_ViewIsThreeColumnGrid(t *testing.T) {
 			t.Fatalf("样式表里应有 %q", want)
 		}
 	}
+	jsBytes, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := string(jsBytes)
 	// 行内 display:block 会盖掉 display:grid，三栏当场失效
-	if strings.Contains(css, "modalView.style.display = 'block'") {
+	if strings.Contains(js, "modalView.style.display = 'block'") {
 		t.Fatal("modalView 不能用行内 display:block 显示，会盖掉样式表里的 grid")
 	}
-	if strings.Contains(css, "modalEditForm.style.display = 'block'") {
+	if strings.Contains(js, "modalEditForm.style.display = 'block'") {
 		t.Fatal("modalEditForm 不能用行内 display:block 显示，会盖掉样式表里的 grid")
 	}
 }

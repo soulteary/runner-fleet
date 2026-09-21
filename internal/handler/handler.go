@@ -296,11 +296,12 @@ func viewData(c echo.Context) (map[string]any, error) {
 	}
 	tjson, _ := json.Marshal(T)
 	return map[string]any{
-		"Runners": list,
-		"Config":  cfg,
-		"T":       T,
-		"Lang":    lang,
-		"TJSON":   template.JS(tjson),
+		"Runners":      list,
+		"Config":       cfg,
+		"T":            T,
+		"Lang":         lang,
+		"TJSON":        template.JS(tjson),
+		"AssetVersion": AssetVersion,
 	}, nil
 }
 

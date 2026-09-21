@@ -1,0 +1,284 @@
+:root {
+  /* 纯暗色界面必须声明：否则 select 展开的原生下拉面板、滚动条、
+     自动填充背景仍按亮色渲染，和页面对不上 */
+  color-scheme: dark;
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --success: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 24px;
+  line-height: 1.5;
+}
+h1 { font-size: 1.5rem; margin: 0 0 24px; color: var(--text); }
+@media (max-width: 620px) {
+  body { padding: 16px; }
+  .card { padding: 16px; }
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.card h2 { margin: 0 0 16px; font-size: 1.1rem; }
+/* 全文此前唯一一处 overflow 在 .modal 上，主表（容器模式下 7 列）在窄屏
+   会直接溢出撑破页面。滚动条给到容器，表头与内容一起横向滚。 */
+.table-wrap { width: 100%; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+/* 状态徽章与操作按钮换行后既难点又难认，宁可让容器横向滚 */
+.col-status, .col-actions { white-space: nowrap; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.badge.installed { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+.badge.new { background: rgba(210, 153, 34, 0.2); color: var(--warn); }
+.badge.missing { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+.badge.unknown { background: rgba(139, 148, 158, 0.2); color: var(--muted); }
+.badge.running { background: rgba(63, 185, 80, 0.3); color: var(--success); margin-left: 4px; }
+.badge.drift { background: rgba(210, 153, 34, 0.2); color: var(--warn); margin-left: 4px; cursor: help; }
+/* 忙碌来自 GitHub，与 running（本机/容器进程）不是一回事，用另一种颜色区分 */
+.badge.busy { background: rgba(47, 129, 247, 0.25); color: var(--accent); margin-left: 4px; cursor: help; }
+form label { display: block; margin-top: 12px; color: var(--muted); font-size: 13px; }
+form input, form select { width: 100%; max-width: 400px; padding: 8px 12px; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+form button {
+  margin-top: 16px;
+  padding: 8px 20px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+form button:hover { opacity: 0.9; }
+/* 小按钮的共同底子。padding / font-size / border-radius / cursor，连同这套
+   「透明底 + 次要色 + 细边框」的默认配色，此前在下面 11 个类里逐字重复了
+   十来遍——改一处尺寸要改十处。各变体现在只留真正不一样的那几行。 */
+.btn-del, .btn-view, .btn-edit, .btn-start, .btn-stop, .btn-save,
+.btn-recreate, .btn-edit-primary, .modal-close, .btn-reveal-fix, .btn-copy-cmd {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+/* 按钮之间的间距。.btn-del 排在一行的最后，本来就没有这一条 */
+.btn-view, .btn-edit, .btn-start, .btn-stop, .btn-save,
+.btn-recreate, .btn-edit-primary, .modal-close { margin-right: 6px; }
+.btn-reveal-fix, .btn-copy-cmd { margin-right: 8px; }
+/* 各自的配色：写在底子之后，同特异度靠顺序覆盖 */
+.btn-start { background: rgba(63, 185, 80, 0.2); color: var(--success); border-color: var(--success); }
+.btn-stop { background: rgba(248, 81, 73, 0.2); color: var(--danger); border-color: var(--danger); }
+.btn-save { background: rgba(88, 166, 255, 0.2); color: var(--accent); border-color: var(--accent); }
+.btn-recreate, .btn-edit-primary { background: rgba(210, 153, 34, 0.2); color: var(--warn); border-color: var(--warn); }
+.modal-close { background: rgba(139, 148, 158, 0.15); }
+.btn-reveal-fix { color: var(--warn); border-color: var(--warn); }
+.btn-copy-cmd { color: var(--accent); border-color: var(--accent); }
+.btn-del:hover { color: var(--danger); border-color: var(--danger); }
+.btn-view:hover { color: var(--accent); border-color: var(--accent); }
+.btn-edit:hover { color: var(--warn); border-color: var(--warn); }
+.modal-close:hover { color: var(--text); border-color: var(--text); opacity: 0.9; }
+.btn-start:hover, .btn-stop:hover, .btn-save:hover, .btn-recreate:hover,
+.btn-edit-primary:hover, .btn-reveal-fix:hover, .btn-copy-cmd:hover { opacity: 0.9; }
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-width: 960px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { margin: 0; font-size: 1rem; }
+.modal-body { padding: 20px; }
+.modal-body .row { margin-bottom: 12px; }
+/* 查看态三栏：字段多而每个都短，竖着排要滚很久才能看全一台 Runner 的配置。
+   minmax(0, 1fr) 而不是 1fr——安装目录那种不可断的长路径在 1fr 下会把自己
+   那一栏顶宽，三栏随之失衡；配合 .row 的 min-width: 0 才真正按三等分走。 */
+#modalView { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; }
+#modalView .row { margin-bottom: 0; min-width: 0; }
+/* 诊断类字段（命令、报错、注册结果）是整句整段，挤在三分之一栏里只会折成一条细柱 */
+#modalView .row.span-all { grid-column: 1 / -1; }
+/* 编辑态两栏：输入框在 960px 宽度下单栏会拉成一条难以对准的长条 */
+#modalEditForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+#modalEditForm .row { margin-bottom: 0; min-width: 0; }
+@media (max-width: 900px) { #modalView { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  #modalView, #modalEditForm { grid-template-columns: minmax(0, 1fr); }
+}
+/* 列表与弹窗里指向 GitHub Runners 设置页的链接：沿用原来的三态颜色，只在悬停时显出可点 */
+.github-link { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
+.github-link:hover { text-decoration: none; opacity: 0.85; }
+.modal-body .row label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.modal-body .row .val { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
+/* 相对时间下面再给出准确时刻：前者回答「是不是卡住了」，后者用于对日志 */
+.modal-body .row .val .ts-abs { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.modal-body input, .modal-body select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 4px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
+.modal-footer button { margin-right: 8px; }
+.msg { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 14px; }
+.msg.ok { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+.msg.err { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
+.msg-wrap { margin-top: 12px; }
+.msg-wrap .msg { margin-top: 0; }
+.msg-wrap-actions { margin-top: 8px; }
+.msg-wrap-actions .btn-close-msg { padding: 6px 14px; font-size: 13px; background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.msg-wrap-actions .btn-close-msg:hover { color: var(--text); border-color: var(--text); }
+.path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.list-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.list-toolbar .autorefresh { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
+.list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
+.refresh-status { color: var(--muted); font-size: 12px; }
+.refresh-status.err { color: var(--warn); }
+/* 概览与筛选：这是 fleet 管理器，20 台以上时没有搜索就只能靠 Ctrl+F 找 */
+.list-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.stat-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.stat-chip:hover { color: var(--text); border-color: var(--text); }
+.stat-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(88, 166, 255, 0.12); }
+/* 数字等宽，筛选时计数跳动不会把筹码宽度带得一跳一跳 */
+.stat-chip .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 只有真的有异常/漂移时才染色，0 的时候不必抢注意力 */
+.stat-chip.running.has .n { color: var(--success); }
+.stat-chip.problem.has .n { color: var(--danger); }
+.stat-chip.drift.has .n { color: var(--warn); }
+.filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.filter-row input[type="search"] { flex: 1 1 240px; max-width: 320px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+.filter-count { color: var(--muted); font-size: 12px; }
+/* 只用来取样式的小按钮。不要复用 .btn-view / .btn-del 这些：它们同时是行内
+   操作的行为选择器，套上去会被当成行操作绑上监听，点一下就误开查看弹窗。 */
+.btn-neutral { padding: 4px 10px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.btn-neutral:hover { color: var(--text); border-color: var(--text); }
+.parse-box {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.parse-box label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+.parse-box code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.parse-row { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+.parse-row textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  resize: vertical;
+}
+.parse-btn-row { align-self: flex-start; }
+.btn-parse {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-parse:hover { opacity: 0.9; }
+.check-msg { margin-top: 6px; font-size: 13px; line-height: 1.6; }
+.check-msg:empty { margin-top: 0; }
+.check-msg .check-line { display: block; }
+.check-msg.ok { color: var(--success); }
+.check-msg.warn { color: var(--warn); }
+.check-msg.err { color: var(--danger); }
+.check-msg code { background: rgba(110, 118, 129, 0.2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.btn-suggest { margin-top: 4px; padding: 3px 10px; font-size: 12px; background: var(--card); color: var(--accent); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.btn-suggest:hover { border-color: var(--accent); }
+.parse-msg { margin-top: 8px; font-size: 13px; }
+.parse-msg.ok { color: var(--success); }
+.parse-msg.err { color: var(--danger); }
+.reg-ok { color: var(--success); font-size: 12px; }
+.reg-err { color: var(--danger); font-size: 12px; }
+.probe-err { color: var(--danger); font-size: 12px; }
+/* 暗色背景上浏览器默认的焦点框几乎看不见，键盘用户会彻底迷路 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 悬停提示：原先这些信息只挂在 title 上，键盘和触屏根本拿不到——
+   而「漂移了什么」恰恰是决定要不要点「重建」的依据。
+   默认态用 clip-path 裁掉而不是 display:none：后者会把文本一并从无障碍树里
+   摘掉，读屏器就什么也读不到了。 */
+.has-tip { position: relative; }
+.has-tip .tip {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 60;
+  width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  padding: 0; border: 0; border-radius: 6px;
+  background: var(--bg); color: var(--text);
+  font-size: 12px; font-weight: 400; line-height: 1.5;
+  text-align: left; white-space: normal; word-break: break-word;
+}
+.has-tip:hover .tip, .has-tip:focus .tip, .has-tip:focus-within .tip {
+  width: max-content; max-width: 360px; height: auto;
+  overflow: visible; clip-path: none;
+  padding: 8px 10px; border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* ===== Toast ===== */
+/* 取代原生 alert：它阻塞整个页面，样式也和这套暗色界面格格不入。 */
+.toast-wrap { position: fixed; right: 20px; bottom: 20px; z-index: 200; display: flex; flex-direction: column; gap: 10px; width: min(420px, calc(100vw - 40px)); }
+.toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: 12px 14px; font-size: 13px; color: var(--text); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 8px; }
+.toast.ok { border-left-color: var(--success); }
+.toast.warn { border-left-color: var(--warn); }
+.toast.err { border-left-color: var(--danger); }
+.toast .toast-msg { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.toast .toast-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.confirm-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; }
+/* 确认框的「确定」：沿用重建按钮那身警告色，但不借它的类名——
+   .btn-recreate 同时是行操作的行为选择器 */
+.btn-confirm { padding: 4px 10px; font-size: 12px; margin-right: 6px; background: rgba(210, 153, 34, 0.2); color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; cursor: pointer; }
+.btn-confirm:hover { opacity: 0.9; }
+/* 请求在途时按钮置灰，避免连点发出两次启停 */
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+.github-yes { color: var(--success); }
+.github-no { color: var(--warn); }
+.github-unknown { color: var(--muted); }
+/* 以下几条原先是内联 style。display:none 那类是 JS 要切换的初始状态，留在标签上；
+   纯展示的收到这里，免得改配色还要回模板里找。 */
+.page-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.page-head h1 { margin: 0; }
+.lang-select { padding: 6px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer; }
+.card-hint { color: var(--muted); font-size: 12px; margin: 0 0 12px 0; }
+.cell-empty { color: var(--muted); }
+.input-readonly { opacity: 0.8; }
+.modal-msg { margin-top: 12px; }
+.modal-footer .spacer-right { margin-right: auto; }
+.msg pre { margin-top: 8px; font-size: 12px; }
+.msg .msg-note { font-size: 12px; color: var(--muted); }

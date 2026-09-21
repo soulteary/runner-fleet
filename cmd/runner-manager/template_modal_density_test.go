@@ -10,14 +10,19 @@ import (
 // 继续显示「—」——正是这次要去掉的东西。这里把 JS 里的名单和模板里的
 // id 对起来。
 func TestTemplate_ProbeRowIDsMatchMarkup(t *testing.T) {
-	b, err := templateFS.ReadFile("templates/index.html")
+	// 名单住在 static/app.js，行的 id 住在模板，两边都要读
+	tpl, err := templateFS.ReadFile("templates/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := string(b)
+	js, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(tpl)
 
 	listRe := regexp.MustCompile(`const PROBE_ROW_IDS = \[([^\]]+)\]`)
-	m := listRe.FindStringSubmatch(src)
+	m := listRe.FindStringSubmatch(string(js))
 	if m == nil {
 		t.Fatal("找不到 PROBE_ROW_IDS")
 	}
@@ -47,7 +52,8 @@ func TestTemplate_ProbeRowIDsMatchMarkup(t *testing.T) {
 
 // 两处时间戳都必须走 renderTimestamp，漏掉哪个那一栏就退回裸 RFC3339
 func TestTemplate_TimestampsUseRelativeRenderer(t *testing.T) {
-	b, err := templateFS.ReadFile("templates/index.html")
+	// 脚本已从 index.html 拆到 static/app.js，断言跟着载体走，意图不变
+	b, err := staticFS.ReadFile("static/app.js")
 	if err != nil {
 		t.Fatal(err)
 	}

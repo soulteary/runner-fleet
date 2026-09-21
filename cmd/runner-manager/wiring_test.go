@@ -179,6 +179,8 @@ func TestRegisterRoutes_AllEndpointsPresent(t *testing.T) {
 		"GET /version",
 		"GET /metrics",
 		"GET /",
+		"GET /static/*",
+		"HEAD /static/*",
 		"GET /api/runners",
 		"GET /api/runners/:name",
 		"POST /api/runners",

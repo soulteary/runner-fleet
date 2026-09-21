@@ -48,7 +48,12 @@ func TestTemplate_ModalIsAnAccessibleDialog(t *testing.T) {
 
 // 焦点管理靠这三段 JS：少哪一段都不会报错，只是键盘用户重新迷路
 func TestTemplate_ModalManagesFocus(t *testing.T) {
-	html := a11yPage(t)
+	// 脚本已从 index.html 拆到 static/app.js，断言跟着载体走，意图不变
+	b, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(b)
 	for _, want := range []string{
 		"function trapTab(",
 		"lastFocused = document.activeElement",

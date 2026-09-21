@@ -106,9 +106,16 @@ var (
 	jsKeyRe = regexp.MustCompile(`\bt\('([a-z][a-z_]*\.[a-zA-Z_0-9]+)'\)`)
 )
 
-// 模板里引用了却不存在的键，渲染出来就是一段空白，不会有任何报错
+// 模板里引用了却不存在的键，渲染出来就是一段空白，不会有任何报错。
+//
+// 脚本已从 index.html 拆到 static/app.js，两边都要扫：只扫模板的话，
+// app.js 里写错一个键同样不会报错，界面上就是一处空白。
 func TestTemplateKeysExistInI18n(t *testing.T) {
-	b, err := templateFS.ReadFile("templates/index.html")
+	tpl, err := templateFS.ReadFile("templates/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js, err := staticFS.ReadFile("static/app.js")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,11 +124,17 @@ func TestTemplateKeysExistInI18n(t *testing.T) {
 		t.Fatal(err)
 	}
 	used := map[string]bool{}
-	for _, m := range tplKeyRe.FindAllStringSubmatch(string(b), -1) {
+	for _, m := range tplKeyRe.FindAllStringSubmatch(string(tpl), -1) {
 		used[m[1]] = true
 	}
-	for _, m := range jsKeyRe.FindAllStringSubmatch(string(b), -1) {
+	jsUsed := 0
+	for _, m := range jsKeyRe.FindAllStringSubmatch(string(js), -1) {
 		used[m[1]] = true
+		jsUsed++
+	}
+	// 脚本拆出去之后最容易发生的疏忽是这里只剩模板、忘了跟着扫 app.js
+	if jsUsed == 0 {
+		t.Fatal("没有从 static/app.js 里提取到任何 i18n 键，扫描范围或正则可能失效了")
 	}
 	if len(used) == 0 {
 		t.Fatal("没有从模板里提取到任何 i18n 键，正则可能失效了")
@@ -134,6 +147,6 @@ func TestTemplateKeysExistInI18n(t *testing.T) {
 	}
 	sort.Strings(missing)
 	if len(missing) > 0 {
-		t.Fatalf("模板引用了 en.json 里没有的键: %v", missing)
+		t.Fatalf("模板或脚本引用了 en.json 里没有的键: %v", missing)
 	}
 }
