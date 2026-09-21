@@ -10,6 +10,56 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 
 - Go 1.27 (match [go.mod](../go.mod)).
 
+## Architecture
+
+Three processes. The part worth knowing is which of them owns what.
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+The diagram's labels stay in English in every translation: they are process names, paths and
+endpoints, and translating an identifier makes it harder to grep, not easier to read.
+
+**The Manager orchestrates; it does not host runners.** In container mode each runner is its own
+container, created by the Manager through the host's Docker socket — which is why the Manager
+needs that socket and must not be pointed at DinD. In the default mode there is no Agent and no
+runner container at all: the runner processes run inside the Manager's own container, and the
+Manager reads `/proc` directly.
+
+**Status crosses a process boundary, so it crosses HTTP.** The Manager and a runner container are
+in different PID namespaces, so the Manager cannot see the runner's processes — it asks the Agent,
+which reads its own `/proc`. That call carries a per-runner bearer token, because any container on
+the same Docker network can reach the Agent's `/start` and `/stop`. When the call fails the answer
+is `unknown`, never `installed`: "registered but not running, so start it" must not fire on a
+runner the Manager could not reach. See [How running state is determined](#how-running-state-is-determined).
+
+**Nine things are fixed at `docker create` time** and never change afterwards: container name,
+image, network, mount directory, in-job Docker backend, DinD host, docker GID, agent token and the
+resource limits. `docker start` only restarts what was already built, so editing the config alone
+never reaches an existing container. That is the whole reason drift detection exists — the Manager
+compares each container's real create parameters against the current config, rebuilds a **stopped**
+one on its next start, and flags a **running** one instead of interrupting a job. The image is
+compared by ID as well as by reference, so rebuilding the same tag counts.
+
 ## Build
 
 ```bash

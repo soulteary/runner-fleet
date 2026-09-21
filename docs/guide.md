@@ -268,6 +268,71 @@ scrape_configs:
       password: <BASIC_AUTH_PASSWORD>
 ```
 
+### Upgrading
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Nothing needs re-registering: runner identity lives in each runner's install directory, which the
+upgrade does not touch.
+
+In container mode the runner containers still exist with the **old** runner image, because image,
+network, mount directory and the rest are fixed at `docker create` time. The Manager notices and
+repairs that on its own — a **stopped** runner is rebuilt on its next start, a **running** one is
+flagged "config changed" and rebuilt when you hit Recreate or stop and start it while idle. Two
+details decide whether the new image is actually there to build from:
+
+- A **version tag** pulls itself: after a version bump the new `-runner` tag is not present
+  locally, so `docker create` fetches it.
+- A **mutable tag** (`:main`, or the same version tag rebuilt) already resolves locally, so
+  `docker create` reuses the stale image. Pull it yourself first — `docker pull <runner image>`.
+  Drift is compared on image **ID** as well as reference, so once the pull lands the rebuild
+  happens as usual.
+
+`runners.resources` is the one setting that reaches an existing container without a rebuild: the
+Manager applies it with `docker update` on start, so upgrading into a version that supports limits
+does not require recreating everything.
+
+Read the [Changelog](../CHANGELOG.md) for the release you are jumping to — breaking changes and
+anything needing a manual step are called out there.
+
+### What to back up
+
+The README says the config is your backup. That is true of *configuration* and not of *identity*:
+a runner's credentials live in its install directory, and without them a restored deployment has
+to be re-registered by hand.
+
+Back up `config/config.yaml` and each `runners/<name>/` directory, excluding `_work/`.
+
+| In `runners/<name>/` | Written by | If you lose it |
+|---|---|---|
+| `.runner`, `.credentials_rsaparams` and the other files `config.sh` wrote | actions/runner | The runner is gone. Re-register it, and delete the stale entry on GitHub first — a new registration under the same name fails while the old one is listed |
+| `.agent_token` | Manager (mode `0600`) | Regenerated; the container is flagged as drifted and rebuilt on its next start |
+| `.github_check_token` | You, optionally | The visibility check stops, and deleting the runner can no longer deregister it from GitHub |
+| `.registration_result.json`, `.github_status.json` | Manager | Cosmetic — both are rebuilt by the next registration or check |
+| `_work/` | The jobs | Nothing worth keeping. It is checkouts and build output, it is the largest thing on disk, and it grows |
+
+Ownership matters on restore: everything must end up owned by UID 1001, the same
+`sudo chown -R 1001:1001 config runners` as the first install. `GET /ready` write-probes the
+runners directory, so it is the fastest way to confirm a restore is actually usable.
+
+### Behind a reverse proxy
+
+The Manager speaks plain HTTP and has no TLS of its own, so the proxy terminates TLS. This matters
+more than usual here: Basic Auth sends the password on every request, and without TLS it crosses
+the network in the clear on each one.
+
+The cross-site check does not need configuring. It reads `Sec-Fetch-Site`, which the browser
+computes locally, so a proxy rewriting `Host` cannot break it. `TRUSTED_ORIGINS` is the escape
+hatch for the case where it does — list the origins as the browser's address bar shows them,
+comma-separated, and keep the list to origins you control. See
+[4. Security and validation](#4-security-and-validation).
+
+Point the proxy's health check at `/health` and its readiness gate, if it has one, at `/ready`.
+Both stay unauthenticated. Do not expose `/metrics` publicly: with Basic Auth on it requires
+credentials, and with Basic Auth off it is as open as everything else.
+
 ### Version and logs
 
 `GET /version` returns the version and nothing else. Build details are deliberately not there:

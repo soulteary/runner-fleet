@@ -10,6 +10,58 @@ Für Produktion Container-Bereitstellung verwenden; siehe [Benutzerhandbuch](gui
 
 - Go 1.27 (abgestimmt auf [go.mod](../../go.mod)).
 
+## Architektur
+
+Drei Prozesse. Wissenswert ist, welcher davon was besitzt.
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+Die Beschriftungen im Diagramm bleiben in allen Übersetzungen englisch: es sind Prozessnamen, Pfade
+und Endpunkte, und einen Bezeichner zu übersetzen macht ihn schwerer greppbar, nicht lesbarer.
+
+**Der Manager orchestriert; er beherbergt keine Runner.** Im Containermodus ist jeder Runner ein
+eigener Container, den der Manager über den Docker-Socket des Hosts anlegt — deshalb braucht der
+Manager diesen Socket und darf nicht auf DinD zeigen. Im Standardmodus gibt es weder Agent noch
+Runner-Container: die Runner-Prozesse laufen im Container des Managers selbst, und der Manager
+liest `/proc` direkt.
+
+**Der Status überquert eine Prozessgrenze, also läuft er über HTTP.** Manager und Runner-Container
+liegen in verschiedenen PID-Namespaces; der Manager sieht die Prozesse des Runners nicht und fragt
+deshalb den Agent, der sein eigenes `/proc` liest. Dieser Aufruf trägt ein Bearer-Token pro Runner,
+denn jeder Container im selben Docker-Netz erreicht `/start` und `/stop` des Agents. Schlägt der
+Aufruf fehl, lautet die Antwort `unknown`, nie `installed`: „registriert, läuft aber nicht, also
+starten" darf nicht auf einem Runner greifen, den der Manager gar nicht erreichen konnte. Siehe
+[Wie der Laufzustand ermittelt wird](#wie-der-laufzustand-ermittelt-wird).
+
+**Neun Dinge werden im Moment des `docker create` festgelegt** und ändern sich danach nicht mehr:
+Containername, Image, Netzwerk, Mount-Verzeichnis, In-Job-Docker-Backend, DinD-Host, Docker-GID,
+Agent-Token und die Ressourcenlimits. `docker start` startet nur neu, was bereits gebaut wurde —
+die Konfiguration allein zu ändern erreicht einen bestehenden Container also nie. Genau dafür gibt
+es die Drift-Erkennung: Der Manager vergleicht die tatsächlichen Erzeugungsparameter jedes
+Containers mit der aktuellen Konfiguration, baut einen **gestoppten** beim nächsten Start neu und
+markiert einen **laufenden**, statt einen Job zu unterbrechen. Das Image wird per ID und nicht nur
+per Referenz verglichen, ein Neubau desselben Tags zählt also ebenfalls.
+
 ## Build
 
 ```bash

@@ -10,6 +10,56 @@
 
 - Go 1.27（[go.mod](../../go.mod) と一致）。
 
+## アーキテクチャ
+
+プロセスは 3 つ。知っておく価値があるのは、どれが何を担っているかです。
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+図のラベルはどの訳文でも英語のままにしてあります。プロセス名・パス・エンドポイントであり、
+識別子を訳すと読みやすくなるどころか grep しづらくなるだけだからです。
+
+**Manager はオーケストレーションだけを行い、Runner を抱えません。** コンテナモードでは各 Runner が
+それぞれのコンテナになり、Manager がホストの Docker socket 越しに作成します——Manager にその socket が
+必要で、かつ DinD を指してはいけない理由がこれです。デフォルトモードでは Agent も Runner コンテナも
+存在しません。Runner プロセスは Manager 自身のコンテナ内で動き、Manager が直接 `/proc` を読みます。
+
+**状態はプロセス境界をまたぐので、HTTP を通ります。** Manager と Runner コンテナは PID namespace が
+異なり、Manager からは Runner のプロセスが見えません。そこで Agent に尋ね、Agent が自分の `/proc` を
+読みます。この呼び出しは Runner ごとの bearer トークンを伴います——同じ Docker ネットワーク上のどの
+コンテナからも Agent の `/start`・`/stop` に届いてしまうからです。呼び出しが失敗したときの答えは
+`installed` ではなく `unknown` です。「登録済みだが動いていないので起動する」という判断が、そもそも
+到達できなかった Runner に対して発火してはいけません。
+[実行状態の判定方法](#実行状態の判定方法)を参照。
+
+**9 つの項目は `docker create` の時点で確定**し、その後は変わりません: コンテナ名、イメージ、
+ネットワーク、マウントディレクトリ、Job 内 Docker バックエンド、DinD ホスト、docker GID、
+Agent トークン、リソース上限。`docker start` は既に作られたものをそのまま起動し直すだけなので、
+設定だけを変えても既存のコンテナには決して届きません。ドリフト検出が存在する理由はこれに尽きます——
+Manager は各コンテナの実際の作成パラメータを現在の設定と突き合わせ、**停止中**のものは次回起動時に
+作り直し、**実行中**のものは Job を中断せずに印だけ付けます。イメージは参照だけでなく ID でも比較する
+ので、同じ tag を再ビルドした場合も対象になります。
+
 ## ビルド
 
 ```bash

@@ -10,6 +10,59 @@ En production, utilisez le déploiement conteneur ; voir [Guide d'utilisation](g
 
 - Go 1.27 (en cohérence avec [go.mod](../../go.mod)).
 
+## Architecture
+
+Trois processus. Ce qui compte, c'est de savoir lequel possède quoi.
+
+```mermaid
+flowchart LR
+  GH["GitHub Actions"]
+  subgraph host["Host"]
+    M["<b>Manager</b><br/>runner-manager :8080"]
+    SOCK[("docker.sock")]
+    DIR[("runners/&lt;name&gt;/")]
+    subgraph RC["Runner container — container mode only"]
+      AG["<b>Agent</b><br/>runner-agent :8081"]
+      RUN["run.sh → Runner.Listener"]
+    end
+  end
+  M -->|"docker create / start / stop / rm"| SOCK
+  SOCK -.->|"creates"| RC
+  M -->|"HTTP + Bearer AGENT_TOKEN<br/>/status /start /stop"| AG
+  AG -->|"spawns; reads /proc"| RUN
+  M -->|"config, tokens, registration result"| DIR
+  DIR -.->|"bind-mounted as /runner"| RC
+  RUN -->|"long-polls for jobs"| GH
+  M -.->|"optional PAT: listed? busy?"| GH
+```
+
+Les étiquettes du diagramme restent en anglais dans toutes les traductions : ce sont des noms de
+processus, des chemins et des endpoints, et traduire un identifiant le rend plus difficile à
+grep sans le rendre plus lisible.
+
+**Le Manager orchestre ; il n'héberge pas les runners.** En mode conteneur, chaque runner est son
+propre conteneur, créé par le Manager via la socket Docker de l'hôte — d'où le fait que le Manager
+ait besoin de cette socket et ne doive pas être pointé vers DinD. En mode par défaut il n'y a ni
+Agent ni conteneur runner : les processus runner tournent dans le conteneur du Manager lui-même,
+qui lit `/proc` directement.
+
+**L'état traverse une frontière de processus, donc il passe par HTTP.** Le Manager et un conteneur
+runner sont dans des namespaces PID différents : le Manager ne voit pas les processus du runner, il
+interroge l'Agent, qui lit son propre `/proc`. Cet appel porte un jeton bearer propre à chaque
+runner, car n'importe quel conteneur du même réseau Docker peut atteindre `/start` et `/stop` de
+l'Agent. Quand l'appel échoue, la réponse est `unknown`, jamais `installed` : « enregistré mais pas
+en cours, donc démarrons-le » ne doit pas se déclencher sur un runner que le Manager n'a pas pu
+joindre. Voir [Comment l'état d'exécution est déterminé](#comment-létat-dexécution-est-déterminé).
+
+**Neuf choses sont figées au moment du `docker create`** et ne changent plus ensuite : nom du
+conteneur, image, réseau, répertoire monté, backend Docker pour les jobs, hôte DinD, GID docker,
+jeton d'Agent et les limites de ressources. `docker start` ne fait que relancer ce qui était déjà
+construit, donc modifier la configuration seule n'atteint jamais un conteneur existant. C'est toute
+la raison d'être de la détection de dérive : le Manager compare les paramètres de création réels de
+chaque conteneur à la configuration courante, reconstruit un conteneur **arrêté** à son prochain
+démarrage, et se contente de signaler un conteneur **en cours** plutôt que d'interrompre un job.
+L'image est comparée par ID autant que par référence, donc reconstruire le même tag compte aussi.
+
 ## Build
 
 ```bash
