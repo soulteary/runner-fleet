@@ -4,7 +4,6 @@ package handler
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -20,6 +19,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	secure "github.com/soulteary/secure-kit"
 )
 
 // Supported UI languages, same as docs (en, zh, fr, ja, ko, de).
@@ -178,15 +178,26 @@ func applyContainerStatusOne(ctx context.Context, cfg *config.Config, info *runn
 	info.Status = status
 }
 
-// shortRandomSuffix 生成 6 位小写字母+数字的随机后缀，用于 runner 名称去重
+// shortRandomSuffixLen 建议名后缀长度；字符集固定为小写字母+数字，
+// 因为它会被拼进容器名与目录名。
+const shortRandomSuffixLen = 6
+
+// shortRandomSuffix 生成 6 位小写字母+数字的随机后缀，用于 runner 名称去重。
+//
+// 早先的实现是 letters[int(b[i])%len(letters)]：字符集 36 个字符除不尽 256，
+// a/b/c/d 出现的概率比其余字符高约 14%。后缀只用来去重，不是安全边界，
+// 但没有理由留着一个有偏的实现——secure.RandomString 走 crypto/rand.Int
+// 按字符集长度取模，天然无偏。
+//
+// 取不到随机数时返回空串，由调用方跳过这一轮：绝不能回退到一个可预测的值，
+// 那会让两次并发添加拿到同一个建议名，恰好制造出建议名本该避开的冲突。
 func shortRandomSuffix() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 6)
-	_, _ = rand.Read(b)
-	for i := range b {
-		b[i] = letters[int(b[i])%len(letters)]
+	s, err := secure.RandomString(shortRandomSuffixLen, secure.CharsetAlphanumericLower)
+	if err != nil {
+		log.Printf("[precheck] 生成建议名后缀失败: %v", err)
+		return ""
 	}
-	return string(b)
+	return s
 }
 
 // runInstallRunnerScript 执行容器内 install-runner.sh，下载并解压 runner 到 basePath/runnerName；超时返回 error

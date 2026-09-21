@@ -209,7 +209,13 @@ func suggestRunnerName(cfg *config.Config, name, path string, lookup containerLo
 		}
 	}
 	for i := 0; i < 20; i++ {
-		candidate := name + "-" + shortRandomSuffix()
+		// 取不到随机后缀时跳过这一轮，而不是拼出一个 "name-" 当建议名——
+		// 那个名字既没有区分度，还可能刚好通过冲突检查被推荐出去
+		suffix := shortRandomSuffix()
+		if suffix == "" {
+			continue
+		}
+		candidate := name + "-" + suffix
 		if !hasErrorConflict(collectRunnerConflicts(cfg, candidate, path, lookup, willRegister)) {
 			return candidate
 		}

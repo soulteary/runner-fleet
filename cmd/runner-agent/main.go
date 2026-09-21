@@ -3,7 +3,6 @@
 package main
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
+	secure "github.com/soulteary/secure-kit"
 )
 
 const defaultInstallDir = "/runner"
@@ -212,7 +212,10 @@ func requireToken(next http.HandlerFunc) http.HandlerFunc {
 		want := expectedToken()
 		if want != "" {
 			got := bearerToken(r.Header.Get("Authorization"))
-			if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			// 与 Manager 侧同理：subtle.ConstantTimeCompare 在两侧长度不等时立即
+			// 返回，耗时会随「猜的长度是否等于真实长度」而变，把令牌长度泄漏出去；
+			// secure.ConstantTimeEqual 先把两侧补到同长再比
+			if !secure.ConstantTimeEqual(got, want) {
 				w.WriteHeader(http.StatusUnauthorized)
 				_, _ = w.Write([]byte(`{"message":"unauthorized"}`))
 				return
