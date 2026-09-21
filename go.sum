@@ -42,6 +42,8 @@ github.com/soulteary/cli-kit v1.9.0 h1:MqI51qtK+pspPDoF0WA0RctRrDXB/lkQ0Wl7qWO2e
 github.com/soulteary/cli-kit v1.9.0/go.mod h1:xwDFEGpNaL5Tgqsv2FW0PRPuCE80Um+LXDUUIzcQxgQ=
 github.com/soulteary/health-kit/v3 v3.0.0 h1:VdAyUGZxHrRJYhU/CeiPXFxz9OL7Zk6sNrygA/gCl2U=
 github.com/soulteary/health-kit/v3 v3.0.0/go.mod h1:Ip/i1kijlPfaQHGvr8oF4tbtSAG9dFZGHZKxaE+4E7E=
+github.com/soulteary/i18n-kit/v3 v3.0.0 h1:dEXGnF47X5lGQbuH+PGjqVioDoc4tq4liELwoa6ViTU=
+github.com/soulteary/i18n-kit/v3 v3.0.0/go.mod h1:kdY9FY9gPw/r1sNYnS99xDOMwtPzH3IrMNpgoFxdUaU=
 github.com/soulteary/secure-kit v1.6.0 h1:QvvLkOhHq1lBWRkjWvELqeUiFPnKiuqBEqNSDVKE+p8=
 github.com/soulteary/secure-kit v1.6.0/go.mod h1:vNpwew8IBGYaxWnJMlTTSyRBVxHWmfhe3XXGs+Crby4=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
