@@ -79,14 +79,14 @@ func runRegistrationJob(j registrationJob) {
 		runnerSegment := filepath.Base(installDir)
 		installOut, installErr := runInstallRunnerScript(j.BasePath, runnerSegment, 3*time.Minute)
 		if installErr != nil {
-			msg := "自动安装 Runner 失败: " + installErr.Error()
+			msg := "installing the runner automatically failed: " + installErr.Error()
 			writeRegistrationResult(installDir, false, msg)
-			log.Printf("[registration] %s 安装失败: %v\noutput: %s", j.RunnerName, installErr, string(installOut))
+			log.Printf("[registration] %s install failed: %v\noutput: %s", j.RunnerName, installErr, string(installOut))
 			return
 		}
 		if _, err2 := os.Stat(configScript); err2 != nil {
-			writeRegistrationResult(installDir, false, "安装完成但未找到 "+runner.ConfigScriptName())
-			log.Printf("[registration] %s 安装后未找到 config 脚本\noutput: %s", j.RunnerName, string(installOut))
+			writeRegistrationResult(installDir, false, "the install finished but "+runner.ConfigScriptName()+" was not found")
+			log.Printf("[registration] %s config script missing after install\noutput: %s", j.RunnerName, string(installOut))
 			return
 		}
 	}
@@ -97,33 +97,33 @@ func runRegistrationJob(j registrationJob) {
 			msg = err.Error()
 		}
 		if strings.Contains(string(out), "Must not run with sudo") {
-			msg += "（请以非 root 用户运行容器，或设置环境变量 RUNNER_ALLOW_RUNASROOT=1）"
+			msg += " (run the container as a non-root user, or set RUNNER_ALLOW_RUNASROOT=1)"
 		}
 		outLower := strings.ToLower(string(out))
 		if strings.Contains(outLower, "token") &&
 			(strings.Contains(outLower, "invalid") || strings.Contains(outLower, "expired") ||
 				strings.Contains(outLower, "already") || strings.Contains(outLower, "used")) {
-			msg += "。请为每个 Runner 在 GitHub 重新生成新的注册 Token"
+			msg += ". Generate a fresh registration token on GitHub for each runner."
 		}
 		// --unattended 下重名会直接失败退出，错误里只说「存在同名 Runner」，
 		// 但没说该去哪儿删——GitHub 侧的 Runner 列表不在本工具的管辖范围内
 		if strings.Contains(outLower, "runner exists with the same name") ||
 			strings.Contains(outLower, "a runner exists with the same name") {
-			msg += "。GitHub 上已存在同名 Runner：到目标仓库或组织的 Settings → Actions → Runners 删除它后重试"
+			msg += ". GitHub already lists a runner with this name: delete it under Settings → Actions → Runners on the target repository or organization, then try again."
 		}
 		writeRegistrationResult(installDir, false, msg)
-		log.Printf("[registration] %s 注册失败: %s", j.RunnerName, msg)
+		log.Printf("[registration] %s registration failed: %s", j.RunnerName, msg)
 		return
 	}
-	writeRegistrationResult(installDir, true, "注册成功")
+	writeRegistrationResult(installDir, true, "registered")
 	cfg, _ := config.Load(ConfigPath)
 	if cfg != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		if startErr := runner.StartIfInstalled(ctx, cfg, j.RunnerName, installDir); startErr != nil {
-			log.Printf("[registration] %s 注册成功但启动失败: %v", j.RunnerName, startErr)
+			log.Printf("[registration] %s registered but failed to start: %v", j.RunnerName, startErr)
 		} else {
-			log.Printf("[registration] %s 已注册并启动", j.RunnerName)
+			log.Printf("[registration] %s registered and started", j.RunnerName)
 		}
 	}
 }
@@ -191,7 +191,7 @@ const shortRandomSuffixLen = 6
 func shortRandomSuffix() string {
 	s, err := secure.RandomString(shortRandomSuffixLen, secure.CharsetAlphanumericLower)
 	if err != nil {
-		log.Printf("[precheck] 生成建议名后缀失败: %v", err)
+		log.Printf("[precheck] cannot generate the suffix for the suggested name: %v", err)
 		return ""
 	}
 	return s
@@ -224,7 +224,7 @@ func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) 
 func runConfigScript(installDir, url, token, name string, labels []string, timeout time.Duration) ([]byte, error) {
 	absDir, err := filepath.Abs(installDir)
 	if err != nil {
-		return nil, fmt.Errorf("解析 runner 路径失败: %w", err)
+		return nil, fmt.Errorf("cannot resolve the runner path: %w", err)
 	}
 	installDir = absDir
 	configScript := filepath.Join(installDir, runner.ConfigScriptName())
@@ -544,7 +544,7 @@ func StartRunner(c echo.Context) error {
 		applyContainerStatusOne(c.Request().Context(), cfg, info)
 		if info.Probe != nil {
 			probeFailed = true
-			log.Printf("[start] 容器 Runner 状态探测失败 name=%s，将继续尝试启动: %v", info.Name, info.Probe.Error)
+			log.Printf("[start] status probe failed for container runner name=%s, starting anyway: %v", info.Name, info.Probe.Error)
 		}
 	}
 	// 容器模式下探测失败会把状态标记为 unknown；启动前资格判断应回退到磁盘原始状态。
@@ -628,7 +628,7 @@ func StopRunner(c echo.Context) error {
 		applyContainerStatusOne(c.Request().Context(), cfg, info)
 		if info.Probe != nil {
 			probeFailed = true
-			log.Printf("[stop] 容器 Runner 状态探测失败 name=%s，将继续尝试停止: %v", info.Name, info.Probe.Error)
+			log.Printf("[stop] status probe failed for container runner name=%s, stopping anyway: %v", info.Name, info.Probe.Error)
 		}
 	}
 	if !info.Running && !probeFailed {
@@ -729,7 +729,7 @@ func UpdateRunner(c echo.Context) error {
 	}
 	updated = runner.GetByName(cfg, name)
 	// 若已注册且未在运行，自动启动（容器/进程模式统一走 StartIfInstalled）
-	msg := "已更新"
+	msg := tr(c, "api.updated")
 	var started bool
 	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
 		ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
@@ -737,9 +737,9 @@ func UpdateRunner(c echo.Context) error {
 		startErr := runner.StartIfInstalled(ctx, cfg, name, updated.InstallDir)
 		started = (startErr == nil)
 		if startErr != nil {
-			msg += "，但自动启动失败: " + startErr.Error()
+			msg = trf(c, "api.updated_autostart_failed", startErr)
 		} else {
-			msg += "，已自动启动"
+			msg = tr(c, "api.updated_autostarted")
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
@@ -787,7 +787,7 @@ func RemoveRunnerByName(c echo.Context) error {
 	dereg := deregisterFromGitHub(deregCtx, installDir, info.TargetType, info.Target, name)
 	deregCancel()
 	if !dereg.Done {
-		log.Printf("[remove] %s：%s", name, dereg.Message)
+		log.Printf("[remove] %s: %s", name, trEnf(dereg.MessageKey, dereg.MessageArgs...))
 	}
 	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
 	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {
@@ -802,7 +802,7 @@ func RemoveRunnerByName(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.config_save_failed", err))
 	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"message":             trf(c, "api.removed", dereg.Message),
+		"message":             trf(c, "api.removed", trf(c, dereg.MessageKey, dereg.MessageArgs...)),
 		"github_deregistered": dereg.Done,
 	})
 }

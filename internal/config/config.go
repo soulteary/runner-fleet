@@ -193,29 +193,29 @@ func (r ResourceLimits) Validate() error {
 		// 正则挡掉 1e3/NaN 等 ParseFloat 能接受但 docker 不接受的写法，再要求数值为正
 		f, err := strconv.ParseFloat(v, 64)
 		if !dockerCPUsRe.MatchString(v) || err != nil || f <= 0 {
-			return fmt.Errorf("runners.resources.cpus 需为正数（如 \"2\" 或 \"1.5\"），当前为 %q", r.CPUs)
+			return fmt.Errorf("runners.resources.cpus must be a positive number (for example \"2\" or \"1.5\"), got %q", r.CPUs)
 		}
 	}
 	if v := strings.TrimSpace(r.Memory); v != "" && !dockerSizeRe.MatchString(v) {
-		return fmt.Errorf("runners.resources.memory 需为 docker 内存写法（如 \"512m\"、\"4g\"），当前为 %q", r.Memory)
+		return fmt.Errorf("runners.resources.memory must use docker memory notation (for example \"512m\" or \"4g\"), got %q", r.Memory)
 	}
 	if v := strings.TrimSpace(r.MemorySwap); v != "" && v != "-1" && !dockerSizeRe.MatchString(v) {
-		return fmt.Errorf("runners.resources.memory_swap 需为 docker 内存写法或 \"-1\"，当前为 %q", r.MemorySwap)
+		return fmt.Errorf("runners.resources.memory_swap must use docker memory notation or be \"-1\", got %q", r.MemorySwap)
 	}
 	if r.PidsLimit < -1 {
-		return fmt.Errorf("runners.resources.pids_limit 需为正数或 -1（不限），当前为 %d", r.PidsLimit)
+		return fmt.Errorf("runners.resources.pids_limit must be a positive number, or -1 for unlimited, got %d", r.PidsLimit)
 	}
 	memory := strings.TrimSpace(r.Memory)
 	swap := strings.TrimSpace(r.MemorySwap)
 	if swap != "" && memory == "" {
-		return fmt.Errorf("设置 runners.resources.memory_swap 时必须同时设置 memory，否则 docker 会拒绝创建容器")
+		return fmt.Errorf("runners.resources.memory_swap needs memory set as well, or docker refuses to create the container")
 	}
 	// docker 要求 memory-swap（内存+swap 总量）不小于 memory，否则创建容器时才报错
 	if swap != "" && swap != "-1" && memory != "" {
 		memBytes, memErr := parseDockerSize(memory)
 		swapBytes, swapErr := parseDockerSize(swap)
 		if memErr == nil && swapErr == nil && swapBytes < memBytes {
-			return fmt.Errorf("runners.resources.memory_swap(%s) 不能小于 memory(%s)：该值是内存+swap 的总量，docker 会拒绝创建容器", r.MemorySwap, r.Memory)
+			return fmt.Errorf("runners.resources.memory_swap(%s) cannot be smaller than memory(%s): it is the total of memory plus swap, and docker refuses to create the container", r.MemorySwap, r.Memory)
 		}
 	}
 	return nil
@@ -226,7 +226,7 @@ func (r ResourceLimits) Validate() error {
 func parseDockerSize(v string) (int64, error) {
 	v = strings.TrimSpace(v)
 	if !dockerSizeRe.MatchString(v) {
-		return 0, fmt.Errorf("不是合法的 docker 内存写法: %q", v)
+		return 0, fmt.Errorf("not a valid docker memory value: %q", v)
 	}
 	mult := int64(1)
 	switch last := v[len(v)-1]; last {
@@ -241,7 +241,7 @@ func parseDockerSize(v string) (int64, error) {
 	}
 	n, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return 0, fmt.Errorf("不是合法的 docker 内存写法: %q", v)
+		return 0, fmt.Errorf("not a valid docker memory value: %q", v)
 	}
 	return int64(n * float64(mult)), nil
 }
@@ -347,9 +347,9 @@ func Load(path string) (*Config, error) {
 			}
 			dir := filepath.Dir(path)
 			if mkdirErr := os.MkdirAll(dir, 0755); mkdirErr != nil {
-				log.Printf("警告: 无法创建配置目录 %s: %v，将不写入 config 文件", dir, mkdirErr)
+				log.Printf("warning: cannot create the config directory %s: %v, the config file will not be written", dir, mkdirErr)
 			} else if saveErr := c.Save(path); saveErr != nil {
-				log.Printf("警告: 无法将配置写入 %s: %v，使用内存配置继续运行", path, saveErr)
+				log.Printf("warning: cannot write the config to %s: %v, continuing with the in-memory config", path, saveErr)
 			}
 			return c, nil
 		}
@@ -407,7 +407,7 @@ func Validate(c *Config) error {
 		c.Runners.JobDockerBackend = jobBackend
 	}
 	if validator.ValidateEnumCaseInsensitive(jobBackend, JobDockerBackends) != nil {
-		return fmt.Errorf("runners.job_docker_backend 仅支持 %s，当前为 %q",
+		return fmt.Errorf("runners.job_docker_backend only supports %s, got %q",
 			strings.Join(JobDockerBackends, "/"), c.Runners.JobDockerBackend)
 	}
 	// Port 为 0 表示「没写」，由 Load 填默认值，这里不管；非 0 才校验范围。
@@ -415,30 +415,30 @@ func Validate(c *Config) error {
 	// ListenAndServe 才以一句不提配置项的 "invalid port" 失败。
 	if c.Server.Port != 0 {
 		if err := validator.ValidatePort(c.Server.Port); err != nil {
-			return fmt.Errorf("server.port 需在 1-65535 之间，当前为 %d（也可能来自 MANAGER_PORT/SERVER_PORT）", c.Server.Port)
+			return fmt.Errorf("server.port must be between 1 and 65535, got %d (it may also come from MANAGER_PORT/SERVER_PORT)", c.Server.Port)
 		}
 	}
 	if err := c.Runners.Resources.Validate(); err != nil {
 		return err
 	}
 	if c.Runners.DockerGID < 0 {
-		return fmt.Errorf("runners.docker_gid 不能为负数（当前为 %d），留空或 0 表示自动探测 docker.sock 所属组", c.Runners.DockerGID)
+		return fmt.Errorf("runners.docker_gid cannot be negative (got %d); leave it empty or 0 to detect the group owning docker.sock", c.Runners.DockerGID)
 	}
 	if !c.Runners.ContainerMode {
 		if strings.TrimSpace(c.Runners.VolumeHostPath) != "" {
-			return fmt.Errorf("runners.volume_host_path 仅在 container_mode=true 时可设置")
+			return fmt.Errorf("runners.volume_host_path can only be set when container_mode=true")
 		}
 		if jobBackend != "dind" {
-			return fmt.Errorf("container_mode=false 时 runners.job_docker_backend 必须为 dind（当前为 %q）", jobBackend)
+			return fmt.Errorf("runners.job_docker_backend must be dind when container_mode=false (got %q)", jobBackend)
 		}
 	}
 	if c.Runners.ContainerMode {
 		if strings.TrimSpace(c.Runners.VolumeHostPath) != "" && !filepath.IsAbs(c.Runners.VolumeHostPath) {
-			return fmt.Errorf("runners.volume_host_path 必须为宿主机绝对路径")
+			return fmt.Errorf("runners.volume_host_path must be an absolute path on the host")
 		}
 		baseClean := filepath.Clean(c.Runners.BasePath)
 		if strings.TrimSpace(c.Runners.VolumeHostPath) == "" && strings.HasPrefix(baseClean, "/app") {
-			return fmt.Errorf("container_mode=true 且 base_path=%s 时必须设置 runners.volume_host_path（宿主机 runners 根目录绝对路径）", c.Runners.BasePath)
+			return fmt.Errorf("runners.volume_host_path must be set when container_mode=true and base_path=%s (the absolute path of the runners base directory on the host)", c.Runners.BasePath)
 		}
 	}
 	for i, item := range c.Runners.Items {
@@ -447,13 +447,13 @@ func Validate(c *Config) error {
 		targetType := strings.ToLower(strings.TrimSpace(item.TargetType))
 		target := strings.TrimSpace(item.Target)
 		if name == "" {
-			return fmt.Errorf("runners.items[%d].name 不能为空", i)
+			return fmt.Errorf("runners.items[%d].name cannot be empty", i)
 		}
 		if !IsSafeRunnerNameOrPath(name) {
-			return fmt.Errorf("runners.items[%d].name 包含非法字符（不允许 .. / \\\\）: %s", i, name)
+			return fmt.Errorf("runners.items[%d].name contains an illegal character (.. / \\\\ are not allowed): %s", i, name)
 		}
 		if path != "" && !IsSafeRunnerNameOrPath(path) {
-			return fmt.Errorf("runners.items[%d].path 包含非法字符（不允许 .. / \\\\）: %s", i, path)
+			return fmt.Errorf("runners.items[%d].path contains an illegal character (.. / \\\\ are not allowed): %s", i, path)
 		}
 		if err := ValidateTarget(targetType, target); err != nil {
 			return fmt.Errorf("runners.items[%d]: %w", i, err)
@@ -461,33 +461,33 @@ func Validate(c *Config) error {
 		itemBackend := normalizeJobDockerBackend(item.JobDockerBackend)
 		itemImage := strings.TrimSpace(item.ContainerImage)
 		if itemBackend != "" && validator.ValidateEnumCaseInsensitive(itemBackend, JobDockerBackends) != nil {
-			return fmt.Errorf("runners.items[%d].job_docker_backend 仅支持 %s，当前为 %q",
+			return fmt.Errorf("runners.items[%d].job_docker_backend only supports %s, got %q",
 				i, strings.Join(JobDockerBackends, "/"), item.JobDockerBackend)
 		}
 		if !c.Runners.ContainerMode {
 			// 与 runners.volume_host_path 的处理一致：容器模式专属字段不允许在非容器模式下设置，
 			// 避免配置看起来生效、实际被忽略
 			if itemImage != "" {
-				return fmt.Errorf("runners.items[%d].container_image 仅在 container_mode=true 时可设置", i)
+				return fmt.Errorf("runners.items[%d].container_image can only be set when container_mode=true", i)
 			}
 			if itemBackend != "" {
-				return fmt.Errorf("runners.items[%d].job_docker_backend 仅在 container_mode=true 时可设置", i)
+				return fmt.Errorf("runners.items[%d].job_docker_backend can only be set when container_mode=true", i)
 			}
 		}
 		if seen[name] {
-			return fmt.Errorf("runners.items 中存在同名 Runner: %s", name)
+			return fmt.Errorf("runners.items has two runners with the same name: %s", name)
 		}
 		seen[name] = true
 		installPath := item.InstallPath(c.Runners.BasePath)
 		installKey := filepath.Clean(installPath)
 		if existing, ok := seenInstallPaths[installKey]; ok {
-			return fmt.Errorf("runners.items 安装目录冲突: %s 与 %s 均映射到 %s", existing, name, installKey)
+			return fmt.Errorf("runners.items has an install directory conflict: %s and %s both map to %s", existing, name, installKey)
 		}
 		seenInstallPaths[installKey] = name
 		if c.Runners.ContainerMode {
 			containerName := NormalizedContainerName(name)
 			if existing, ok := seenContainerNames[containerName]; ok {
-				return fmt.Errorf("runners.items 中 Runner 名称映射后容器名冲突: %s 与 %s 均映射为 %s", existing, name, containerName)
+				return fmt.Errorf("runners.items has a container name conflict after mapping: %s and %s both map to %s", existing, name, containerName)
 			}
 			seenContainerNames[containerName] = name
 		}
@@ -517,26 +517,26 @@ func IsSafeRunnerNameOrPath(s string) bool {
 func ValidateTarget(targetType, target string) error {
 	t := strings.TrimSpace(target)
 	if t == "" {
-		return fmt.Errorf("target 不能为空")
+		return fmt.Errorf("target cannot be empty")
 	}
 	tt := strings.ToLower(strings.TrimSpace(targetType))
 	switch tt {
 	case "org":
 		if strings.Contains(t, "/") {
-			return fmt.Errorf("目标类型为组织(org)时，target 应为组织名，不能包含 /")
+			return fmt.Errorf("when target_type is org, target must be the organization name and cannot contain /")
 		}
 		return nil
 	case "repo":
 		parts := strings.SplitN(t, "/", 2)
 		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return fmt.Errorf("目标类型为仓库(repo)时，target 应为 owner/repo 格式（且 owner 与 repo 均非空）")
+			return fmt.Errorf("when target_type is repo, target must be owner/repo, with both parts non-empty")
 		}
 		if strings.Contains(parts[1], "/") {
-			return fmt.Errorf("target 只能包含一个 /，格式为 owner/repo")
+			return fmt.Errorf("target can contain only one /, in the form owner/repo")
 		}
 		return nil
 	default:
-		return fmt.Errorf("target_type 必须为 org 或 repo")
+		return fmt.Errorf("target_type must be org or repo")
 	}
 }
 

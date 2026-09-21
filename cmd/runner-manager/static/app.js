@@ -584,7 +584,7 @@ function openModal(mode, name) {
         else if (gh === true) ghEl.innerHTML = '<span class="github-yes">' + t('modal.gh_yes') + '</span>';
         else if (gh === false) ghEl.innerHTML = '<span class="github-no">' + t('modal.gh_no') + '</span>';
         // gh 为 null：查过但没查出答案，和「从未查过」要分开说，否则过期的令牌看着像没配过
-        else if (data.github_check_error) ghEl.textContent = t('modal.gh_failed') + '：' + data.github_check_error;
+        else if (data.github_check_error) ghEl.textContent = t('modal.gh_failed') + ': ' + data.github_check_error;
         else ghEl.textContent = t('modal.gh_unchecked');
         // 忙碌同样是三态：接口里没有这个字段就是「不知道」，不能说成「空闲」
         var busyEl = document.getElementById('vGitHubBusy');

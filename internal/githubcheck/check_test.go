@@ -151,10 +151,10 @@ func TestRun_FailureIsUnknownNotUnregistered(t *testing.T) {
 		{name: "令牌过期", status: http.StatusUnauthorized, wantInMsg: "401"},
 		{name: "权限不足", status: http.StatusForbidden, wantInMsg: "403"},
 		{name: "限流", status: http.StatusForbidden,
-			headers: map[string]string{"X-RateLimit-Remaining": "0"}, wantInMsg: "限流"},
+			headers: map[string]string{"X-RateLimit-Remaining": "0"}, wantInMsg: "rate limit"},
 		{name: "目标不可见", status: http.StatusNotFound, wantInMsg: "404"},
 		{name: "服务端故障", status: http.StatusBadGateway, wantInMsg: "502"},
-		{name: "响应不是JSON", status: http.StatusOK, body: "not json", wantInMsg: "解析"},
+		{name: "响应不是JSON", status: http.StatusOK, body: "not json", wantInMsg: "could not parse"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -318,10 +318,14 @@ func TestDeregister_NoTokenSaysWhereToDeleteManually(t *testing.T) {
 	if res.Done {
 		t.Fatal("没有令牌时不可能注销成功")
 	}
-	for _, want := range []string{RunnerTokenFile, "Settings", "alpha", "重名"} {
-		if !strings.Contains(res.Message, want) {
-			t.Fatalf("说明里应含 %q，实际为 %q", want, res.Message)
-		}
+	// 断言键与参数，不断言措辞：句子现在由调用方按语言渲染，
+	// 本包只回传「是什么事」。参数里必须带上令牌文件名与 Runner 名——
+	// 少了哪一个，那句话都没法告诉人该去哪儿手动删。
+	if res.MessageKey != "github.dereg.no_pat" {
+		t.Fatalf("键应为 github.dereg.no_pat，实际 %q", res.MessageKey)
+	}
+	if len(res.MessageArgs) != 2 || res.MessageArgs[0] != RunnerTokenFile || res.MessageArgs[1] != "alpha" {
+		t.Fatalf("参数应为 [%s alpha]，实际 %v", RunnerTokenFile, res.MessageArgs)
 	}
 }
 
@@ -334,8 +338,12 @@ func TestDeregister_APIFailureIsReported(t *testing.T) {
 	if res.Done {
 		t.Fatal("API 报 401 时不能算注销成功")
 	}
-	if !strings.Contains(res.Message, "401") || !strings.Contains(res.Message, "alpha") {
-		t.Fatalf("说明 %q 里应指出 401 与 Runner 名", res.Message)
+	if res.MessageKey != "github.dereg.lookup_failed" {
+		t.Fatalf("键应为 github.dereg.lookup_failed，实际 %q", res.MessageKey)
+	}
+	if len(res.MessageArgs) != 2 || !strings.Contains(fmt.Sprint(res.MessageArgs[0]), "401") ||
+		res.MessageArgs[1] != "alpha" {
+		t.Fatalf("参数里应带上 401 与 Runner 名，实际 %v", res.MessageArgs)
 	}
 }
 

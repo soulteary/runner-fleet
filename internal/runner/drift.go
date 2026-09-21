@@ -137,7 +137,7 @@ func (s containerSpec) createArgs() ([]string, error) {
 	case "none":
 		// Job 内不提供 Docker，不注入环境与挂载
 	default:
-		return nil, fmt.Errorf("不支持的 runners.job_docker_backend=%q（仅支持 dind/host-socket/none）", s.JobBackend)
+		return nil, fmt.Errorf("unsupported runners.job_docker_backend=%q (only dind, host-socket and none are supported)", s.JobBackend)
 	}
 	return append(args, s.Image), nil
 }

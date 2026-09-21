@@ -105,9 +105,9 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictNameTaken,
 				Level:      ConflictLevelError,
-				Message:    "配置中已存在同名 Runner: " + name,
+				Message:    "a runner named " + name + " already exists in the configuration",
 				Detail:     name,
-				Suggestion: "换一个名称（可用下方建议名），或直接在列表里管理已有的那个 Runner",
+				Suggestion: "pick another name (the suggested one below works), or manage the existing runner from the list",
 			})
 			continue
 		}
@@ -115,18 +115,18 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictInstallDir,
 				Level:      ConflictLevelError,
-				Message:    fmt.Sprintf("安装目录与已有 Runner %s 相同: %s", existing.Name, installDir),
+				Message:    fmt.Sprintf("the install directory is the same as runner %s: %s", existing.Name, installDir),
 				Detail:     existing.Name,
-				Suggestion: "换一个名称，或改 path 指向别的子目录",
+				Suggestion: "pick another name, or point path at a different subdirectory",
 			})
 		}
 		if cfg.Runners.ContainerMode && config.NormalizedContainerName(existing.Name) == containerName {
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictContainerName,
 				Level:      ConflictLevelError,
-				Message:    fmt.Sprintf("名称规范化后与已有 Runner %s 撞容器名: %s", existing.Name, containerName),
+				Message:    fmt.Sprintf("once normalized, the name collides with the container name of runner %s: %s", existing.Name, containerName),
 				Detail:     existing.Name,
-				Suggestion: "容器名只保留字母数字与横线，换一个区分度更高的名称",
+				Suggestion: "container names keep only letters, digits and hyphens; pick a name that stays distinct after that",
 			})
 		}
 	}
@@ -142,9 +142,9 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 				conflicts = append(conflicts, RunnerConflict{
 					Type:       ConflictDirRegistered,
 					Level:      ConflictLevelError,
-					Message:    "目录 " + installDir + " 下已有注册过的 Runner（存在 .runner），带 token 再注册一次会被 config.sh 拒绝",
+					Message:    installDir + " already holds a registered runner (it has a .runner file); registering again with a token is rejected by config.sh",
 					Detail:     installDir,
-					Suggestion: "要接管这个已注册的 Runner，把注册 Token 留空直接添加；要重新注册，先移除该目录并在 GitHub 上删掉对应 Runner",
+					Suggestion: "to adopt the registered runner, add it with the registration token left empty; to register afresh, remove the directory and delete the runner on GitHub first",
 					FixCommand: "rm -rf " + installDir,
 				})
 				break
@@ -152,17 +152,17 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictDirAdopt,
 				Level:      ConflictLevelWarn,
-				Message:    "目录 " + installDir + " 下已有注册过的 Runner，添加后将直接接管它（不会重新注册）",
+				Message:    installDir + " already holds a registered runner, so adding it adopts that runner instead of registering a new one",
 				Detail:     installDir,
-				Suggestion: "若本意是新建一个 Runner，请换个名称",
+				Suggestion: "if you meant to create a new runner, pick another name",
 			})
 		case "nonempty":
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictDirExists,
 				Level:      ConflictLevelWarn,
-				Message:    "目录 " + installDir + " 已存在且非空，将直接复用其中已解压的 runner",
+				Message:    installDir + " exists and is not empty, so the runner already extracted there is reused",
 				Detail:     installDir,
-				Suggestion: "若是上次残留，建议换名或先清空该目录",
+				Suggestion: "if it is left over from an earlier attempt, pick another name or empty the directory first",
 			})
 		}
 	}
@@ -172,10 +172,12 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 			conflicts = append(conflicts, RunnerConflict{
 				Type:  ConflictContainerExists,
 				Level: ConflictLevelError,
-				Message: fmt.Sprintf("宿主机上已存在容器 %s（状态 %s），且不属于当前配置中的任何 Runner；启动时会直接复用它，而它挂载的是创建时的目录，未必是这个 Runner 的",
+				Message: fmt.Sprintf("the host already has a container named %s (status %s) that belongs to no runner in the current "+
+					"configuration. Starting this runner reuses it, and it is still mounting the directory it was created with, "+
+					"which need not be this runner's",
 					containerName, status),
 				Detail:     containerName,
-				Suggestion: "换个名称，或确认该容器不再使用后删除它，让 Manager 按这个 Runner 的目录重新创建",
+				Suggestion: "pick another name, or once you are sure the container is unused, delete it so the Manager recreates it against this runner's directory",
 				FixCommand: "docker rm -f " + containerName,
 			})
 		}
@@ -233,10 +235,10 @@ func PrecheckRunner(c echo.Context) error {
 	name := strings.TrimSpace(c.QueryParam("name"))
 	path := strings.TrimSpace(c.QueryParam("path"))
 	if name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "请提供 name")
+		return echo.NewHTTPError(http.StatusBadRequest, tr(c, "api.name_required"))
 	}
 	if !config.IsSafeRunnerNameOrPath(name) || (path != "" && !config.IsSafeRunnerNameOrPath(path)) {
-		return echo.NewHTTPError(http.StatusBadRequest, "name、path 不可包含 / \\ .. 等非法字符")
+		return echo.NewHTTPError(http.StatusBadRequest, tr(c, "api.name_path_invalid"))
 	}
 
 	// 容器查询要有上限：docker 卡住时表单不该跟着卡住

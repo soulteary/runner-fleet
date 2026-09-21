@@ -56,7 +56,7 @@ func DetectProbeErrorType(err error) ProbeErrorType {
 	switch {
 	case strings.Contains(msg, "docker"), strings.Contains(msg, "daemon"), strings.Contains(msg, "socket"):
 		return ProbeErrorTypeDockerAccess
-	case strings.Contains(msg, "agent 返回"):
+	case strings.Contains(msg, "agent returned"):
 		return ProbeErrorTypeAgentHTTP
 	case strings.Contains(msg, "connect"), strings.Contains(msg, "connection refused"), strings.Contains(msg, "no such host"):
 		return ProbeErrorTypeAgentConnect
@@ -69,13 +69,13 @@ func DetectProbeErrorType(err error) ProbeErrorType {
 func ProbeSuggestion(t ProbeErrorType) string {
 	switch t {
 	case ProbeErrorTypeDockerAccess:
-		return "检查 docker.sock 挂载与权限（DOCKER_GID/group_add/user），确认 Docker daemon 可访问"
+		return "check the docker.sock mount and its permissions (DOCKER_GID/group_add/user), and that the Docker daemon is reachable"
 	case ProbeErrorTypeAgentConnect:
-		return "检查 runner 容器网络、DNS 与 Agent 端口连通性"
+		return "check the runner container network, DNS, and that the Agent port is reachable"
 	case ProbeErrorTypeAgentHTTP:
-		return "查看 runner 容器日志，确认 Agent 与 /runner 下脚本进程状态"
+		return "read the runner container logs and check the Agent and the scripts under /runner"
 	default:
-		return "先尝试停止/启动自愈，再查看 manager 与 runner 容器日志"
+		return "try a stop/start to self-heal first, then read the manager and runner container logs"
 	}
 }
 

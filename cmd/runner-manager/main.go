@@ -107,8 +107,8 @@ func newTemplateRenderer() *templateRenderer {
 }
 
 func main() {
-	configPath := flag.String("config", "config/config.yaml", "配置文件路径")
-	showVersion := flag.Bool("version", false, "显示版本号后退出")
+	configPath := flag.String("config", "config/config.yaml", "path to the config file")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
 	handler.Version = Version
@@ -129,10 +129,10 @@ func main() {
 	handler.StartRegistrationWorker()
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("加载配置失败: %v", err)
+		log.Fatalf("cannot load the configuration: %v", err)
 	}
 	if cfg.Runners.ContainerMode && runner.ManagerDockerHostIsDind() {
-		log.Printf("警告: 容器模式已开启，但 DOCKER_HOST 指向 TCP（DinD）。Manager 必须使用宿主机 Docker（socket）才能创建/启停 Runner 容器。请在 .env 中移除或注释 DOCKER_HOST=tcp://runner-dind:2375")
+		log.Printf("warning: container mode is on, but DOCKER_HOST points at TCP (DinD). The Manager needs the host Docker socket to create, start and stop runner containers. Remove or comment out DOCKER_HOST=tcp://runner-dind:2375 in .env")
 	}
 	// 启动自检：把配置类问题提前到这里暴露，而不是等第一个 Job 跑挂才发现。
 	// 只做只读检查，任何一项失败都不阻止启动（避免打断既有部署）。
@@ -147,7 +147,7 @@ func main() {
 	go runAutoStartRunners(*configPath)
 	go runRegistrationCheck(*configPath)
 	go func() {
-		log.Printf("监听 %s", addr)
+		log.Printf("listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -155,13 +155,13 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	log.Println("正在关闭服务...")
+	log.Println("shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("关闭服务失败:", err)
+		log.Fatal("shutdown failed:", err)
 	}
-	log.Println("已退出")
+	log.Println("stopped")
 }
 
 // runAutoStartRunners 启动后延迟执行一次：将已注册但未在运行的 runner 全部拉起（便于 DinD/管理器重启后恢复）
@@ -170,10 +170,10 @@ func runAutoStartRunners(configPath string) {
 	time.Sleep(delay)
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Printf("自动启动 runner 时加载配置失败: %v", err)
+		log.Printf("cannot load the configuration while auto-starting runners: %v", err)
 		return
 	}
-	startIdleRunners(context.Background(), cfg, "自动启动")
+	startIdleRunners(context.Background(), cfg, "auto-start")
 }
 
 // startIdleRunners 把「已注册但没在跑」的 runner 拉起来，供启动后的一次性拉起与定时巡检共用。
@@ -187,9 +187,9 @@ func startIdleRunners(ctx context.Context, cfg *config.Config, action string) {
 			continue
 		}
 		if err := runner.StartIfInstalled(ctx, cfg, info.Name, info.InstallDir); err != nil {
-			log.Printf("%s runner %s 失败: %v", action, info.Name, err)
+			log.Printf("%s of runner %s failed: %v", action, info.Name, err)
 		} else {
-			log.Printf("已%s runner: %s", action, info.Name)
+			log.Printf("%s of runner %s done", action, info.Name)
 		}
 	}
 }
@@ -208,7 +208,7 @@ func runRegistrationCheck(configPath string) {
 			githubcheck.Run(cfg)
 			// 首次不执行拉起，避免与 runAutoStartRunners(15s) 重叠导致重复启动同一 runner
 			if !firstRun {
-				startIdleRunners(context.Background(), cfg, "定时拉起")
+				startIdleRunners(context.Background(), cfg, "periodic start")
 			}
 			firstRun = false
 		}
@@ -295,7 +295,7 @@ func csrfGuardMiddleware(trusted []string) echo.MiddlewareFunc {
 					return next(c)
 				}
 				return echo.NewHTTPError(http.StatusForbidden,
-					"跨站请求被拒绝（Sec-Fetch-Site: "+site+"）。写接口只接受同源调用；如确需跨源访问，用 TRUSTED_ORIGINS 放行该来源")
+					handler.Trf(c, "api.csrf_cross_site", site))
 			}
 			// 老浏览器不发 Sec-Fetch-Site，但跨站 POST 一定带 Origin
 			if origin != "" {
@@ -303,7 +303,7 @@ func csrfGuardMiddleware(trusted []string) echo.MiddlewareFunc {
 					return next(c)
 				}
 				return echo.NewHTTPError(http.StatusForbidden,
-					"跨站请求被拒绝（Origin "+origin+" 与本服务 "+req.Host+" 不一致）。如确需跨源访问，用 TRUSTED_ORIGINS 放行该来源")
+					handler.Trf(c, "api.csrf_origin_mismatch", origin, req.Host))
 			}
 			// 非浏览器请求：不会自动携带凭据，放行
 			return next(c)
@@ -372,14 +372,19 @@ func newEchoServer() *echo.Echo {
 	trusted := trustedOrigins()
 	e.Use(csrfGuardMiddleware(trusted))
 	if len(trusted) > 0 {
-		log.Printf("CSRF 白名单来源: %s", strings.Join(trusted, ", "))
+		log.Printf("CSRF trusted origins: %s", strings.Join(trusted, ", "))
 	}
 	if mw, user := basicAuthMiddleware(); mw != nil {
 		e.Use(mw)
-		log.Printf("Basic Auth 已启用（用户: %s）", user)
+		log.Printf("Basic Auth enabled (user: %s)", user)
 	}
 	e.Renderer = newTemplateRenderer()
+	// 换 loader 必须连着清缓存：bundle 会把「查不到」也缓存起来（loader 为 nil 时
+	// 缓存的是空表），装上 loader 却不清，之前缓存的空表会一直挡在前面。生产里
+	// 只装一次，但这条不变式不该靠「只装一次」成立——测试里就是先有请求后装 loader，
+	// 于是断言拿到的是 "api.csrf_cross_site" 这种键名，还断言得很开心。
 	handler.I18nLoader = loadI18n
+	handler.ResetI18nCache()
 	registerRoutes(e)
 	return e
 }
