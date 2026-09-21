@@ -73,6 +73,7 @@ func TestStopRunnerUnknownRunnerIs404(t *testing.T) {
 
 // 没在跑就不必停，也不该报错——界面上重复点一下是很正常的
 func TestStopRunnerIdleRunnerSucceedsWithoutSignalling(t *testing.T) {
+	defer withI18n(map[string]string{"api.not_running": "NOT-RUNNING"})()
 	base := withConfig(t, &config.Config{
 		Runners: config.RunnersConfig{Items: []config.RunnerItem{{Name: "r1", TargetType: "org", Target: "o1"}}},
 	})
@@ -83,7 +84,7 @@ func TestStopRunnerIdleRunnerSucceedsWithoutSignalling(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("得到 %d（%s），期望 200", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "未在运行") {
+	if !strings.Contains(rec.Body.String(), "NOT-RUNNING") {
 		t.Fatalf("应说明本来就没在跑，实际: %s", rec.Body.String())
 	}
 }

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Server-side messages follow the interface language.** The UI had six languages, but everything the server said back — every toast, every error — was a hardcoded Chinese string, so switching to English gave you an English shell and Chinese messages. `handler.go`'s 53 literals are now 36 `api.*` keys resolved through `tr`/`trf`, which sit between the `resolveLang` and `I18nLoader` that already existed. The plumbing was there; it had simply never been connected to the API side.
+- Translating on the server rather than returning error codes for the browser to resolve keeps `message` as prose, which matters most for the callers with no translation table: `curl` and CI scripts. They send no `Accept-Language`, and the detector defaults to English — so a script that gets Chinese today gets English now.
+- `TestAPIKeys_…` checks both directions: every `api.*` key the code uses exists in all six bundles, and every `api.*` key in a bundle is still used by code. Verified by mutation — dropping a key from `ja.json`, adding a `tr` call with a new key, and leaving an orphan key each turn it red, naming the language and the key.
+
+### Fixed
+
+- `trf` used to `Sprintf` even when the key was missing. The fallback value is the key itself, which contains no verbs, so the arguments were appended as `api.recreate_requires_registered%!(EXTRA string=new)` — noise that reads neither as a missing translation nor as an argument. A missing key now degrades to `key: argument`.
+- Two sites the compiler caught while converting: a closure parameter named `c *config.Config` shadowed the echo context, and `removeRunnerFromConfig` had no request context at all. The first is renamed, the second now takes the context — it already returned `echo.NewHTTPError`, so this adds no coupling that was not there.
+
+### Changed
+
+- The language note in the README and all six guides said the opposite of what is now true. It now states what actually holds: the UI and its messages follow your language (`?lang=`, the cookie, `Accept-Language`, English by default), **logs are still Chinese** including the startup self-check, and a few messages originating deeper in the code still carry Chinese through. Two halves of §1.3 remain: the 25 `log.Printf` sites, which have no request to take a language from, and the 7 in `internal/githubcheck`, which has no `echo.Context`.
+
+### Added
+
 - `CONTRIBUTING.md`, `SECURITY.md`, a pull request template and a bug-report issue form. The repository had none of them. `CONTRIBUTING.md` leads with `make check` and then lists what each consistency check will tell you when it goes red — several exist because the exact mistake already happened once, and knowing which saves a round trip. The issue form asks up front for the version, the mode, the in-job Docker backend and the `[preflight …]` self-check output, because troubleshooting always starts by asking for those.
 - `SECURITY.md` names the private advisory route and then does something a policy file usually skips: it lists what this tool actually holds (runner registration keys, the optional PAT, the agent token, the Basic Auth password) and the exposure that comes with the design rather than from a bug — no auth by default, `host-socket` handing jobs the host, the Manager needing the Docker socket, and anyone who can add a runner being able to run code.
 - `development.md` gained an **Architecture** section in all six languages, with a diagram. It answers what was previously only inferable by reading three separate sections: the Manager orchestrates and does not host runners; status crosses a PID-namespace boundary so it crosses HTTP, and an unreachable runner reads `unknown` rather than `installed`; and nine things are fixed at `docker create` time, which is the entire reason drift detection exists.

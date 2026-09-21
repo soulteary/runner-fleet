@@ -8,9 +8,10 @@
 
 **审计基准**：`main` @ `0e812a7`，最新发布 v1.7.1。<!-- version-check-ignore -->
 
-**执行状态**：**四批全部完成，第 7 节的语言策略也已拍板（选项 B）。**
-只剩 **§1.3 的另一半**：服务端消息补 i18n——那一项动的是真实代码路径，
-和文档改动不是一回事，单独成批。
+**执行状态**：**四批全部完成；第 7 节已拍板（选项 B）；§1.3 的 API 消息一侧也已补上 i18n。**
+剩下的是 §1.3 里**日志**那一半：`log.Printf` 没有请求语境，要按服务端语言而不是
+请求语言来选，是另一个设计问题；以及 `internal/githubcheck` 的 7 条跨包消息。
+两者都记在 §1.3 下面。
 每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、且只有那一条会红。
 下面的问题描述保留审计当时的原文，改掉它们会让「为什么要加这条检查」失去凭据；
 已修的条目在标题上标注。
@@ -95,7 +96,7 @@ docker compose logs runner-manager | grep 自检
 `internal/docsconsistency/preflight_marker_test.go` 守文档里让人 grep 的词就是这个常量。
 **日志正文仍是中文**——那是 §1.3，这里只解决「怎么把这些行捞出来」。
 
-### 1.3 API 提示语不跟随界面语言  ⚠️ 已写明边界，未补 i18n
+### 1.3 API 提示语不跟随界面语言  ◐ API 消息已修，日志与跨包消息未修
 
 界面有 152 个 i18n 键 × 6 种语言（`cmd/runner-manager/i18n/`，且 `i18n_test.go` 交叉校验键集），
 但那只覆盖模板里的静态文案。用户操作后真正读到的那句话来自服务端，是中文硬编码：
@@ -114,6 +115,29 @@ echo.NewHTTPError(http.StatusBadRequest, "name、target_type、target 必填")
 消息抽成键），要么在 `docs/guide.md` 与 README 里如实写明「界面外壳已翻译，服务端消息
 与日志目前仅中文」。**装作没这回事是最差的选项**——它让翻译看起来像没做完，而不是
 一个已知的、有边界的限制。
+
+**已落地（API 消息一侧）**：`internal/handler/i18n.go` 提供 `tr` / `trf`，接在早就存在的
+`resolveLang` 与 `I18nLoader` 之间——管线本来就有，此前只是没接到 API 响应这一侧。
+`handler.go` 的 53 处中文字面量收敛成 36 个 `api.*` 键，六份 JSON 各 +36。
+`TestAPIKeys_…` 双向盯着：代码用到的键六种语言都得有，JSON 里没人用的键要删。
+
+选了**服务端翻译**而不是返回错误码由浏览器翻译，两个理由：`message` 仍然是给人读的散文，
+返回 `api.name_required` 会让 curl 与 CI 脚本拿到一个码，而它们恰恰最没有翻译表可查；
+而 Detector 默认英文，所以不带 `Accept-Language` 的脚本拿到英文——**比今天拿到中文严格更好**。
+
+写的时候踩到两处，都由编译器和测试当场逮住：一个闭包参数 `c *config.Config` 把 echo 的 `c`
+遮住了；`removeRunnerFromConfig` 根本没有请求上下文。另外第一版 `trf` 在键缺失时仍然
+`Sprintf`，拼出 `api.recreate_requires_registered%!(EXTRA string=new)` 这种既不像缺译文
+也不像参数的噪音——现在缺键时退成「键: 参数」。
+
+**没做的两半**：
+
+- **日志**（25 处 `log.Printf`）。`tr` 要 `echo.Context`，而日志没有请求语境——它该跟随的是
+  服务端语言而不是请求语言，是另一个设计问题（多半要一个 `LOG_LANG` 或跟随 `LANG`）。
+  在那之前，`[preflight …]` 前缀保证了不认识汉字也能把它们捞出来。
+- **`internal/githubcheck` 的 7 条**。那个包没有 `echo.Context`，消息经 `dereg.Message`
+  拼进 API 响应，所以英文界面下 `api.removed` 的外壳是英文、跟进来的那半句仍是中文。
+  要么让它回传键、由 handler 边界翻译，要么把它也接上 i18n——都比这一批大。
 
 ### 1.4 两处指向不存在文件的引用  ✅ 已修
 
