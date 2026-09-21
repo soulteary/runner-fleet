@@ -46,6 +46,8 @@ github.com/soulteary/metrics-kit/v3 v3.0.0 h1:1KBslddLh5Qv9+pi06Py/SoM59Cbm2FiRD
 github.com/soulteary/metrics-kit/v3 v3.0.0/go.mod h1:hugXfHjLJUSqNTjF6UUueEdO7KZEz7rzQOMHUvNd3hM=
 github.com/soulteary/secure-kit v1.6.0 h1:QvvLkOhHq1lBWRkjWvELqeUiFPnKiuqBEqNSDVKE+p8=
 github.com/soulteary/secure-kit v1.6.0/go.mod h1:vNpwew8IBGYaxWnJMlTTSyRBVxHWmfhe3XXGs+Crby4=
+github.com/soulteary/version-kit/v3 v3.0.0 h1:dRlleqy7uupj3+kW1KJW8tRVX+CUFfFHDeNJElfkCBc=
+github.com/soulteary/version-kit/v3 v3.0.0/go.mod h1:AQFIRqGcEPrNk5xpcLHYXQ1xE3/f+PJPT5poR5tWJZ0=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=

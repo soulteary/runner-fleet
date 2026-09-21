@@ -32,8 +32,13 @@ var templateFS embed.FS
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-// Version 由构建时 -ldflags "-X main.Version=..." 注入
-var Version = "dev"
+// 三者均由构建时 -ldflags "-X main.Xxx=..." 注入。
+// Commit/BuildDate 未注入时为空，version-kit 会把它们从输出里省掉。
+var (
+	Version   = "dev"
+	Commit    string
+	BuildDate string
+)
 
 type templateRenderer struct {
 	templates *template.Template
@@ -59,13 +64,18 @@ func main() {
 	showVersion := flag.Bool("version", false, "显示版本号后退出")
 	flag.Parse()
 
+	handler.Version = Version
+	handler.Commit = Commit
+	handler.BuildDate = BuildDate
+
+	// -version 打印完整构建信息（含提交与构建时间），本机执行、不对外；
+	// HTTP 的 /version 仍只给版本号，见 handler.VersionInfo 的说明。
 	if *showVersion {
-		fmt.Println(Version)
+		fmt.Println(handler.BuildInfo().Full())
 		os.Exit(0)
 	}
 
 	handler.ConfigPath = *configPath
-	handler.Version = Version
 	handler.StartRegistrationWorker()
 	cfg, err := config.Load(*configPath)
 	if err != nil {

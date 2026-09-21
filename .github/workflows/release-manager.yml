@@ -45,7 +45,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           VERSION=${VERSION#v}
           COMMIT=$(git rev-parse --short HEAD)
-          BUILD_DATE=$(date -u +%FT%T%z)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
@@ -55,7 +55,7 @@ jobs:
         run: |
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
-          LDFLAGS="-s -w -X main.Version=v${VERSION}"
+          LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.Commit=${{ steps.version.outputs.commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-amd64 ./cmd/runner-manager
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-linux-arm64 ./cmd/runner-manager
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/runner-manager-darwin-amd64 ./cmd/runner-manager
@@ -111,6 +111,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.tag }}
+            COMMIT=${{ steps.version.outputs.commit }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
           # scope 按 workflow 分开：tag push 会同时触发四个构建 workflow，
           # 而 type=gha 不指定 scope 时都落在 BuildKit 默认的 scope=buildkit 上，
           # 互相覆盖，一方正在写的层被另一方的索引替换后就是 layer blob not_found。
