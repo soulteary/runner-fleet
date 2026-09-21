@@ -183,7 +183,7 @@ PAT がなければ登録解除はできません。GitHub は PAT か新しい 
 - `make test`: テストを実行。
 - `make test-race`: レース検出付きでテストを実行（CI が実行するもの）。
 - `make lint`: `./...` に golangci-lint を実行。CI の Test job の Lint ステップに対応。
-- `make check`: CI が確認する内容を一つのターゲットに集約——gofmt、vet、lint、`-race` テスト、および 2 つの整合性スクリプト。push 前にこれを実行。
+- `make check`: CI が確認する内容を一つのターゲットに集約——gofmt、vet、lint、`-race` テスト、および 2 つの整合性チェック。push 前にこれを実行。
 - `make run`: Manager をビルドしてから実行。
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager イメージのビルドと実行。[ユーザーガイド](guide.md) 参照。
 - `make docker-build-runner`: コンテナモード用 Runner イメージをビルド（`Dockerfile.runner`、デフォルトタグは `RUNNER_IMAGE`）。
@@ -226,20 +226,30 @@ PAT がなければ登録解除はできません。GitHub は PAT か新しい 
 
 ## リリース
 
-ドキュメントと例のバージョン参照は `internal/config/config.go` のデフォルトイメージタグと一致させる必要があります。CI は `scripts/check-version-consistency.sh` で検証します。リリース PR を開く前にローカルで実行してください:
+ドキュメントと例のバージョン参照は `internal/config/config.go` のデフォルトイメージタグと一致させる必要があります。CI は `ci-recipes runner-fleet check-version-consistency` で検証します。リリース PR を開く前にローカルで実行してください:
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+両方のチェックは [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes) が提供します。各リポジトリ
+固有の CI シェルをテスト済みの単一 Go バイナリに置き換えるもので、本リポジトリは
+`scripts/ci-recipes.conf` だけを持ちます。CI が固定しているバージョンを入れてください:
+
+```bash
+make install-ci-recipes
+```
+
+固定値は `.github/workflows/ci-consistency.yml` の 1 か所だけにあり、Makefile はそこから読みます。
 
 古いバージョンを正当に引用する行（リリースノート、アップグレード手順）には `version-check-ignore` マーカーを付けます。
 
-翻訳版にも同じ仕組みがあります。`scripts/check-docs-structure.sh` は各 `docs/<lang>/*.md` の
+翻訳版にも同じ仕組みがあります。`ci-recipes runner-fleet check-docs-structure` は各 `docs/<lang>/*.md` の
 見出しレベルの並びを英語版と突き合わせます——見出しの文言は違って当然ですが、構造は違ってはいけません。
 英語版に節を追加して 5 言語の翻訳が追従していない場合、見過ごされずにその場で PR が失敗します:
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← ドキュメントへ戻る](README.md)

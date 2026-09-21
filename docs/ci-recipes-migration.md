@@ -7,11 +7,13 @@ This file is the consumer-side counterpart of that project's
 it records which of this repository's shell surfaces belong there, which do not,
 what the move buys and costs, and what is left to do.
 
-**Status.** The two recipes exist. They were implemented against
-`soulteary/ci-recipes@83ccd6f83d7e7ef40f5d6faf2e11960f1de74a78` and live on that
-project's `claude/runner-fleet-recipes-vkkn7s` branch at commit
-`99245b4`; this repository has not switched to them yet, and
-[the last section](#what-is-left) says why and what the switch looks like.
+**Status.** Done. `CI (Consistency)` and `make check` call the recipes;
+`scripts/check-version-consistency.sh` and `scripts/check-docs-structure.sh` are
+deleted, and `scripts/ci-recipes.conf` carries this repository's settings. The
+recipes were implemented against
+`soulteary/ci-recipes@83ccd6f83d7e7ef40f5d6faf2e11960f1de74a78` and merged there
+as that project's pull request 18; the pin names the resulting commit on its
+`main`. [The last section](#the-pin) covers the one follow-up still owed.
 
 This file has no translated counterparts on purpose.
 `scripts/check-docs-structure.sh` mirrors `README.md`, `guide.md` and
@@ -21,8 +23,8 @@ This file has no translated counterparts on purpose.
 
 | Shell surface | Invoked by | Verdict |
 |---|---|---|
-| `scripts/check-version-consistency.sh` | `ci-consistency.yml`, `make check` | **Migrated** → `runner-fleet check-version-consistency` |
-| `scripts/check-docs-structure.sh` | `ci-consistency.yml`, `make check` | **Migrated** → `runner-fleet check-docs-structure` |
+| `scripts/check-version-consistency.sh` | *(deleted)* | **Migrated** → `runner-fleet check-version-consistency` |
+| `scripts/check-docs-structure.sh` | *(deleted)* | **Migrated** → `runner-fleet check-docs-structure` |
 | `scripts/install-runner.sh` | `Dockerfile` → operator `docker exec`; the registration job in `internal/runner` | Out of scope — runtime entrypoint. Its right home is Go code *in this repository*. |
 | `examples/deploy/standalone/run.sh` | Operators, by hand | Out of scope — example |
 | `.github/actions/detect-go-module-root/action.yml` | Every Go CI and release job | Out of scope — inline workflow shell |
@@ -146,62 +148,57 @@ real tree on both paths: the passing run is identical, and a failing run differs
 only in the remediation hint saying to rerun the check rather than the script,
 plus the one-line English summary `cli.Exit` prints for every ci-recipes recipe.
 
-## What the switch costs
+## What the switch cost
 
-**A Go toolchain in a job that needs none.** `ci-consistency.yml` is today two
+**A Go toolchain in a job that needed none.** `ci-consistency.yml` used to be two
 jobs of `actions/checkout` plus `sh`: no `setup-go`, no module cache, no network
-past the checkout. Calling ci-recipes adds `actions/setup-go` and
+past the checkout. Each job now adds `actions/setup-go` and
 `go install github.com/soulteary/ci-recipes/cmd/ci-recipes@<pin>` — a module
 download plus a build of the entire CLI, all five repositories' recipes, to run
-two checks. Measured here: ~18 s of cold `go build` for an 11 MB binary, before
-`setup-go` and the download. Published release binaries would remove nearly all
-of it.
+one check. Measured: ~18 s of cold `go build` for an 11 MB binary, before
+`setup-go` and the download.
 
-**Cross-repository release coupling.** Reduced, not removed. The config file
+The two jobs each install it rather than sharing one job. Merging them would save
+an install, but it would also merge the two check names that appear on a pull
+request, and a branch protection rule requiring `Version consistency` and
+`Docs structure consistency` by name would stop matching. They already ran in
+parallel, so wall-clock time is unchanged; only runner minutes double. Published
+release binaries would remove nearly all of the added time.
+
+**Cross-repository release coupling.** Reduced, not removed. `scripts/ci-recipes.conf`
 keeps the per-repository facts here, but the check *logic* now lives elsewhere: a
-change to how headings are compared, or to how a version reference is
-recognized, is a ci-recipes commit and a pin bump.
+change to how headings are compared, or to how a version reference is recognized,
+is a ci-recipes commit and a pin bump.
 
-**A smaller blast radius than it looks.** These two checks gate *this*
-repository's release hygiene. Breaking them breaks a PR gate, not a published
-artifact — unlike the release and signing recipes that make up most of
-ci-recipes.
+**A version number the version check objects to.** Pinning a dependency means
+writing a `vX.Y.Z` literal, and the version-consistency check recognizes exactly
+that and nothing about who it belongs to — so the pin reads as a stale reference
+to this repository's own version. This is not a pseudo-version artifact; a real
+tag collides identically. The fix is the one the check already provides: the pin
+line in `ci-consistency.yml` carries a `version-check-ignore` marker, and it is
+the only place in the repository that spells the version out. `make check` and
+`make install-ci-recipes` read it from there with `sed`, the six
+`development.md` files say `make install-ci-recipes` instead of repeating it, and
+a `make check` that cannot read a version fails rather than installing nothing
+and continuing.
 
-## What is left
+## The pin
 
-One thing, and it is not in this repository: **ci-recipes publishes no tags.**
-Its changelog is still `[Unreleased]`, so the only thing to pin is a bare commit
-SHA with nothing to distinguish a compatible bump from a breaking one — and today
-that SHA is on an unmerged branch, which a squash merge would orphan and take
-this repository's CI down with it.
+`CI_RECIPES_VERSION` in `.github/workflows/ci-consistency.yml` is a module
+pseudo-version of the shape `v0.0.0-<timestamp>-<sha>`, <!-- version-check-ignore -->
+because **ci-recipes publishes no tags**; its changelog is still `[Unreleased]`.
 
-So the sequence is: merge the ci-recipes branch, tag a release there and publish
-binaries for it, then land the switch below in one commit.
+A pseudo-version rather than the short SHA on purpose. `go install …@<short-sha>`
+resolves the SHA against the repository, so it breaks if the commit stops being
+reachable — which a squash merge would do. A pseudo-version is an exact module
+version that the proxy serves immutably from its cache, so it keeps resolving
+regardless. Both forms were verified to install here. The commit it names is the
+merge on ci-recipes' `main` rather than the branch commit that produced it, so
+the pin does not depend on that branch continuing to exist.
 
-```diff
-   version:
-     name: Version consistency
-     steps:
-       - name: Checkout code
-         uses: actions/checkout@v6
-+      - name: Set up Go
-+        uses: actions/setup-go@v6
-+        with:
-+          go-version: ${{ env.GO_VERSION }}
-+      - name: Install ci-recipes
-+        run: go install github.com/soulteary/ci-recipes/cmd/ci-recipes@<tag>
-       - name: Check version references are in sync
--        run: sh scripts/check-version-consistency.sh
-+        run: ci-recipes runner-fleet check-version-consistency
-```
-
-The `docs` job changes the same way, `make check` needs the `command -v` guard
-and install hint `make lint` already has for `golangci-lint`, and
-`scripts/ci-recipes.conf` gets committed with the contents shown above. Keeping
-the two scripts as thin forwarders is not worth it — two ways to run one check is
-the thing the migration is supposed to remove — so delete them, and update the
-`## Releasing` section of `docs/development.md` plus its five translations, which
-name both scripts by path.
+Still owed: once ci-recipes tags a release, change that one line to the tag. If
+it also publishes release binaries, the `go install` step can become a download
+and the ~18 s build disappears.
 
 ## `install-runner.sh`: the bigger prize, in the wrong repository
 

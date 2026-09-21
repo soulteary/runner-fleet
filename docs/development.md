@@ -184,7 +184,7 @@ pointer to `false` is true. Use the `GitHubYes` / `GitHubNo` / `GitHubUnknown` h
 - `make test`: Run tests.
 - `make test-race`: Run tests with the race detector (what CI runs).
 - `make lint`: Run golangci-lint over `./...` — the same step CI's Test job runs.
-- `make check`: Everything CI checks, in one target — gofmt, vet, lint, `-race` tests and both consistency scripts. Run this before pushing.
+- `make check`: Everything CI checks, in one target — gofmt, vet, lint, `-race` tests and both consistency checks. Run this before pushing.
 - `make run`: Build then run Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager image build and run; see [User Guide](guide.md).
 - `make docker-build-runner`: Build Runner image for container mode (`Dockerfile.runner`, default tag in `RUNNER_IMAGE`).
@@ -229,21 +229,31 @@ A few conventions worth knowing before adding to the suite:
 
 ## Releasing
 
-Version references in docs and examples must match the default image tag in `internal/config/config.go`. CI enforces this via `scripts/check-version-consistency.sh`; run it locally before opening a release PR:
+Version references in docs and examples must match the default image tag in `internal/config/config.go`. CI enforces this via `ci-recipes runner-fleet check-version-consistency`; run it locally before opening a release PR:
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+Both checks come from [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes), which replaces
+per-repository CI shell with one tested Go binary; this repository supplies only
+`scripts/ci-recipes.conf`. Install the version CI pins:
+
+```bash
+make install-ci-recipes
+```
+
+The pin lives only in `.github/workflows/ci-consistency.yml`; the Makefile reads it from there.
 
 If a line legitimately cites an older version (release notes, upgrade instructions), append a `version-check-ignore` marker to that line to skip it.
 
-The translated docs are checked the same way. `scripts/check-docs-structure.sh` compares the
+The translated docs are checked the same way. `ci-recipes runner-fleet check-docs-structure` compares the
 heading-level sequence of every `docs/<lang>/*.md` against its English original — heading text
 is supposed to differ, the structure is not — so a section added in English and skipped in the
 five translations fails the PR instead of going unnoticed:
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← Back to docs](README.md)

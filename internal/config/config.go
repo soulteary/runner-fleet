@@ -34,8 +34,9 @@ var JobDockerBackends = []string{"dind", "host-socket", "none"}
 // Tag 取自环境变量 FLEET_IMAGE_TAG，未设置时为 v1.6.0；镜像名为 {repo}:{tag}-runner。
 func DefaultRunnerContainerImage() string {
 	// 这里刻意不改写成 env.GetTrimmed("FLEET_IMAGE_TAG", "v1.6.0")：
-	// scripts/check-version-consistency.sh 用正则 `tag = "vX.Y.Z"` 从本文件里取
-	// 全仓库的基准版本号，换成函数调用后那条正则匹配不到，脚本会直接以
+	// 版本号一致性检查（ci-recipes runner-fleet check-version-consistency，正则写在
+	// scripts/ci-recipes.conf 的 version_baseline_regex）用 `tag = "vX.Y.Z"` 从本文件里
+	// 取全仓库的基准版本号，换成函数调用后那条正则匹配不到，检查会直接以
 	// 「无法解析默认镜像 tag」失败。保持这个字面形状。
 	tag := strings.TrimSpace(os.Getenv("FLEET_IMAGE_TAG"))
 	if tag == "" {
