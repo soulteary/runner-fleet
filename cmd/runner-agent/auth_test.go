@@ -109,8 +109,14 @@ func TestRequireTokenRejectsBadCredentials(t *testing.T) {
 		{"完全不带 Authorization", ""},
 		{"令牌不对", "Bearer wrong-token"},
 		{"只有前缀没有令牌", "Bearer "},
+		{"只有 scheme 没有空格", "Bearer"},
 		{"令牌是正确值的前缀", "Bearer the-secret-token"},
 		{"令牌比正确值长", "Bearer the-secret-token-value-extra"},
+		// 裸令牌不再放行：文档六种语言都写着 Authorization: Bearer，
+		// Manager 发的也一直是 Bearer，代码没有理由比文档更松
+		{"令牌对但没有 scheme", "the-secret-token-value"},
+		{"换了别的 scheme", "Basic the-secret-token-value"},
+		{"scheme 拼错", "Bearerr the-secret-token-value"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,11 +136,11 @@ func TestRequireTokenAcceptsCorrectToken(t *testing.T) {
 	agentDir(t, "the-secret-token-value")
 	cases := []string{
 		"Bearer the-secret-token-value",
-		"Bearer   the-secret-token-value  ", // 前后空白会被 TrimSpace 掉
-		// 不带 scheme 的裸令牌同样放行：TrimPrefix 在前缀不存在时原样返回。
-		// 这是宽松而非漏洞——照样得先有那串密钥。Manager 一律发 Bearer
-		// （见 runner.setAgentAuth），所以收紧它只会打断手写的排障请求。
-		"the-secret-token-value",
+		"Bearer   the-secret-token-value  ", // scheme 与令牌之间、令牌之后的空白都会被去掉
+		"  Bearer the-secret-token-value",   // 头部本身的前导空白
+		// RFC 7235：scheme 名大小写不敏感
+		"bearer the-secret-token-value",
+		"BEARER the-secret-token-value",
 	}
 	for _, header := range cases {
 		t.Run(header, func(t *testing.T) {

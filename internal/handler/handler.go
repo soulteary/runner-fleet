@@ -279,21 +279,33 @@ func ListRunners(c echo.Context) error {
 }
 
 // resolveLang returns the UI language: Cookie "lang" > Query "lang" > Accept-Language > "en".
-func resolveLang(c echo.Context) string {
-	if v, err := c.Cookie("lang"); err == nil && v != nil && v.Value != "" {
-		vv := strings.ToLower(strings.TrimSpace(v.Value))
-		for _, supported := range supportedLangs {
-			if vv == supported {
-				return vv
-			}
+// matchSupportedLang 归一化后返回受支持的语言码；不支持（或为空）时返回空串
+func matchSupportedLang(v string) string {
+	vv := strings.ToLower(strings.TrimSpace(v))
+	for _, supported := range supportedLangs {
+		if vv == supported {
+			return supported
 		}
 	}
-	if v := c.QueryParam("lang"); v != "" {
-		vv := strings.ToLower(strings.TrimSpace(v))
-		for _, supported := range supportedLangs {
-			if vv == supported {
-				return vv
-			}
+	return ""
+}
+
+// resolveLang 选择界面语言，优先级为 ?lang= > cookie > Accept-Language > en。
+//
+// 查询参数排在 cookie 前面：cookie 是这台浏览器上的长期偏好（语言下拉框写的就是它，
+// 写完 reload，URL 上并不带参数），而 ?lang= 是本次访问的明确指定。次序反过来的话，
+// 带 ?lang=ja 的链接发给一个早先选过中文的人，对方看到的仍是中文——这个参数
+// 对每一个设过偏好的人都是失效的，而那恰恰是它唯一有用的场合。
+//
+// 它刻意不写回 cookie：一次性的链接参数不该悄悄改掉对方的长期偏好，
+// 去掉参数再刷新就该回到自己选的那个语言。
+func resolveLang(c echo.Context) string {
+	if lang := matchSupportedLang(c.QueryParam("lang")); lang != "" {
+		return lang
+	}
+	if v, err := c.Cookie("lang"); err == nil && v != nil {
+		if lang := matchSupportedLang(v.Value); lang != "" {
+			return lang
 		}
 	}
 	if ah := c.Request().Header.Get("Accept-Language"); ah != "" {
@@ -302,14 +314,12 @@ func resolveLang(c echo.Context) string {
 			if i := strings.Index(part, ";"); i >= 0 {
 				part = strings.TrimSpace(part[:i])
 			}
-			code := strings.ToLower(part)
+			code := part
 			if i := strings.Index(code, "-"); i >= 0 {
 				code = code[:i]
 			}
-			for _, supported := range supportedLangs {
-				if code == supported {
-					return supported
-				}
+			if lang := matchSupportedLang(code); lang != "" {
+				return lang
 			}
 		}
 	}

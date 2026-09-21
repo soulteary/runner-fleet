@@ -1,7 +1,7 @@
 #!/bin/sh
 # 校验各语言文档的章节结构与英文版一致。
 #
-# 背景：docs/{zh,fr,de,ko,ja}/development.md 曾整整落后一个版本——英文版在 v1.5.1/v1.6.0
+# 背景：docs/{zh,fr,de,ko,ja}/development.md 曾整整落后一个版本——英文版在 v1.5.1/v1.6.0  version-check-ignore
 # 加了「运行状态如何判定」「Runner 目录权限」「删除 Runner 与 GitHub」三节和整个「测试」一节，
 # 五种译文一节都没跟上，而且没有任何东西会因此报错：译文本身语法完好，站点照常渲染。
 # 界面的 i18n 早就有测试盯着六种语言的键集，文档这一半却一直没有。

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -256,9 +257,10 @@ func TestGetRunner(t *testing.T) {
 
 // 六种语言的界面全靠这个函数选，选错就是整页英文。
 //
-// 优先级是 cookie > ?lang= > Accept-Language > en。cookie 排在 query 前面是
-// 有意的：界面上的语言下拉框就是写 cookie 再 reload（见 index.html），
-// 那是用户明确且持久的选择，不该被链接上残留的 ?lang= 盖掉。
+// 优先级 ?lang= > cookie > Accept-Language > en。query 排在 cookie 前面：
+// cookie 是这台浏览器上的长期偏好（语言下拉框写的就是它，写完 reload，URL 上不带参数），
+// ?lang= 则是本次访问的明确指定。反过来的话，带 ?lang=ja 的链接发给一个早先选过中文的人，
+// 对方看到的仍是中文——这个参数对每一个设过偏好的人都失效，而那正是它唯一有用的场合。
 func TestResolveLang(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -268,19 +270,22 @@ func TestResolveLang(t *testing.T) {
 		want   string
 	}{
 		{"默认英文", "", "", "", "en"},
-		{"cookie 优先于 query", "zh", "ja", "ko", "ja"},
-		{"没有 cookie 时看 query", "zh", "", "ko", "zh"},
+		{"query 优先于 cookie", "zh", "ja", "ko", "zh"},
+		{"没有 query 时看 cookie", "", "ja", "ko", "ja"},
 		{"最后 Accept-Language", "", "", "ko", "ko"},
 		{"Accept-Language 带权重", "", "", "de-DE,de;q=0.9,en;q=0.8", "de"},
-		{"不支持的 cookie 值跳过，继续看 query", "zh", "xx", "", "zh"},
-		{"不支持的语言回落英文", "xx", "", "", "en"},
+		{"不支持的 query 值跳过，继续看 cookie", "xx", "ja", "", "ja"},
+		{"不支持的 cookie 值跳过，继续看 Accept-Language", "", "xx", "ko", "ko"},
+		{"都不支持时回落英文", "xx", "yy", "zz", "en"},
 		{"大小写不敏感", "ZH", "", "", "zh"},
+		{"前后空白会被去掉", "  ja  ", "", "", "ja"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			target := "/"
 			if tc.query != "" {
-				target += "?lang=" + tc.query
+				// 必须转义：值里可能有空格，直接拼进 URL 会连请求行都解析不了
+				target += "?lang=" + url.QueryEscape(tc.query)
 			}
 			req := httptest.NewRequest(http.MethodGet, target, nil)
 			if tc.cookie != "" {

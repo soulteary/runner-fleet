@@ -177,12 +177,12 @@ exit 0`)
 	}
 	args := string(b)
 	// --name：不传的话 config.sh 会取 Manager 容器的 hostname，一个部署里每个 Runner
-	// 都用同一个名字注册，GitHub 上只看得到一个（v1.5.1 修过）
+	// 都用同一个名字注册，GitHub 上只看得到一个（v1.5.1 修过） version-check-ignore
 	if !strings.Contains(args, "--name demo") {
 		t.Errorf("必须传 --name，实际参数: %s", args)
 	}
 	// --unattended：重名时才会立刻失败退出，否则进交互重试循环耗到超时，
-	// 把单 worker 队列里后面排队的 Runner 全堵住（同为 v1.5.1 所修）
+	// 把单 worker 队列里后面排队的 Runner 全堵住（同为 v1.5.1 所修） version-check-ignore
 	if !strings.Contains(args, "--unattended") {
 		t.Errorf("必须传 --unattended，实际参数: %s", args)
 	}
