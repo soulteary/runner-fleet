@@ -1196,3 +1196,85 @@ runners:
 		t.Fatalf("应在加载时拒绝非法 cpus，got: %v", err)
 	}
 }
+
+// TestLoad_EnvOverrides_PortTrimsSurroundingWhitespace 钉住「端口先 trim 再解析」。
+//
+// .env 与 compose 的 environment: 块里带一个尾随空格是常事。cli-kit 的
+// env.GetInt 不做 trim，直接换用它会让 "MANAGER_PORT=9090 " 静默失效、
+// 继续听配置里的端口——一个没有任何日志的部署故障。这个用例就是拦它的。
+func TestLoad_EnvOverrides_PortTrimsSurroundingWhitespace(t *testing.T) {
+	for _, envVal := range []string{" 9090", "9090 ", "  9090  "} {
+		restore := setEnvsAndRestore(t, map[string]string{"MANAGER_PORT": envVal}, []string{"MANAGER_PORT"})
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte("server: { port: 8080 }\nrunners: { items: [] }"), 0644); err != nil {
+			restore()
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		restore()
+		if err != nil {
+			t.Fatalf("MANAGER_PORT=%q: Load failed: %v", envVal, err)
+		}
+		if cfg.Server.Port != 9090 {
+			t.Errorf("MANAGER_PORT=%q: 期望 trim 后生效为 9090，got %d", envVal, cfg.Server.Port)
+		}
+	}
+}
+
+// TestValidate_ServerPortRange 端口范围在 Validate 就拦下，而不是等 ListenAndServe。
+func TestValidate_ServerPortRange(t *testing.T) {
+	newCfg := func(port int) *Config {
+		return &Config{
+			Server:  ServerConfig{Port: port},
+			Runners: RunnersConfig{BasePath: "./runners", JobDockerBackend: "dind"},
+		}
+	}
+	// 0 表示「没写」，由 Load 填默认值，Validate 不该对它报错——
+	// 代码里大量直接构造 Config 再 Validate 的地方都不设 Server。
+	if err := Validate(newCfg(0)); err != nil {
+		t.Fatalf("port=0 应视为未设置而放行，got: %v", err)
+	}
+	for _, port := range []int{8080, 1, 65535} {
+		if err := Validate(newCfg(port)); err != nil {
+			t.Errorf("port=%d 应合法，got: %v", port, err)
+		}
+	}
+	for _, port := range []int{65536, 70000, -1} {
+		err := Validate(newCfg(port))
+		if err == nil || !strings.Contains(err.Error(), "server.port") {
+			t.Errorf("port=%d 应被拒绝并指出 server.port，got: %v", port, err)
+		}
+	}
+}
+
+// TestLoad_EnvOverrides_PortOutOfRangeFailsLoudly 越界端口要在加载期报错。
+//
+// 刻意不在 applyEnvOverrides 里悄悄忽略：忽略之后进程会用默认端口起来，
+// 界面在 8080 而不是你设的 70000，没有任何提示；报错则一眼看到是哪个配置项。
+func TestLoad_EnvOverrides_PortOutOfRangeFailsLoudly(t *testing.T) {
+	restore := setEnvsAndRestore(t, map[string]string{"MANAGER_PORT": "70000"}, []string{"MANAGER_PORT"})
+	defer restore()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("server: { port: 8080 }\nrunners: { items: [] }"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "server.port") {
+		t.Fatalf("MANAGER_PORT=70000 应在 Load 阶段报错并指出 server.port，got: %v", err)
+	}
+}
+
+// TestValidate_JobDockerBackendCaseInsensitive 配置文件里大小写混写也应接受。
+func TestValidate_JobDockerBackendCaseInsensitive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte("server: { port: 8080 }\nrunners:\n  base_path: ./runners\n  job_docker_backend: DinD\n  items: []\n")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("DinD 应被接受，got: %v", err)
+	}
+	if cfg.Runners.JobDockerBackend != "dind" {
+		t.Errorf("期望归一化为 dind，got %q", cfg.Runners.JobDockerBackend)
+	}
+}

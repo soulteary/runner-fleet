@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/labstack/echo/v4 v4.15.0
+	github.com/soulteary/cli-kit v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
