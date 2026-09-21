@@ -11,6 +11,7 @@ require (
 	github.com/soulteary/logger-kit/v3 v3.0.0
 	github.com/soulteary/metrics-kit/v3 v3.0.0
 	github.com/soulteary/preflight-kit v1.0.0
+	github.com/soulteary/procfind-kit v1.0.0
 	github.com/soulteary/secure-kit v1.6.0
 	github.com/soulteary/version-kit/v3 v3.0.0
 	gopkg.in/yaml.v3 v3.0.1
