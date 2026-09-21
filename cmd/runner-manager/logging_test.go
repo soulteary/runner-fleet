@@ -95,9 +95,12 @@ func TestRequestLogger_CapturesRealStatusCode(t *testing.T) {
 	}
 }
 
-// 探针每几秒打一次，进日志只会把真正有用的行淹掉。
+// 探针与 Prometheus 抓取每几秒一次，进日志只会把真正有用的行淹掉。
+//
+// /metrics 这条是两个 PR 合流后才显形的：logger 侧原本只跳过两个探针，
+// 而 Prometheus 默认 15s 抓一次 /metrics，不跳过的话请求日志里绝大多数行都是它。
 func TestRequestLogger_SkipsProbeEndpoints(t *testing.T) {
-	for _, p := range []string{"/health", "/ready"} {
+	for _, p := range []string{"/health", "/ready", metricsPath} {
 		if got := captureLog(t, "json", p, http.StatusOK); strings.Contains(got, `"path":"`+p+`"`) {
 			t.Errorf("%s 不该进请求日志:\n%s", p, got)
 		}

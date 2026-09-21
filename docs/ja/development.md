@@ -50,6 +50,7 @@ Basic Auth 有効時、`/health` 以外のリクエストには Header に `Auth
 |------|----------|------|
 | `/health` | GET | `{"status":"ok"}` を返す。Ingress/K8s プローブ用。常に認証不要。 |
 | `/version` | GET | `{"version":"..."}` を返す。 |
+| `/metrics` | GET | Prometheus メトリクス（リクエスト数とレイテンシ）。`path` ラベルはリクエスト URL ではなく Echo のルートテンプレート（`/api/runners/:name`）。Basic Auth 有効時は**認証が必要**——スクレイプ設定に `basic_auth` を指定。 |
 | `/api/runners` | GET | Runner 一覧。コンテナモードで probe 失敗時は `status=unknown` と構造化された `probe`（`error/type/suggestion/check_command/fix_command`）を返す。 |
 | `/api/runners/:name` | GET | 単一 Runner の詳細。コンテナモードで probe 失敗時も同様に `probe`。 |
 | `/api/runners/:name/start` | POST | Runner を起動。probe 失敗時も起動を試み、レスポンスに構造化された `probe` を返す。 |

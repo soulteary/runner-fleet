@@ -172,6 +172,7 @@ func TestRegisterRoutes_AllEndpointsPresent(t *testing.T) {
 	want := []string{
 		"GET /health",
 		"GET /version",
+		"GET /metrics",
 		"GET /",
 		"GET /api/runners",
 		"GET /api/runners/:name",

@@ -50,6 +50,7 @@ With Basic Auth, all requests except `/health` must include `Authorization: Basi
 |------|--------|-------------|
 | `/health` | GET | Returns `{"status":"ok"}`; for Ingress/K8s probes; always unauthenticated. |
 | `/version` | GET | Returns `{"version":"..."}`. |
+| `/metrics` | GET | Prometheus metrics (request counts and latency). Path labels use the Echo route template (`/api/runners/:name`), not the request URL. **Requires auth** when Basic Auth is enabled — configure `basic_auth` in the scrape job. |
 | `/api/runners` | GET | Runner list. In container mode, on probe failure returns `status=unknown` with structured `probe` (`error/type/suggestion/check_command/fix_command`). |
 | `/api/runners/:name` | GET | Single runner details. Same `probe` on probe failure in container mode. In container mode the response also carries `container_drift` when the container's create parameters no longer match the config. |
 | `/api/runners/:name/start` | POST | Start runner. On probe failure still attempts start, returns structured `probe` in response. |
