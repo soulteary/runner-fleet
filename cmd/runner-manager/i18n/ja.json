@@ -135,6 +135,16 @@
   "autorefresh.updated": "{{time}} に更新",
   "autorefresh.failed": "更新に失敗しました。再試行します",
   "autorefresh.paused": "自動更新はオフです",
+  "filter.all": "すべて",
+  "filter.running": "実行中",
+  "filter.stopped": "停止中",
+  "filter.new": "未登録",
+  "filter.problem": "要対応",
+  "filter.drift": "設定変更あり",
+  "filter.search_placeholder": "名前またはターゲットで検索",
+  "filter.clear": "クリア",
+  "filter.showing": "{{total}} 件中 {{shown}} 件を表示",
+  "filter.no_match": "現在の絞り込み条件に一致する Runner はありません。",
   "page.lang_label": "表示言語",
   "modal.label_drift": "設定の差分"
 }

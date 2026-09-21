@@ -135,6 +135,16 @@
   "autorefresh.updated": "Updated {{time}}",
   "autorefresh.failed": "Refresh failed, will retry",
   "autorefresh.paused": "Auto-refresh off",
+  "filter.all": "All",
+  "filter.running": "Running",
+  "filter.stopped": "Stopped",
+  "filter.new": "Unregistered",
+  "filter.problem": "Needs attention",
+  "filter.drift": "Config changed",
+  "filter.search_placeholder": "Search name or target",
+  "filter.clear": "Clear",
+  "filter.showing": "Showing {{shown}} of {{total}}",
+  "filter.no_match": "No runners match the current filter.",
   "page.lang_label": "Interface language",
   "modal.label_drift": "Config drift"
 }

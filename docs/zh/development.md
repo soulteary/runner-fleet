@@ -167,7 +167,7 @@ Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsapara
 - `make test`：运行测试。
 - `make test-race`：带竞态检测跑测试（CI 跑的就是这个）。
 - `make lint`：对 `./...` 跑 golangci-lint，与 CI 里 Test job 的 Lint 那一步对应。
-- `make check`：把 CI 会跑的检查收在一个目标里——gofmt、vet、lint、`-race` 测试与两个一致性脚本。推之前跑它。
+- `make check`：把 CI 会跑的检查收在一个目标里——gofmt、vet、lint、`-race` 测试与两个一致性检查。推之前跑它。
 - `make run`：先 build 再运行 Manager。
 - `make docker-build` / `make docker-run` / `make docker-stop`：Manager 镜像构建与运行，见 [使用指南](guide.md)。
 - `make docker-build-runner`：构建容器模式用的 Runner 镜像（`Dockerfile.runner`，默认 tag 见 `RUNNER_IMAGE`）。
@@ -205,20 +205,29 @@ Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsapara
 
 ## 发布
 
-文档与示例中的版本号必须与 `internal/config/config.go` 里的默认镜像 tag 一致，CI 会通过 `scripts/check-version-consistency.sh` 强制校验。提发布 PR 前可本地先跑：
+文档与示例中的版本号必须与 `internal/config/config.go` 里的默认镜像 tag 一致，CI 会通过 `ci-recipes runner-fleet check-version-consistency` 强制校验。提发布 PR 前可本地先跑：
 
 ```bash
-sh scripts/check-version-consistency.sh
+ci-recipes runner-fleet check-version-consistency
 ```
+
+两个检查来自 [soulteary/ci-recipes](https://github.com/soulteary/ci-recipes)——它用一个带测试的 Go
+二进制替换各仓库自己的 CI shell，本仓库只出 `scripts/ci-recipes.conf`。装 CI 钉的那个版本即可：
+
+```bash
+make install-ci-recipes
+```
+
+版本只写在 `.github/workflows/ci-consistency.yml` 一处，Makefile 从那里读。
 
 某一行确需引用历史版本号（变更说明、升级指引等）时，在该行加上 `version-check-ignore` 标记即可跳过。
 
-译文同样有机制盯着。`scripts/check-docs-structure.sh` 会把每个 `docs/<lang>/*.md` 的标题层级序列
+译文同样有机制盯着。`ci-recipes runner-fleet check-docs-structure` 会把每个 `docs/<lang>/*.md` 的标题层级序列
 与英文原版比对——标题文字本来就该不同，结构不该——于是「英文加了一节、五种译文没跟上」会当场让 PR 失败，
 而不是一直没人发现：
 
 ```bash
-sh scripts/check-docs-structure.sh
+ci-recipes runner-fleet check-docs-structure
 ```
 
 [← 返回文档](README.md)

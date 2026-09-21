@@ -135,6 +135,16 @@
   "autorefresh.updated": "Mis à jour à {{time}}",
   "autorefresh.failed": "Échec de l'actualisation, nouvelle tentative",
   "autorefresh.paused": "Actualisation auto désactivée",
+  "filter.all": "Tous",
+  "filter.running": "En cours",
+  "filter.stopped": "Arrêtés",
+  "filter.new": "Non enregistrés",
+  "filter.problem": "À traiter",
+  "filter.drift": "Config modifiée",
+  "filter.search_placeholder": "Rechercher par nom ou cible",
+  "filter.clear": "Effacer",
+  "filter.showing": "{{shown}} sur {{total}} affichés",
+  "filter.no_match": "Aucun runner ne correspond au filtre actuel.",
   "page.lang_label": "Langue de l'interface",
   "modal.label_drift": "Écart de configuration"
 }

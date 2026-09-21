@@ -135,6 +135,16 @@
   "autorefresh.updated": "{{time}}에 업데이트됨",
   "autorefresh.failed": "새로고침 실패, 다시 시도합니다",
   "autorefresh.paused": "자동 새로고침 꺼짐",
+  "filter.all": "전체",
+  "filter.running": "실행 중",
+  "filter.stopped": "중지됨",
+  "filter.new": "미등록",
+  "filter.problem": "확인 필요",
+  "filter.drift": "설정 변경됨",
+  "filter.search_placeholder": "이름 또는 대상 검색",
+  "filter.clear": "지우기",
+  "filter.showing": "{{total}}개 중 {{shown}}개 표시",
+  "filter.no_match": "현재 필터와 일치하는 Runner가 없습니다.",
   "page.lang_label": "인터페이스 언어",
   "modal.label_drift": "설정 차이"
 }

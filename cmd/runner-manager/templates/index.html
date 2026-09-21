@@ -4,8 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{index .T "page.title"}}</title>
+  {{/* 内联 SVG 图标：不必为一个 16px 的图新增静态路由和二进制资源，
+       也省掉每次加载都要吃的一个 /favicon.ico 404 */}}
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161b22'/%3E%3Crect x='7' y='8' width='18' height='4.5' rx='2.25' fill='%2358a6ff'/%3E%3Crect x='7' y='14' width='18' height='4.5' rx='2.25' fill='%233fb950'/%3E%3Crect x='7' y='20' width='18' height='4.5' rx='2.25' fill='%238b949e'/%3E%3C/svg%3E">
   <style>
     :root {
+      /* 纯暗色界面必须声明：否则 select 展开的原生下拉面板、滚动条、
+         自动填充背景仍按亮色渲染，和页面对不上 */
+      color-scheme: dark;
       --bg: #0d1117;
       --card: #161b22;
       --border: #30363d;
@@ -26,6 +32,10 @@
       line-height: 1.5;
     }
     h1 { font-size: 1.5rem; margin: 0 0 24px; color: var(--text); }
+    @media (max-width: 620px) {
+      body { padding: 16px; }
+      .card { padding: 16px; }
+    }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .card {
@@ -36,7 +46,12 @@
       margin-bottom: 20px;
     }
     .card h2 { margin: 0 0 16px; font-size: 1.1rem; }
+    /* 全文此前唯一一处 overflow 在 .modal 上，主表（容器模式下 7 列）在窄屏
+       会直接溢出撑破页面。滚动条给到容器，表头与内容一起横向滚。 */
+    .table-wrap { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
+    /* 状态徽章与操作按钮换行后既难点又难认，宁可让容器横向滚 */
+    .col-status, .col-actions { white-space: nowrap; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); font-weight: 600; }
     .badge {
@@ -193,6 +208,24 @@
     .list-toolbar .autorefresh input { width: auto; margin: 0; cursor: pointer; }
     .refresh-status { color: var(--muted); font-size: 12px; }
     .refresh-status.err { color: var(--warn); }
+    /* 概览与筛选：这是 fleet 管理器，20 台以上时没有搜索就只能靠 Ctrl+F 找 */
+    .list-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .stat-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+    .stat-chip:hover { color: var(--text); border-color: var(--text); }
+    .stat-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(88, 166, 255, 0.12); }
+    /* 数字等宽，筛选时计数跳动不会把筹码宽度带得一跳一跳 */
+    .stat-chip .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+    /* 只有真的有异常/漂移时才染色，0 的时候不必抢注意力 */
+    .stat-chip.running.has .n { color: var(--success); }
+    .stat-chip.problem.has .n { color: var(--danger); }
+    .stat-chip.drift.has .n { color: var(--warn); }
+    .filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .filter-row input[type="search"] { flex: 1 1 240px; max-width: 320px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+    .filter-count { color: var(--muted); font-size: 12px; }
+    /* 只用来取样式的小按钮。不要复用 .btn-view / .btn-del 这些：它们同时是行内
+       操作的行为选择器，套上去会被当成行操作绑上监听，点一下就误开查看弹窗。 */
+    .btn-neutral { padding: 4px 10px; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+    .btn-neutral:hover { color: var(--text); border-color: var(--text); }
     .parse-box {
       margin-bottom: 20px;
       padding-bottom: 20px;
@@ -285,24 +318,39 @@
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p style="color: var(--muted); font-size: 12px; margin: 0 0 12px 0;">{{index .T "runner_list.hint"}}</p>
+    <div class="list-stats" id="listStats">
+      <button type="button" class="stat-chip active" data-filter="all">{{index .T "filter.all"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip running" data-filter="running">{{index .T "filter.running"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip" data-filter="stopped">{{index .T "filter.stopped"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip" data-filter="new">{{index .T "filter.new"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip problem" data-filter="problem">{{index .T "filter.problem"}}<span class="n">0</span></button>
+      <button type="button" class="stat-chip drift" data-filter="drift">{{index .T "filter.drift"}}<span class="n">0</span></button>
+    </div>
+    <div class="filter-row">
+      <input type="search" id="runnerSearch" placeholder="{{index .T "filter.search_placeholder"}}" aria-label="{{index .T "filter.search_placeholder"}}">
+      <button type="button" id="filterClearBtn" class="btn-neutral" style="display:none">{{index .T "filter.clear"}}</button>
+      <span class="filter-count" id="filterCount" aria-live="polite"></span>
+    </div>
     <div class="list-toolbar">
       <label class="autorefresh"><input type="checkbox" id="autoRefreshToggle" checked>{{index .T "autorefresh.label"}}</label>
       <span id="refreshStatus" class="refresh-status" aria-live="polite"></span>
     </div>
+    <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>{{index .T "runner_list.table.name"}}</th>
           <th>{{index .T "runner_list.table.target"}}</th>
-          <th>{{index .T "runner_list.table.status"}}</th>
+          <th class="col-status">{{index .T "runner_list.table.status"}}</th>
           {{if .Config.Runners.ContainerMode}}<th>{{index .T "runner_list.table.docker_backend"}}</th>{{end}}
           <th>{{index .T "runner_list.table.reg_github"}}</th>
           <th>{{index .T "runner_list.table.install_dir"}}</th>
-          <th></th>
+          <th class="col-actions"></th>
         </tr>
       </thead>
       <tbody id="runnerRowsBody">{{template "runnerRows" .}}</tbody>
     </table>
+    </div>
   </div>
 
   <div class="card">
@@ -1092,6 +1140,9 @@
         // 再判一次：请求在途的这段时间里用户可能已经打开弹窗或关掉了自动刷新
         if (!refreshPaused()) {
           runnerRowsBody.innerHTML = html;
+          // 换回来的是一整批新行，筛选状态不会跟着过来——不重筛的话，
+          // 每 15 秒筛掉的行就会自己冒回来
+          applyFilter();
           refreshStatusEl.className = 'refresh-status';
           refreshStatusEl.textContent = fillVars(t('autorefresh.updated'), { time: new Date().toLocaleTimeString() });
         }
@@ -1115,6 +1166,86 @@
     // 标签页切回来时立刻补一次，不用干等下一个周期
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRows(); });
     refreshTimer = setInterval(refreshRows, REFRESH_MS);
+    // ===== 概览统计与筛选 =====
+    // 这是个 fleet 管理器，但列表此前是平铺的：20 台以上只能靠 Ctrl+F 找，
+    // 也看不出「几台在跑、几台挂了」。筹码既是统计，也是筛选入口。
+    const PREDICATES = {
+      all: function() { return true; },
+      running: function(r) { return r.running; },
+      stopped: function(r) { return r.status === 'installed' && !r.running; },
+      new: function(r) { return r.status === 'new'; },
+      // 异常：目录没了、状态查不出来、或探测失败——这三种都得有人去看一眼
+      problem: function(r) { return r.status === 'missing' || r.status === 'unknown' || r.probe; },
+      drift: function(r) { return r.drift; }
+    };
+    const statsEl = document.getElementById('listStats');
+    const searchEl = document.getElementById('runnerSearch');
+    const filterCountEl = document.getElementById('filterCount');
+    const filterClearBtn = document.getElementById('filterClearBtn');
+    let activeFilter = 'all';
+
+    function readRows() {
+      return Array.prototype.map.call(document.querySelectorAll('tr[data-name]'), function(tr) {
+        return {
+          tr: tr,
+          name: (tr.dataset.name || '').toLowerCase(),
+          target: (tr.dataset.target || '').toLowerCase(),
+          status: tr.dataset.status || '',
+          running: tr.dataset.running === '1',
+          drift: tr.dataset.drift === '1',
+          probe: tr.dataset.probe === '1'
+        };
+      });
+    }
+
+    function applyFilter() {
+      const rows = readRows();
+      const q = (searchEl.value || '').trim().toLowerCase();
+      const pred = PREDICATES[activeFilter] || PREDICATES.all;
+      let shown = 0;
+      rows.forEach(function(r) {
+        const hit = pred(r) && (!q || r.name.indexOf(q) >= 0 || r.target.indexOf(q) >= 0);
+        r.tr.style.display = hit ? '' : 'none';
+        if (hit) shown++;
+      });
+      // 计数始终按全部算，不跟着当前筛选走：否则点进「需处理」之后其余筹码
+      // 全变成 0，就再也看不出全局了
+      statsEl.querySelectorAll('.stat-chip').forEach(function(chip) {
+        const n = rows.filter(PREDICATES[chip.dataset.filter] || PREDICATES.all).length;
+        chip.querySelector('.n').textContent = n;
+        chip.classList.toggle('has', n > 0);
+        // 数量为 0 的筹码收起来，免得小规模部署下摆一排空筹码；
+        // 当前选中的那个即便归零也要留着，否则筛完就找不到退出的入口
+        chip.style.display = (n > 0 || chip.dataset.filter === 'all' || chip.dataset.filter === activeFilter) ? '' : 'none';
+      });
+      const filtering = activeFilter !== 'all' || q !== '';
+      filterCountEl.textContent = filtering ? fillVars(t('filter.showing'), { shown: shown, total: rows.length }) : '';
+      filterClearBtn.style.display = filtering ? 'inline-block' : 'none';
+      // 每次重新取：这一行住在 runnerRows 片段里，自动刷新会把它整个换掉，
+      // 加载时存下来的那个引用刷新之后就指向一个已经离开文档的节点了
+      const noMatchRow = document.getElementById('noMatchRow');
+      if (noMatchRow) noMatchRow.style.display = (rows.length > 0 && shown === 0) ? '' : 'none';
+    }
+
+    function setActiveChip(name) {
+      activeFilter = name;
+      statsEl.querySelectorAll('.stat-chip').forEach(function(c) { c.classList.toggle('active', c.dataset.filter === name); });
+    }
+    statsEl.addEventListener('click', function(e) {
+      const chip = e.target.closest('.stat-chip');
+      if (!chip) return;
+      setActiveChip(chip.dataset.filter);
+      applyFilter();
+    });
+    searchEl.addEventListener('input', applyFilter);
+    filterClearBtn.addEventListener('click', function() {
+      searchEl.value = '';
+      setActiveChip('all');
+      applyFilter();
+      searchEl.focus();
+    });
+    applyFilter();
+
     document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
     document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));
   </script>
@@ -1126,10 +1257,13 @@
      GitHubYes/GitHubNo 这类三态判断不必在 JS 里再写一遍。 */}}
 {{define "runnerRows"}}
         {{range .Runners}}
-        <tr>
+        {{/* 筛选与计数读这些属性，而不是去解析单元格里的可见文本——那些文本是
+             按语言翻译过的，换一种语言筛选就会失灵。属性写在片段里，自动刷新
+             换回来的行才同样带着它们。 */}}
+        <tr data-name="{{.Name}}" data-target="{{.TargetType}}: {{.Target}}" data-status="{{.Status}}" data-running="{{if .Running}}1{{else}}0{{end}}" data-drift="{{if .ContainerDrift}}1{{else}}0{{end}}" data-probe="{{if .Probe}}1{{else}}0{{end}}">
           <td>{{.Name}}</td>
           <td>{{.TargetType}}: {{.Target}}</td>
-          <td>
+          <td class="col-status">
             <span class="badge {{.Status}}">{{.Status}}</span>
             {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
             {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
@@ -1142,8 +1276,8 @@
           <td>
             {{if .RegistrationMessage}}
               {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
+                {{/* 提示里仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行的 GitHub ✓ 交代 */}}
                 <a class="reg-ok github-link has-tip" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">{{index $.T "reg.registered"}}<span class="tip">{{.RegistrationMessage}}</span></a>
               {{else}}
                 <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}} has-tip" tabindex="0" role="note">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}<span class="tip">{{.RegistrationMessage}}</span></span>
@@ -1164,7 +1298,7 @@
             {{end}}
           </td>
           <td class="path">{{.InstallDir}}</td>
-          <td>
+          <td class="col-actions">
             {{if and (eq .Status "installed") (not .Running)}}<button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_title"}}">{{index $.T "btn.start"}}</button>{{end}}
             {{if .Running}}<button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_title"}}">{{index $.T "btn.stop"}}</button>{{end}}
             {{if eq .Status "unknown"}}
@@ -1181,4 +1315,5 @@
         {{if not .Runners}}
         <tr><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "runner_list.empty"}}</td></tr>
         {{end}}
+        <tr id="noMatchRow" style="display:none"><td colspan="{{if .Config.Runners.ContainerMode}}7{{else}}6{{end}}" style="color: var(--muted);">{{index .T "filter.no_match"}}</td></tr>
 {{end}}
