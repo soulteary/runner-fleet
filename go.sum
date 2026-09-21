@@ -52,8 +52,8 @@ github.com/soulteary/preflight-kit v1.0.0 h1:abXeDyKwdLYemOUNOqrjrGX5wj3ETLer6eZ
 github.com/soulteary/preflight-kit v1.0.0/go.mod h1:O3wu9sNDj1iL5vRdE5pvONF0Q4AfydWe2g2L7HsOVKw=
 github.com/soulteary/procfind-kit v1.0.0 h1:Q2lc/MZAkstpcKkoRKOrigqn2e4tdwqKkpttoYVGdOU=
 github.com/soulteary/procfind-kit v1.0.0/go.mod h1:PhIceat1ly1j8KX/zLlWz+kTQKtolvH0eLAMeY4u74Y=
-github.com/soulteary/secure-kit/v2 v2.0.0 h1:uxvRqZFtrgJUiixbVwh3M1O8Z6U5h+kFl7nD7CjAjqU=
-github.com/soulteary/secure-kit/v2 v2.0.0/go.mod h1:QBB7rfrAZBhj8971qfm6oGU322MZfcpzib/urYZ/Lzc=
+github.com/soulteary/secure-kit/v2 v2.1.0 h1:n5KfT7KO8CrmjGpk4yVcNXshbgT4osu0QeDDg3Yg/3s=
+github.com/soulteary/secure-kit/v2 v2.1.0/go.mod h1:ouOCHlEDBOW1OLGwbxXAnQqfadhI3+zRWMBR2c0eE2c=
 github.com/soulteary/version-kit/v4 v4.0.0 h1:4gEes54h/iymUhPdY/LhKG1mSuMMpNmzd3fx4glcreU=
 github.com/soulteary/version-kit/v4 v4.0.0/go.mod h1:TUA+9E+g5kjaT2ilfaIszoYtqgnCV0XiUzhT4RDrL9Q=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
