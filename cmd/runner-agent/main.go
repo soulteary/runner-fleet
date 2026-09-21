@@ -17,7 +17,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/runnerproc"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
 
 const defaultInstallDir = "/runner"
@@ -188,14 +188,31 @@ func logTokenUnreadable(path string, err error) {
 	})
 }
 
+// bearerPrefix Authorization 头里的认证 scheme；按 RFC 7235，scheme 名大小写不敏感
+const bearerPrefix = "Bearer "
+
+// bearerToken 取出 `Authorization: Bearer <token>` 里的令牌，不是这个 scheme 时返回空串。
+//
+// 以前这里用 strings.TrimPrefix，而它在前缀不存在时原样返回整个字符串——于是一个
+// 不带 scheme 的裸令牌也能通过。那不构成漏洞（调用方照样得先有那串密钥），
+// 但文档六种语言都写着 `Authorization: Bearer`，Manager 发的也一直是 Bearer
+// （见 runner.setAgentAuth）：代码比自己的文档更松，没有道理。
+func bearerToken(header string) string {
+	h := strings.TrimSpace(header)
+	if len(h) < len(bearerPrefix) || !strings.EqualFold(h[:len(bearerPrefix)], bearerPrefix) {
+		return ""
+	}
+	return strings.TrimSpace(h[len(bearerPrefix):])
+}
+
 // requireToken 包装控制类接口；令牌未配置时直接放行，配置了则要求 Bearer 匹配。
 // 每次请求重新读取令牌，便于 Manager 在容器启动后才写入令牌的场景。
 func requireToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		want := expectedToken()
 		if want != "" {
-			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(got)), []byte(want)) != 1 {
+			got := bearerToken(r.Header.Get("Authorization"))
+			if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
 				w.WriteHeader(http.StatusUnauthorized)
 				_, _ = w.Write([]byte(`{"message":"unauthorized"}`))
 				return

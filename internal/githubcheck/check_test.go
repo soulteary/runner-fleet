@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 // fakeAPI 把 apiBase 指向一个本地服务，返回它记录下的请求路径

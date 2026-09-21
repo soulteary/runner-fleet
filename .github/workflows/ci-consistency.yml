@@ -21,3 +21,17 @@ jobs:
       # 落后三个版本的镜像；这一步让下次漏改直接在 PR 上失败。
       - name: Check version references are in sync
         run: sh scripts/check-version-consistency.sh
+
+  docs:
+    name: Docs structure consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 五种译文的 development.md 曾整整落后一个版本（v1.5.1/v1.6.0 新增的四节一节没跟上），  version-check-ignore
+      # 而没有任何东西会因此报错——译文语法完好，站点照常渲染。界面的 i18n 早有测试盯着
+      # 六种语言的键集，文档这一半一直没有；这一步补上。
+      - name: Check translated docs match the English section structure
+        run: sh scripts/check-docs-structure.sh

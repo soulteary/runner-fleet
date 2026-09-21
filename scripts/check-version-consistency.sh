@@ -34,8 +34,18 @@ echo "基准版本（取自 ${SOURCE_FILE}）: ${EXPECTED}"
 #   - internal/config/config.go 里基准值旁边的字段注释可以悄悄说另一个版本——
 #     基准就在这个文件里，注释反而没人核对。
 # 测试里拿某个版本当输入数据用（而非引用当前版本）时，照例加 version-check-ignore 跳过。
-FILES=$(git ls-files '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' '*.sh' '*.go' |
-    grep -v '^CHANGELOG\.md$' || true)
+#
+# --others --exclude-standard：光凭 --cached（git ls-files 的默认行为）只能看到已被
+# git 跟踪的文件，于是**新增但尚未提交**的文件永远扫不到——本地提交前跑一次是绿的，
+# 一旦提交进去，CI 检出的树里它已被跟踪，当场变红。这个假绿灯真的放过去过一次。
+# 加上未跟踪文件后，本地看到的与 CI 看到的一致。--exclude-standard 保证 .gitignore
+# 里的东西（config/config.yaml、.env 这些本地文件）仍然不参与校验。
+# CI 那边检出的是干净的树，没有未跟踪文件，所以这一项对 CI 没有任何影响。
+#
+# sort -u：合并冲突期间 --cached 会把未合并路径按 stage 打印多次，去重顺带让顺序稳定。
+FILES=$(git ls-files --cached --others --exclude-standard \
+    '*.md' '*.yml' '*.yaml' '*.example' 'Makefile' '*Dockerfile*' '*.sh' '*.go' |
+    sort -u | grep -v '^CHANGELOG\.md$' || true)
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT

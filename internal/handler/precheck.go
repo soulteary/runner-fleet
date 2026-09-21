@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
 	"github.com/labstack/echo/v4"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 // 冲突类型，前端据此做本地化文案，未知类型回落到 message

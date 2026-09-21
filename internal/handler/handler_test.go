@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
 	"github.com/labstack/echo/v4"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 func init() {

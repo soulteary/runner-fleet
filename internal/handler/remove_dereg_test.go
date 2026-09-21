@@ -12,8 +12,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
-	"github.com/lab-dev/github-actions-runner-manager/internal/githubcheck"
+	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/githubcheck"
 )
 
 // removeTestSetup 造一份只含一个已注册 runner 的配置，并把 ConfigPath 指过去

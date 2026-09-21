@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // CheckLevel 自检结果级别

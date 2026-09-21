@@ -178,6 +178,8 @@ runners:
 
 **인증**: 기본값은 로그인 없음. 내부 네트워크 또는 localhost에서만 사용 권장. Basic Auth 활성화에는 환경 변수 `BASIC_AUTH_PASSWORD` 설정. `BASIC_AUTH_USER` 선택(기본 `admin`). `GET /health`를 제외한 모든 경로에 인증 필요. 비밀은 커밋하지 말고 `.env` 사용. 컨테이너: `-e BASIC_AUTH_PASSWORD=...` 또는 compose `env_file`.
 
+**교차 사이트 요청**: 쓰기 엔드포인트는 브라우저가 교차 사이트라고 보고한 요청을 거부하므로, 다른 오리진의 페이지가 캐시된 Basic 인증 정보로 이 API를 조작할 수 없습니다. 설정할 것은 없습니다. 리버스 프록시가 `Host`를 바꿔 써서 본인의 요청까지 거부된다면 브라우저에 보이는 오리진을 `TRUSTED_ORIGINS`에 쉼표로 구분해 넣으세요. 브라우저가 아닌 호출자(curl, CI 스크립트)는 영향을 받지 않습니다 — 캐시된 자격 증명이 없으므로 여기서의 공격자가 될 수 없습니다. 정확한 규칙은 [개발 문서](development.md)를 참고하세요.
+
 **경로 및 고유성**: name/path에 `..`, `/`, `\` 포함 불가. 디렉터리는 `runners.base_path` 아래에 있어야 함. 중복 이름 불가. 편집 시 이름은 읽기 전용. 컨테이너 모드에서 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 오류.
 
 **Agent 인증**(컨테이너 모드): Manager가 Runner마다 무작위 토큰을 `<runner 디렉터리>/.agent_token`(0600)에 기록하고, 컨테이너 생성 시 `AGENT_TOKEN`으로 주입하며, Agent 호출 시 `Authorization: Bearer`로 전송합니다. Agent는 환경 변수를 읽으므로 Manager와 Agent의 UID 일치에 의존하지 않습니다. 파일은 Manager 측 영구 사본입니다. Agent는 토큰 없는 `/status`, `/start`, `/stop`을 거부하며 `/health`는 HEALTHCHECK용으로 열려 있습니다. 이 기능 이전에 생성된 컨테이너는 토큰이 주입되지 않아 인증 없이 동작합니다. 이제 이런 컨테이너는 "설정 변경됨"으로 판정되어 다음 시작 때 자동으로 재생성되며 토큰이 채워집니다(실행 중이면 "컨테이너 재생성" 사용).

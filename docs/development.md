@@ -59,6 +59,36 @@ With Basic Auth, all requests except `/health` must include `Authorization: Basi
 | `/api/runners/:name/recreate` | POST | Remove and recreate the runner container with the current config (container mode only). Interrupts a job running on it — starting a stopped container already recreates it automatically when its create parameters drifted. |
 | `/api/runner-precheck` | GET | Pre-flight a name before adding: `?name=&path=`. Returns `available`, a `suggested_name` and the `conflicts` found (`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`), each with `level` (`error`/`warn`), `message`, `detail` and an optional `fix_command`. Read-only; the Web UI calls it while you type. |
 
+### Cross-site requests (CSRF)
+
+Write endpoints (`POST`, `PUT`, `DELETE`) reject requests the browser reports as cross-site.
+Without this, a page on any other origin could submit a form to `POST /api/runners`: that is
+a CORS "simple request", so it goes out without a preflight and the browser attaches
+whatever Basic Auth credentials it has cached for this origin. Opening a malicious page was
+enough to add or stop a runner. `PUT` and `DELETE` always preflight, so they were never the
+exposed part — `POST` was, and `/api/runners/:name/{start,stop,recreate}` are all POST.
+
+The check reads `Sec-Fetch-Site` first: the browser computes it locally, so a reverse proxy
+rewriting `Host` cannot break it (Chrome 76+, Firefox 90+, Safari 16.4+). Only `same-origin`
+passes; `same-site` does not, because a subdomain or another port is a different origin and
+this is an admin surface. Browsers too old to send it fall back to comparing `Origin`
+against the request's `Host`, which every current browser sends on a cross-site POST.
+
+A request with **neither** header did not come from a browser (curl, CI scripts). It holds
+no cookie and no cached Basic Auth, so it cannot be a CSRF attack, and it passes — the API
+stays scriptable, and no token or extra header is needed anywhere.
+
+Two consequences:
+
+- **Request bodies are JSON only.** `AddRunnerRequest` and `UpdateRunnerRequest` carry no
+  `form` struct tags, so a form-encoded post binds to an empty struct and fails validation
+  even if it somehow got past the middleware. The Web UI already posts JSON — its
+  `FormData` use is only for reading fields out of the form element.
+- **`TRUSTED_ORIGINS` is the escape hatch.** If a reverse proxy rewrites `Host` such that
+  your own requests are refused, list the browser-visible origins there, comma-separated
+  (`https://ci.example.com`). They are allowed whatever `Sec-Fetch-Site` says, so keep the
+  list to origins you control.
+
 ### Breaking change (upgrade note)
 
 Legacy flat `probe_*` fields are removed; use the `probe` object: `probe.error`, `probe.type`, `probe.suggestion`, `probe.check_command`, `probe.fix_command`. `probe.type` values: `docker-access`, `agent-http`, `agent-connect`, `unknown`. Web UI can still "Start/Stop" for self-heal when `status=unknown`.
@@ -150,6 +180,7 @@ pointer to `false` is true. Use the `GitHubYes` / `GitHubNo` / `GitHubUnknown` h
 - `make build-agent`: Build Runner Agent (container mode).
 - `make build-all`: Build Manager and Agent.
 - `make test`: Run tests.
+- `make test-race`: Run tests with the race detector (what CI runs).
 - `make run`: Build then run Manager.
 - `make docker-build` / `make docker-run` / `make docker-stop`: Manager image build and run; see [User Guide](guide.md).
 - `make docker-build-runner`: Build Runner image for container mode (`Dockerfile.runner`, default tag in `RUNNER_IMAGE`).
@@ -161,9 +192,13 @@ Container mode uses Agent from `cmd/runner-agent` and Runner image from `Dockerf
 
 ## Tests
 
-`go test ./...`, plus `go test -race ./...` before pushing. The repo's golangci-lint runs in
-CI; `errcheck` and `staticcheck` via `go run` cover most of what it flags if you cannot run
-it locally.
+`go test ./...`, or `make test-race` for what CI actually runs. Every CI and release
+workflow runs `go test -race`, so a data race fails the build rather than surfacing later as
+an occasional wrong status in production — this project's concurrency (the single-worker
+registration queue, the per-runner `runnerOps` lock, the single-winner creation in
+`EnsureAgentToken`) rests on conventions the type system does not enforce. The repo's
+golangci-lint runs in CI; `errcheck` and `staticcheck` via `go run` cover most of what it
+flags if you cannot run it locally.
 
 A few conventions worth knowing before adding to the suite:
 
@@ -175,6 +210,10 @@ A few conventions worth knowing before adding to the suite:
   (`basicAuthMiddleware`, `httpErrorHandler`, `registerRoutes`, `listenAddr`, `loadI18n`).
   Adding a route means updating `TestRegisterRoutes_AllEndpointsPresent`, which asserts the
   exact set — the prompt to think about whether the new route needs authentication.
+- **Middleware is tested through `newEchoServer()`, not only on its own.** A guard that is
+  correct but never mounted is the typical way this kind of protection fails, so
+  `TestCSRFGuardIsMountedOnWriteRoutes` drives the real route table. Adding a write route
+  means adding it to `writeRoutes` there.
 - **The i18n files are cross-checked.** A key in `en.json` with no counterpart elsewhere
   renders as a blank, silently, so tests assert the key sets match across all six languages,
   that no value is empty, and that every key the template references exists.
@@ -193,5 +232,14 @@ sh scripts/check-version-consistency.sh
 ```
 
 If a line legitimately cites an older version (release notes, upgrade instructions), append a `version-check-ignore` marker to that line to skip it.
+
+The translated docs are checked the same way. `scripts/check-docs-structure.sh` compares the
+heading-level sequence of every `docs/<lang>/*.md` against its English original — heading text
+is supposed to differ, the structure is not — so a section added in English and skipped in the
+five translations fails the PR instead of going unnoticed:
+
+```bash
+sh scripts/check-docs-structure.sh
+```
 
 [← Back to docs](README.md)

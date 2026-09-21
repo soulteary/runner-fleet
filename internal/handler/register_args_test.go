@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 // fakeConfigScript 在 installDir 下放一个假的 config 脚本，把收到的参数逐行写进 args.txt

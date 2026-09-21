@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/runner"
 )
 
 func zhText(t *testing.T, key string) string {

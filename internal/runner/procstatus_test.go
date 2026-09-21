@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // newFakeRunnerDir 造一个像已注册 runner 的目录：有 .runner，有一个会常驻的 run.sh。

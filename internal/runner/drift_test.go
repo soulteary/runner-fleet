@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // hostSocketSpec 一个典型的 host-socket 容器形态

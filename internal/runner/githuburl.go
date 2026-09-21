@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/lab-dev/github-actions-runner-manager/internal/config"
+	"github.com/soulteary/runner-fleet/internal/config"
 )
 
 // githubWebBase 做成变量仅为测试；GitHub Enterprise 另说，本工具目前只对 github.com
