@@ -8,7 +8,7 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 
 ## Requirements
 
-- Go 1.26 (match [go.mod](../go.mod)).
+- Go 1.27 (match [go.mod](../go.mod)).
 
 ## Build
 

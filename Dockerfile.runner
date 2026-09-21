@@ -1,6 +1,6 @@
 # Runner 容器镜像：仅 Agent + 运行依赖，/runner 由 Manager 挂载；Agent 放 /app 避免挂载覆盖入口
 ARG BUILDPLATFORM=linux/amd64
-FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
