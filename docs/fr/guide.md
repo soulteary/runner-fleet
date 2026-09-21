@@ -176,7 +176,7 @@ Plusieurs runners par machine : utilisez des sous-répertoires distincts.
 
 ## 4. Sécurité et validation
 
-**Authentification** : Pas de connexion par défaut ; à utiliser uniquement sur réseau interne ou localhost. Définir la variable d'environnement `BASIC_AUTH_PASSWORD` pour activer Basic Auth ; `BASIC_AUTH_USER` optionnel (défaut `admin`). Toutes les routes sauf `GET /health` nécessitent une authentification ; ne commitez pas les secrets — utilisez `.env`. En conteneur : `-e BASIC_AUTH_PASSWORD=...` ou `env_file` dans compose.
+**Authentification** : Pas de connexion par défaut ; à utiliser uniquement sur réseau interne ou localhost. Définir la variable d'environnement `BASIC_AUTH_PASSWORD` pour activer Basic Auth ; `BASIC_AUTH_USER` optionnel (défaut `admin`). Toutes les routes sauf `GET /health` et `GET /ready` nécessitent une authentification ; ne commitez pas les secrets — utilisez `.env`. En conteneur : `-e BASIC_AUTH_PASSWORD=...` ou `env_file` dans compose.
 
 **Requêtes intersites** : les endpoints d'écriture rejettent tout ce que le navigateur signale comme intersite, de sorte qu'une page d'une autre origine ne peut pas piloter cette API avec vos identifiants Basic Auth en cache. Rien à configurer. Si un reverse proxy réécrit `Host` au point que vos propres requêtes sont refusées, listez les origines visibles dans le navigateur dans `TRUSTED_ORIGINS` (séparées par des virgules). Les appelants non navigateurs (curl, scripts de CI) ne sont pas concernés — ils ne portent aucun identifiant en cache et ne peuvent donc pas être l'attaquant ici. Voir la [doc de développement](development.md) pour la règle exacte.
 

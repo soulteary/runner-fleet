@@ -48,7 +48,8 @@ Mit Basic Auth müssen alle Anfragen außer `/health` den Header `Authorization:
 
 | Pfad | Methode | Beschreibung |
 |------|---------|--------------|
-| `/health` | GET | Gibt `{"status":"ok"}` zurück; für Ingress/K8s-Probes; immer unauthentifiziert. |
+| `/health` | GET | Liveness. Gibt `{"status":"ok","service":"runner-fleet"}` zurück; ohne Abhängigkeitsprüfungen immer 200, solange der Prozess läuft; immer unauthentifiziert. |
+| `/ready` | GET | Readiness. Gleiche Body-Form; 503, wenn die Konfiguration nicht geladen werden kann oder das Runner-Basisverzeichnis fehlt bzw. nicht beschreibbar ist. Für K8s `readinessProbe`; ebenfalls unauthentifiziert und nennt nie die fehlgeschlagene Prüfung. |
 | `/version` | GET | Gibt `{"version":"..."}` zurück. |
 | `/metrics` | GET | Prometheus-Metriken (Anzahl und Latenz der Anfragen). Das Label `path` verwendet die Echo-Routenvorlage (`/api/runners/:name`), nicht die Anfrage-URL. **Erfordert Auth**, wenn Basic Auth aktiviert ist — `basic_auth` im Scrape-Job konfigurieren. |
 | `/api/runners` | GET | Runner-Liste. Im Containermodus bei Probe-Fehler `status=unknown` mit strukturiertem `probe` (`error/type/suggestion/check_command/fix_command`). |

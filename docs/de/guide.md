@@ -176,7 +176,7 @@ Mehrere Runner pro Maschine: getrennte Unterverzeichnisse verwenden.
 
 ## 4. Sicherheit und Validierung
 
-**Auth**: Standardmäßig keine Anmeldung; nur im internen Netz oder auf localhost verwenden. Umgebungsvariable `BASIC_AUTH_PASSWORD` setzen für Basic Auth; `BASIC_AUTH_USER` optional (Standard `admin`). Alle Routen außer `GET /health` erfordern Auth; keine Secrets committen – `.env` verwenden. Im Container: `-e BASIC_AUTH_PASSWORD=...` oder compose `env_file`.
+**Auth**: Standardmäßig keine Anmeldung; nur im internen Netz oder auf localhost verwenden. Umgebungsvariable `BASIC_AUTH_PASSWORD` setzen für Basic Auth; `BASIC_AUTH_USER` optional (Standard `admin`). Alle Routen außer `GET /health` und `GET /ready` erfordern Auth; keine Secrets committen – `.env` verwenden. Im Container: `-e BASIC_AUTH_PASSWORD=...` oder compose `env_file`.
 
 **Site-übergreifende Anfragen**: Schreibende Endpunkte weisen alles ab, was der Browser als site-übergreifend meldet; eine Seite anderer Herkunft kann diese API also nicht mit Ihren zwischengespeicherten Basic-Auth-Daten steuern. Nichts zu konfigurieren. Schreibt ein Reverse Proxy `Host` so um, dass die eigenen Anfragen abgewiesen werden, tragen Sie die im Browser sichtbaren Herkünfte kommagetrennt in `TRUSTED_ORIGINS` ein. Nicht-Browser-Aufrufer (curl, CI-Skripte) sind nicht betroffen — sie führen keine zwischengespeicherten Zugangsdaten mit und kommen als Angreifer hier nicht in Frage. Die genaue Regel steht in der [Entwicklungsdoku](development.md).
 

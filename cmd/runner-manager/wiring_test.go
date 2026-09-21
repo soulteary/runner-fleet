@@ -84,6 +84,7 @@ func serveWithAuth(t *testing.T, path, user, pass string, withCreds bool) int {
 		e.Use(mw)
 	}
 	e.GET("/health", func(c echo.Context) error { return c.String(http.StatusOK, "ok") })
+	e.GET("/ready", func(c echo.Context) error { return c.String(http.StatusOK, "ready") })
 	e.GET("/api/runners", func(c echo.Context) error { return c.String(http.StatusOK, "list") })
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if withCreds {
@@ -148,15 +149,18 @@ func TestBasicAuthMiddleware_UserDefaultsToAdmin(t *testing.T) {
 	}
 }
 
-// /health 给 Ingress / K8s 探针用，必须免鉴权；其余路径一概不免
-func TestBasicAuthMiddleware_HealthIsAlwaysOpen(t *testing.T) {
+// /health 与 /ready 给 Ingress / K8s 探针用，必须免鉴权；其余路径一概不免。
+// 探针配置里通常带不了 Basic Auth 凭据，漏放行就是「开了鉴权之后探针全红」。
+func TestBasicAuthMiddleware_ProbesAreAlwaysOpen(t *testing.T) {
 	t.Setenv("BASIC_AUTH_PASSWORD", "s3cret")
 	t.Setenv("BASIC_AUTH_USER", "")
-	if code := serveWithAuth(t, "/health", "", "", false); code != http.StatusOK {
-		t.Fatalf("/health 应免鉴权，状态码 %d", code)
+	for _, path := range []string{"/health", "/ready"} {
+		if code := serveWithAuth(t, path, "", "", false); code != http.StatusOK {
+			t.Errorf("%s 应免鉴权，状态码 %d", path, code)
+		}
 	}
 	if code := serveWithAuth(t, "/api/runners", "", "", false); code != http.StatusUnauthorized {
-		t.Fatalf("除 /health 外都应要求鉴权，状态码 %d", code)
+		t.Fatalf("除探针端点外都应要求鉴权，状态码 %d", code)
 	}
 }
 
@@ -171,6 +175,7 @@ func TestRegisterRoutes_AllEndpointsPresent(t *testing.T) {
 	}
 	want := []string{
 		"GET /health",
+		"GET /ready",
 		"GET /version",
 		"GET /metrics",
 		"GET /",

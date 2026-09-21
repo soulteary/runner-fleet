@@ -6,6 +6,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/soulteary/cli-kit v1.9.0
 	github.com/soulteary/docker-kit v1.0.0
+	github.com/soulteary/health-kit/v4 v4.0.0
 	github.com/soulteary/i18n-kit/v3 v3.0.0
 	github.com/soulteary/logger-kit/v3 v3.0.0
 	github.com/soulteary/metrics-kit/v3 v3.0.0

@@ -176,7 +176,7 @@ runners:
 
 ## 4. セキュリティと検証
 
-**認証**: デフォルトではログインなし。内部ネットワークまたは localhost でのみ使用推奨。Basic Auth を有効にするには環境変数 `BASIC_AUTH_PASSWORD` を設定。`BASIC_AUTH_USER` は任意（デフォルト `admin`）。`GET /health` 以外の全ルートで認証が必要。シークレットはコミットせず `.env` を使用。コンテナでは `-e BASIC_AUTH_PASSWORD=...` または compose の `env_file`。
+**認証**: デフォルトではログインなし。内部ネットワークまたは localhost でのみ使用推奨。Basic Auth を有効にするには環境変数 `BASIC_AUTH_PASSWORD` を設定。`BASIC_AUTH_USER` は任意（デフォルト `admin`）。`GET /health` と `GET /ready` 以外の全ルートで認証が必要。シークレットはコミットせず `.env` を使用。コンテナでは `-e BASIC_AUTH_PASSWORD=...` または compose の `env_file`。
 
 **クロスサイトリクエスト**: 書き込み系エンドポイントはブラウザがクロスサイトと報告したものを拒否するため、別オリジンのページがあなたのキャッシュ済み Basic 認証情報でこの API を操作することはできません。設定は不要です。リバースプロキシが `Host` を書き換えた結果、自分のリクエストまで拒否される場合は、ブラウザに見えるオリジンを `TRUSTED_ORIGINS` にカンマ区切りで指定してください。ブラウザ以外の呼び出し元（curl、CI スクリプト）は影響を受けません——キャッシュされた資格情報を持たないため、ここでの攻撃者にはなり得ないからです。正確な規則は[開発ドキュメント](development.md)を参照。
 

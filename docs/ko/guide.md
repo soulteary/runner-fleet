@@ -176,7 +176,7 @@ runners:
 
 ## 4. 보안 및 검증
 
-**인증**: 기본값은 로그인 없음. 내부 네트워크 또는 localhost에서만 사용 권장. Basic Auth 활성화에는 환경 변수 `BASIC_AUTH_PASSWORD` 설정. `BASIC_AUTH_USER` 선택(기본 `admin`). `GET /health`를 제외한 모든 경로에 인증 필요. 비밀은 커밋하지 말고 `.env` 사용. 컨테이너: `-e BASIC_AUTH_PASSWORD=...` 또는 compose `env_file`.
+**인증**: 기본값은 로그인 없음. 내부 네트워크 또는 localhost에서만 사용 권장. Basic Auth 활성화에는 환경 변수 `BASIC_AUTH_PASSWORD` 설정. `BASIC_AUTH_USER` 선택(기본 `admin`). `GET /health`와 `GET /ready`를 제외한 모든 경로에 인증 필요. 비밀은 커밋하지 말고 `.env` 사용. 컨테이너: `-e BASIC_AUTH_PASSWORD=...` 또는 compose `env_file`.
 
 **교차 사이트 요청**: 쓰기 엔드포인트는 브라우저가 교차 사이트라고 보고한 요청을 거부하므로, 다른 오리진의 페이지가 캐시된 Basic 인증 정보로 이 API를 조작할 수 없습니다. 설정할 것은 없습니다. 리버스 프록시가 `Host`를 바꿔 써서 본인의 요청까지 거부된다면 브라우저에 보이는 오리진을 `TRUSTED_ORIGINS`에 쉼표로 구분해 넣으세요. 브라우저가 아닌 호출자(curl, CI 스크립트)는 영향을 받지 않습니다 — 캐시된 자격 증명이 없으므로 여기서의 공격자가 될 수 없습니다. 정확한 규칙은 [개발 문서](development.md)를 참고하세요.
 

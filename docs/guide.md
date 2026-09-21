@@ -176,7 +176,7 @@ Multiple runners per machine: use separate subdirs.
 
 ## 4. Security and validation
 
-**Auth**: No login by default; use only on internal network or localhost. Set env `BASIC_AUTH_PASSWORD` to enable Basic Auth; `BASIC_AUTH_USER` optional (default `admin`). All routes except `GET /health` require auth; do not commit secrets—use `.env`. In container: `-e BASIC_AUTH_PASSWORD=...` or compose `env_file`.
+**Auth**: No login by default; use only on internal network or localhost. Set env `BASIC_AUTH_PASSWORD` to enable Basic Auth; `BASIC_AUTH_USER` optional (default `admin`). All routes except `GET /health` and `GET /ready` require auth; do not commit secrets—use `.env`. In container: `-e BASIC_AUTH_PASSWORD=...` or compose `env_file`.
 
 **Cross-site requests**: write endpoints reject anything the browser reports as cross-site, so a page on another origin cannot drive this API with your cached Basic Auth credentials. Nothing to configure. If a reverse proxy rewrites `Host` so that your own requests are refused, list the browser-visible origins in `TRUSTED_ORIGINS` (comma-separated). Non-browser callers (curl, CI scripts) are unaffected — they carry no cached credentials, so they cannot be the attacker here. See [Development](development.md) for the exact rule.
 

@@ -26,6 +26,9 @@ func init() {
 	_ = cfg.Save(ConfigPath)
 }
 
+// /health 仍是存活探针：进程活着恒为 200，不挂任何依赖检查。
+// status 取值仍是 "ok"（health-kit 的 StatusHealthy 就是这个字符串），
+// 只是多了一个 service 字段——对 status == "ok" 的判断是兼容的。
 func TestHealth(t *testing.T) {
 	e := echo.New()
 	e.GET("/health", Health)
@@ -35,8 +38,19 @@ func TestHealth(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d", rec.Code)
 	}
-	if rec.Body.String() != `{"status":"ok"}` && rec.Body.String() != "{\"status\":\"ok\"}\n" {
-		t.Errorf("body = %q", rec.Body.String())
+	var m map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("响应不是 JSON: %v (%s)", err, rec.Body.String())
+	}
+	if m["status"] != "ok" {
+		t.Errorf("status = %v，期望 ok（负载均衡与监控可能在读这个值）", m["status"])
+	}
+	if m["service"] != "runner-fleet" {
+		t.Errorf("service = %v，期望 runner-fleet", m["service"])
+	}
+	// 始终免鉴权的端点，不能吐出逐项检查结果
+	if _, ok := m["checks"]; ok {
+		t.Errorf("/health 不应包含 checks：%v", m)
 	}
 }
 
