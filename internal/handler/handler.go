@@ -19,7 +19,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/runner"
-	secure "github.com/soulteary/secure-kit"
+	secure "github.com/soulteary/secure-kit/v2"
 )
 
 // Supported UI languages, same as docs (en, zh, fr, ja, ko, de).

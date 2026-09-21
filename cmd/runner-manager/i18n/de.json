@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "(standardmäßig ausgeblendet, „Fix-Befehl anzeigen“ klicken)",
   "confirm_remove": "\"{{name}}\" aus Config entfernen?",
   "confirm_reveal_fix": "Fix-Befehl kann Nebenwirkungen haben. Trotzdem anzeigen?",
-  "confirm_show_fix_cmd": "Fix-Befehl anzeigen (Nebenwirkungen)? Zuerst Prüfbefehl ausführen.",
   "msg.check_cmd_copied": "Prüfbefehl kopiert",
   "msg.copy_failed": "Kopieren fehlgeschlagen, manuell kopieren",
   "msg.fix_cmd_copied": "Fix-Befehl kopiert",
@@ -114,9 +113,7 @@
   "msg.action_done": "Aktion ausgeführt",
   "probe.alert_type": "Probe-Fehlertyp: ",
   "probe.alert_suggestion": "Vorschlag: ",
-  "probe.alert_check_cmd": "Prüfbefehl: ",
   "probe.alert_error": "Probe-Fehler: ",
-  "probe.alert_fix_cmd": "Fix-Befehl: ",
   "precheck.checking": "Konflikte werden geprüft…",
   "precheck.ok": "Name ist verfügbar",
   "precheck.name_taken": "Ein Runner mit diesem Namen existiert bereits: {{detail}}",
@@ -146,5 +143,12 @@
   "filter.showing": "{{shown}} von {{total}} angezeigt",
   "filter.no_match": "Kein Runner entspricht dem aktuellen Filter.",
   "page.lang_label": "Oberflächensprache",
-  "modal.label_drift": "Konfigurationsabweichung"
+  "modal.label_drift": "Konfigurationsabweichung",
+  "btn.working": "Läuft…",
+  "toast.dismiss": "Schließen",
+  "toast.view_detail": "Details anzeigen",
+  "toast.reload_list": "Liste neu laden",
+  "confirm.title": "Bitte bestätigen",
+  "confirm.ok": "Bestätigen",
+  "confirm.cancel": "Abbrechen"
 }

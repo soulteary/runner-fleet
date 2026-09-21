@@ -17,7 +17,7 @@ import (
 	"syscall"
 
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
-	secure "github.com/soulteary/secure-kit"
+	secure "github.com/soulteary/secure-kit/v2"
 )
 
 const defaultInstallDir = "/runner"

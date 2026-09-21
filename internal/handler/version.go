@@ -2,12 +2,16 @@ package handler
 
 import (
 	"github.com/labstack/echo/v4"
-	version "github.com/soulteary/version-kit/v3"
+	version "github.com/soulteary/version-kit/v4"
 )
 
 // 三个都由构建时 -ldflags "-X main.Xxx=..." 注入，再由 main 赋进来。
 // Commit 与 BuildDate 是本次新加的：在此之前，拿到一个 runner-manager 二进制
 // 是没办法知道它出自哪个提交的，线上排查只能靠版本号猜。
+//
+// 注入的是 main 的变量，不是 version-kit 的包级变量，所以 kit 升大版本
+// （模块路径随之变化）不必跟着改 ldflags——那正是 kit 自己的升级说明反复
+// 警告、漏改时不报错、只会让二进制静默报 dev 的那一步。
 var (
 	// Version 语义化版本号，未注入时 /version 与 -version 都报 dev
 	Version string
@@ -43,6 +47,11 @@ func BuildInfo() *version.Info {
 //
 // 于是响应体与改动前逐字节相同：{"version":"..."}。commit 与构建时间只走
 // -version 命令行，那是本机执行、不对外。
+//
+// 自己拿 ResolveConfig(...).JSONResponse() 写响应，而不是用 kit 的 HTTP handler：
+// v4 把 net/http 那一套搬进了 httpadapter 子包，根包只剩「决定 serve 什么」的配置
+// API，也就是 Echo、Gin、chi 这类框架该用的那一半。这个文件的代码因此在升 v4 时
+// 一行没动，只换了 import。
 func VersionInfo(c echo.Context) error {
 	body, status := version.ResolveConfig(version.HandlerConfig{Info: BuildInfo()}).JSONResponse()
 	return c.JSONBlob(status, body)

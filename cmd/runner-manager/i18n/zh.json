@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "（默认隐藏，点击“显示修复命令”）",
   "confirm_remove": "确定从配置中移除 \"{{name}}\"？",
   "confirm_reveal_fix": "修复命令可能有副作用，确认显示？",
-  "confirm_show_fix_cmd": "是否显示修复命令（有副作用）？建议先执行检查命令确认。",
   "msg.check_cmd_copied": "检查命令已复制",
   "msg.copy_failed": "复制失败，请手动复制",
   "msg.fix_cmd_copied": "修复命令已复制",
@@ -114,9 +113,7 @@
   "msg.action_done": "操作已执行",
   "probe.alert_type": "探测错误类型：",
   "probe.alert_suggestion": "建议：",
-  "probe.alert_check_cmd": "检查命令：",
   "probe.alert_error": "探测错误：",
-  "probe.alert_fix_cmd": "修复命令：",
   "precheck.checking": "正在检查冲突…",
   "precheck.ok": "名称可用",
   "precheck.name_taken": "配置中已存在同名 Runner：{{detail}}",
@@ -146,5 +143,12 @@
   "filter.showing": "显示 {{shown}} / {{total}}",
   "filter.no_match": "没有符合当前筛选条件的 Runner。",
   "page.lang_label": "界面语言",
-  "modal.label_drift": "配置差异"
+  "modal.label_drift": "配置差异",
+  "btn.working": "处理中…",
+  "toast.dismiss": "知道了",
+  "toast.view_detail": "查看详情",
+  "toast.reload_list": "刷新列表",
+  "confirm.title": "请确认",
+  "confirm.ok": "确定",
+  "confirm.cancel": "取消"
 }

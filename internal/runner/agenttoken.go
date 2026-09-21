@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	secure "github.com/soulteary/secure-kit"
+	secure "github.com/soulteary/secure-kit/v2"
 )
 
 // AgentTokenFile Runner 安装目录下保存 Agent 令牌的文件名

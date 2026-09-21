@@ -156,6 +156,21 @@
     </div>
   </div>
 
+  <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+
+  <div id="confirmModal" class="modal-overlay">
+    <div class="modal" style="max-width: 520px" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="modal-header">
+        <h3 id="confirmTitle">{{index .T "confirm.title"}}</h3>
+      </div>
+      <div class="modal-body"><div id="confirmText" class="confirm-text"></div></div>
+      <div class="modal-footer">
+        <button type="button" id="confirmOkBtn" class="btn-confirm">{{index .T "confirm.ok"}}</button>
+        <button type="button" id="confirmCancelBtn" class="modal-close">{{index .T "confirm.cancel"}}</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // 字典必须内联：它是随页面语言一起渲染出来的，外链脚本拿不到。
     window.__I18N = {{.TJSON}};

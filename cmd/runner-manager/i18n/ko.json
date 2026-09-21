@@ -106,7 +106,6 @@
   "probe.fix_hidden_hint": "(기본 숨김, \"수정 명령 표시\" 클릭)",
   "confirm_remove": "설정에서 \"{{name}}\"을(를) 제거하시겠습니까?",
   "confirm_reveal_fix": "수정 명령에 부작용이 있을 수 있습니다. 표시할까요?",
-  "confirm_show_fix_cmd": "수정 명령을 표시할까요(부작용 있음)? 먼저 확인 명령을 실행하세요.",
   "msg.check_cmd_copied": "확인 명령이 복사되었습니다",
   "msg.copy_failed": "복사 실패, 수동으로 복사하세요",
   "msg.fix_cmd_copied": "수정 명령이 복사되었습니다",
@@ -114,9 +113,7 @@
   "msg.action_done": "작업이 완료되었습니다",
   "probe.alert_type": "프로브 오류 유형: ",
   "probe.alert_suggestion": "권장: ",
-  "probe.alert_check_cmd": "확인 명령: ",
   "probe.alert_error": "프로브 오류: ",
-  "probe.alert_fix_cmd": "수정 명령: ",
   "precheck.checking": "충돌을 확인하는 중…",
   "precheck.ok": "사용 가능한 이름입니다",
   "precheck.name_taken": "같은 이름의 Runner가 이미 있습니다: {{detail}}",
@@ -146,5 +143,12 @@
   "filter.showing": "{{total}}개 중 {{shown}}개 표시",
   "filter.no_match": "현재 필터와 일치하는 Runner가 없습니다.",
   "page.lang_label": "인터페이스 언어",
-  "modal.label_drift": "설정 차이"
+  "modal.label_drift": "설정 차이",
+  "btn.working": "처리 중…",
+  "toast.dismiss": "닫기",
+  "toast.view_detail": "자세히 보기",
+  "toast.reload_list": "목록 새로고침",
+  "confirm.title": "확인",
+  "confirm.ok": "확인",
+  "confirm.cancel": "취소"
 }

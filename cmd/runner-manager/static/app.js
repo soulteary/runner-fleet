@@ -7,6 +7,101 @@
 //
 // i18n 字典由页面内联的一小段脚本先行注入到 window.__I18N。
 function t(key) { return (window.__I18N && window.__I18N[key]) || key; }
+
+// ===== Toast =====
+// 取代原生 alert：它阻塞整个页面，样式也和这套暗色界面格格不入。
+const toastWrap = document.getElementById('toastWrap');
+function dismissToast(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+// actions: [{ label, onClick }]。带 actions 的 toast 不自动消失——
+// 它要等用户去点，自动消失等于把出口收走。
+function showToast(message, type, actions) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || '');
+  const msg = document.createElement('div');
+  msg.className = 'toast-msg';
+  // 接口返回的文案里嵌着用户填的 Runner 名，只能走 textContent
+  msg.textContent = message;
+  el.appendChild(msg);
+  const bar = document.createElement('div');
+  bar.className = 'toast-actions';
+  (actions || []).forEach(function(a) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    // 这里不能套 .btn-view/.btn-del：那两个类名同时是行操作的行为选择器
+    b.className = 'btn-neutral';
+    b.textContent = a.label;
+    b.addEventListener('click', function() { dismissToast(el); a.onClick(); });
+    bar.appendChild(b);
+  });
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn-neutral';
+  close.textContent = t('toast.dismiss');
+  close.addEventListener('click', function() { dismissToast(el); });
+  bar.appendChild(close);
+  el.appendChild(bar);
+  toastWrap.appendChild(el);
+  if (!actions || !actions.length) {
+    setTimeout(function() { dismissToast(el); }, type === 'err' ? 8000 : 4000);
+  }
+  return el;
+}
+
+// ===== 确认弹窗 =====
+// 取代原生 confirm。后者除了阻塞页面，还可能被浏览器的「阻止此页面再次弹窗」
+// 一勾永久禁掉——那之后删除、重建这类需要确认的操作会静默地什么都不做。
+const confirmModal = document.getElementById('confirmModal');
+const confirmTextEl = document.getElementById('confirmText');
+const confirmOkBtn = document.getElementById('confirmOkBtn');
+const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+let confirmSettle = null;
+function settleConfirm(v) {
+  if (!confirmSettle) return;
+  const fn = confirmSettle;
+  confirmSettle = null;
+  confirmModal.classList.remove('show');
+  // 焦点还给唤起它的地方；元素可能已随自动刷新被换掉，所以先确认还在文档里
+  if (confirmLastFocused && document.contains(confirmLastFocused)) confirmLastFocused.focus();
+  confirmLastFocused = null;
+  fn(v);
+}
+let confirmLastFocused = null;
+function confirmDialog(message) {
+  // 上一个确认还没落定就又弹一个：先把旧的按「取消」结掉，免得 Promise 永远挂着
+  settleConfirm(false);
+  confirmLastFocused = document.activeElement;
+  confirmTextEl.textContent = message;
+  confirmModal.classList.add('show');
+  confirmOkBtn.focus();
+  return new Promise(function(resolve) { confirmSettle = resolve; });
+}
+// 确认框也是弹窗，同样要困住焦点——它叠在查看弹窗之上，不拦的话 Tab 会跑到
+// 底下那一层去。trapTab 来自弹窗那套焦点管理，这里直接复用。
+confirmModal.addEventListener('keydown', function(e) { trapTab(e, confirmModal); });
+confirmOkBtn.addEventListener('click', function() { settleConfirm(true); });
+confirmCancelBtn.addEventListener('click', function() { settleConfirm(false); });
+confirmModal.addEventListener('click', function(e) { if (e.target === confirmModal) settleConfirm(false); });
+
+// ===== 按钮忙碌态 =====
+// 启动一台 Runner 可能要几秒到几十秒，此前点下去界面毫无变化，用户必然连点，
+// 于是同一个动作被发两次。请求在途时把同一行（或弹窗页脚）的按钮一并置灰。
+function setRowBusy(btn, busy) {
+  if (!btn) return;
+  const scope = btn.closest('tr') || btn.closest('.modal-footer');
+  const group = scope ? Array.prototype.slice.call(scope.querySelectorAll('button')) : [btn];
+  group.forEach(function(b) {
+    // 关闭键始终可用，否则请求慢的时候用户被困在弹窗里
+    if (b !== btn && b.classList.contains('modal-close')) return;
+    b.disabled = busy;
+  });
+  if (busy) {
+    if (btn.dataset.idleText === undefined) btn.dataset.idleText = btn.textContent;
+    btn.textContent = t('btn.working');
+  } else if (btn.dataset.idleText !== undefined) {
+    btn.textContent = btn.dataset.idleText;
+    delete btn.dataset.idleText;
+  }
+}
 document.getElementById('langSelect').addEventListener('change', function() {
   var lang = this.value;
   document.cookie = 'lang=' + encodeURIComponent(lang) + ';path=/;max-age=31536000';
@@ -553,7 +648,12 @@ document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 modal.addEventListener('keydown', (e) => trapTab(e, modal));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  // 确认框是盖在查看弹窗之上的，Esc 先取消它，否则会把底下的弹窗一起关掉
+  if (confirmModal.classList.contains('show')) { settleConfirm(false); return; }
+  if (modal.classList.contains('show')) closeModal();
+});
 
 document.getElementById('modalEditBtn').addEventListener('click', () => {
   const name = document.getElementById('vName').textContent;
@@ -597,14 +697,16 @@ document.getElementById('modalSaveBtn').addEventListener('click', async () => {
   }
 });
 
-async function removeRunner(name) {
-  if (!name || !confirm(t('confirm_remove').replace('{{name}}', name))) return;
+async function removeRunner(name, btn) {
+  if (!name || !(await confirmDialog(t('confirm_remove').replace('{{name}}', name)))) return;
+  setRowBusy(btn, true);
   try {
     const r = await fetch('/api/runners/' + encodeURIComponent(name), { method: 'DELETE' });
     const data = await r.json().catch(() => ({}));
-    if (r.ok) location.reload();
-    else alert(data.message || r.statusText);
-  } catch (e) { alert(e.message); }
+    if (r.ok) { location.reload(); return; }
+    showToast(data.message || r.statusText || t('msg.request_failed'), 'err');
+  } catch (e) { showToast(e.message, 'err'); }
+  setRowBusy(btn, false);
 }
 // 行内按钮走事件委托而不是逐个 addEventListener：自动刷新会整体替换 <tbody>，
 // 直接绑在按钮上的监听在第一次刷新之后就全部失效了。
@@ -614,44 +716,52 @@ runnerRowsBody.addEventListener('click', (e) => {
   if (!btn || !runnerRowsBody.contains(btn)) return;
   const name = btn.getAttribute('data-name');
   if (!name) return;
+  // 按钮一路传下去，忙碌态才知道该给哪一行置灰
   if (btn.classList.contains('btn-view')) openModal('view', name);
   else if (btn.classList.contains('btn-edit')) openModal('edit', name);
-  else if (btn.classList.contains('btn-del')) removeRunner(name);
-  else if (btn.classList.contains('btn-start')) runnerAction(name, 'start');
-  else if (btn.classList.contains('btn-stop')) runnerAction(name, 'stop');
+  else if (btn.classList.contains('btn-del')) removeRunner(name, btn);
+  else if (btn.classList.contains('btn-start')) runnerAction(name, 'start', btn);
+  else if (btn.classList.contains('btn-stop')) runnerAction(name, 'stop', btn);
   // 重建会删掉容器再按当前配置建一个新的，正在跑的 Job 会被中断，所以先确认
   else if (btn.classList.contains('btn-recreate')) {
-    if (confirm(fillVars(t('confirm_recreate'), { name: name }))) runnerAction(name, 'recreate');
+    confirmDialog(fillVars(t('confirm_recreate'), { name: name })).then(function(ok) {
+      if (ok) runnerAction(name, 'recreate', btn);
+    });
   }
 });
 
-async function runnerAction(name, action) {
+async function runnerAction(name, action, btn) {
+  setRowBusy(btn, true);
   try {
     const r = await fetch('/api/runners/' + encodeURIComponent(name) + '/' + action, { method: 'POST' });
     const data = await r.json().catch(() => ({}));
-    if (r.ok) {
+    if (!r.ok) {
+      showToast(data.message || r.statusText || t('msg.request_failed'), 'err');
+    } else {
       const probeError = resolveProbeError(data);
-      if (probeError) {
-        const probeType = resolveProbeType(data);
-        const checkMsg =
-          (data.message || t('msg.action_done')) +
-          '\n\n' + t('probe.alert_type') + probeType +
-          '\n' + t('probe.alert_suggestion') + resolveProbeSuggestion(data) +
-          '\n' + t('probe.alert_check_cmd') + resolveProbeCheckCommand(data) +
-          '\n' + t('probe.alert_error') + probeError;
-        alert(checkMsg);
-        if (confirm(t('confirm_show_fix_cmd'))) {
-          alert(t('probe.alert_fix_cmd') + '\n' + resolveProbeFixCommand(data));
-        }
-      }
-      location.reload();
+      if (!probeError) { location.reload(); return; }
+      // 探测失败不再连开三个原生弹窗（alert → confirm → alert）：一条 toast 给结论，
+      // 「查看详情」直接打开已有的查看弹窗——检查命令、修复命令连同那套
+      // 「先展示、确认后再复制」的保护都已经在那里，不必重来一遍。
+      // 这里不整页 reload，否则 toast 当场就没了；列表由自动刷新兜住。
+      showToast(
+        (data.message || t('msg.action_done')) +
+        '\n' + t('probe.alert_type') + resolveProbeType(data) +
+        '\n' + t('probe.alert_suggestion') + resolveProbeSuggestion(data) +
+        '\n' + t('probe.alert_error') + probeError,
+        'warn',
+        [
+          { label: t('toast.view_detail'), onClick: function() { openModal('view', name); } },
+          { label: t('toast.reload_list'), onClick: function() { location.reload(); } }
+        ]
+      );
     }
-    else { alert(data.message || r.statusText || t('msg.request_failed')); }
-  } catch (e) { alert(e.message); }
+  } catch (e) { showToast(e.message, 'err'); }
+  setRowBusy(btn, false);
 }
-revealFixBtn.addEventListener('click', () => {
+revealFixBtn.addEventListener('click', async () => {
   if (!currentProbeFixCommand) return;
-  if (!confirm(t('confirm_reveal_fix'))) return;
+  if (!(await confirmDialog(t('confirm_reveal_fix')))) return;
   probeFixCmdEl.textContent = currentProbeFixCommand;
   probeFixRevealed = true;
   copyFixBtn.style.display = 'inline-block';
@@ -659,15 +769,15 @@ revealFixBtn.addEventListener('click', () => {
 copyCheckBtn.addEventListener('click', async () => {
   if (!currentProbeCheckCommand) return;
   const ok = await copyCommandText(currentProbeCheckCommand);
-  alert(ok ? t('msg.check_cmd_copied') : t('msg.copy_failed'));
+  showToast(ok ? t('msg.check_cmd_copied') : t('msg.copy_failed'), ok ? 'ok' : 'err');
 });
 copyFixBtn.addEventListener('click', async () => {
   if (!probeFixRevealed || !currentProbeFixCommand) {
-    alert(t('msg.show_fix_first'));
+    showToast(t('msg.show_fix_first'), 'warn');
     return;
   }
   const ok = await copyCommandText(currentProbeFixCommand);
-  alert(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'));
+  showToast(ok ? t('msg.fix_cmd_copied') : t('msg.copy_failed'), ok ? 'ok' : 'err');
 });
 // ===== 列表自动刷新 =====
 // 「忙碌中」和「GitHub ✓」本来就是后台约 5 分钟一次的检查结果，页面不刷新
@@ -684,7 +794,9 @@ let refreshing = false;
 function refreshPaused() {
   // 弹窗开着时刷新没意义（用户看的是弹窗里的数据）；标签页不可见时也不必打扰
   // 服务端——容器模式下每刷新一次都要对每台 runner 做一次 docker inspect。
-  return !autoRefreshToggle.checked || document.hidden || modal.classList.contains('show');
+  // 确认框也要算进去：正等用户确认删除时把 <tbody> 换掉，那一行会在脚下消失
+  return !autoRefreshToggle.checked || document.hidden ||
+    modal.classList.contains('show') || confirmModal.classList.contains('show');
 }
 
 async function refreshRows() {
@@ -803,5 +915,5 @@ filterClearBtn.addEventListener('click', function() {
 });
 applyFilter();
 
-document.getElementById('modalStartBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStartBtnFooter').getAttribute('data-name'), 'start'));
-document.getElementById('modalStopBtnFooter').addEventListener('click', () => runnerAction(document.getElementById('modalStopBtnFooter').getAttribute('data-name'), 'stop'));
+document.getElementById('modalStartBtnFooter').addEventListener('click', function() { runnerAction(this.getAttribute('data-name'), 'start', this); });
+document.getElementById('modalStopBtnFooter').addEventListener('click', function() { runnerAction(this.getAttribute('data-name'), 'stop', this); });
