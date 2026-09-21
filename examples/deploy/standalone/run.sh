@@ -7,7 +7,7 @@
 #   WITH_DOCKER=0 sh run.sh         # Job 里不需要 docker，不挂宿主机 socket
 #
 # 变量：
-#   IMAGE                 Manager 镜像，默认 ghcr.io/soulteary/runner-fleet:v1.7.1
+#   IMAGE                 Manager 镜像，默认 ghcr.io/soulteary/runner-fleet:v1.8.0
 #   PORT                  宿主机监听地址:端口，默认 127.0.0.1:8080
 #   DATA_DIR              config/ 与 runners/ 的父目录，默认当前目录
 #   BASIC_AUTH_USER       默认 admin
@@ -16,7 +16,7 @@
 
 set -e
 
-IMAGE="${IMAGE:-ghcr.io/soulteary/runner-fleet:v1.7.1}"
+IMAGE="${IMAGE:-ghcr.io/soulteary/runner-fleet:v1.8.0}"
 PORT="${PORT:-127.0.0.1:8080}"
 DATA_DIR="${DATA_DIR:-$(pwd)}"
 BASIC_AUTH_USER="${BASIC_AUTH_USER:-admin}"

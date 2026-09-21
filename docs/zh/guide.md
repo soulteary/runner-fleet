@@ -17,10 +17,10 @@
 
 ### 使用已发布镜像（推荐）
 
-生产环境建议使用具体版本号（如 v1.7.1）；开发可用 `main` tag。
+生产环境建议使用具体版本号（如 v1.8.0）；开发可用 `main` tag。
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.7.1
+docker pull ghcr.io/soulteary/runner-fleet:v1.8.0
 ```
 
 ### docker-compose 快速开始
@@ -49,7 +49,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.7.1
+  ghcr.io/soulteary/runner-fleet:v1.8.0
 ```
 
 宿主机目录需对 UID 1001 可写。Basic Auth：`-e BASIC_AUTH_PASSWORD=密码`、`-e BASIC_AUTH_USER=admin`。Job 需要 Docker 时可加 `-v /var/run/docker.sock:/var/run/docker.sock`；镜像内已预置 GID 999 的 `docker` 组（构建参数 `DOCKER_GID` 可改），宿主机 docker GID 不是 999 时还需加 `--group-add $(getent group docker | cut -d: -f3)`，或使用 DinD（见仓库 `docker-compose.yml` 的 `--profile dind`）。两个镜像除 Docker CLI 外，还带有一层与 GitHub 托管 runner 对齐的命令行基础层：`scripts/apt-packages.txt` 取自 `actions/runner-images` 的 `toolset-2404.json`，`git`、`unzip`、`jq`、`rsync`、`sudo`、`xvfb` 等都在其中。语言与平台 SDK 有意不含——用 `setup-*` action 安装，或自行扩展镜像。与托管 runner 一致，两个镜像都为 Job 用户配置了免密 `sudo`，因此 `sudo apt-get install -y …` 可直接使用；需要更严格的边界时以 `--build-arg ALLOW_SUDO=false` 构建。
@@ -71,7 +71,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker 启停，经 HTTP 访问容器内 Agent 获取状态。
 
 **方式一：仅用 .env（推荐全容器时使用）**
-无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。若未准备 `config/config.yaml`，只要在 `.env` 中配置了上述变量，首次启动时会自动生成该文件。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.7.1` → `v1.7.1-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
+无需改 config.yaml，复制 `cp .env.example .env` 后设置例如：`CONTAINER_MODE=true`、`VOLUME_HOST_PATH=<宿主机 runners 绝对路径>`（如 `realpath runners`）、`JOB_DOCKER_BACKEND=host-socket`、`CONTAINER_NETWORK=runner-net`。若未准备 `config/config.yaml`，只要在 `.env` 中配置了上述变量，首次启动时会自动生成该文件。不设 `RUNNER_IMAGE` 时 Runner 镜像会从 `MANAGER_IMAGE` 自动推导（如 `v1.8.0` → `v1.8.0-runner`）。挂载的 `config` 与 `runners` 目录仍需 `chown 1001:1001`。详见 `.env.example` 中「覆盖 config.yaml」相关变量。
 
 **方式二：在 config/config.yaml 中启用**（见 `config.yaml.example`）：
 
@@ -79,7 +79,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <名称> [版本号]
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.8.0-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -87,7 +87,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.7.1-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
+Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.8.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
 
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
@@ -112,7 +112,7 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .
 ```
 
 Make：`make docker-build`、`make docker-run`、`make docker-stop`。
@@ -132,7 +132,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Runner 安装目录根路径；**容器部署时设为 `/app/runners`** | `./runners` |
 | `runners.items` | 预置 Runner 列表 | 也可通过 Web 界面添加 |
 | `runners.container_mode` | 是否启用容器模式 | `false` |
-| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet:v1.7.1-runner` |
+| `runners.container_image` | 容器模式下 Runner 镜像（tag 带 -runner） | `ghcr.io/soulteary/runner-fleet:v1.8.0-runner` |
 | `runners.container_network` | 容器模式下 Runner 所在网络 | `runner-net` |
 | `runners.agent_port` | 容器内 Agent 端口 | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
@@ -161,7 +161,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `SERVER_ADDR` | `server.addr` | 空（所有网卡） |
 | `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`；镜像内为 `/app/runners` |
 | `CONTAINER_MODE` | `runners.container_mode` | `false`。只认 `true` 与 `1`：这个变量只能把容器模式**打开，不能关闭**，免得一个写错的取值静默换掉一套部署的运行形态 |
-| `RUNNER_IMAGE`、`CONTAINER_IMAGE` | `runners.container_image` | 都不设时由 `MANAGER_IMAGE` 推导（`:v1.7.1` → `:v1.7.1-runner`），再退到 `FLEET_IMAGE_TAG` |
+| `RUNNER_IMAGE`、`CONTAINER_IMAGE` | `runners.container_image` | 都不设时由 `MANAGER_IMAGE` 推导（`:v1.8.0` → `:v1.8.0-runner`），再退到 `FLEET_IMAGE_TAG` |
 | `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
 | `VOLUME_HOST_PATH`、`RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | 空；容器模式下必填 |
 | `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
@@ -178,7 +178,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `LOG_FORMAT` | `console` 给人读，`json` 给 ELK、Loki；取值不认识时回落 `console`，不会导致启动失败 | `console` |
 | `DOCKER_HOST` | **Manager 自己**用哪个 Docker daemon。容器模式必须用宿主机 socket——指向 DinD 会让 Runner 容器建不出来 | `unix:///var/run/docker.sock` |
 | `MANAGER_IMAGE` | compose 拉哪个 Manager 镜像；Runner 镜像也由它推导 | 发布版本的 tag |
-| `FLEET_IMAGE_TAG` | 其它都没决定时，默认 Runner 镜像的 tag | `v1.7.1` |
+| `FLEET_IMAGE_TAG` | 其它都没决定时，默认 Runner 镜像的 tag | `v1.8.0` |
 
 `scripts/install-runner.sh` 另外还读 `RUNNER_VERSION`、`RUNNER_SHA256` 与
 `RUNNER_FORCE_REINSTALL`——见[自动安装与注册](#自动安装与注册)。

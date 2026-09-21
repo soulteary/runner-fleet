@@ -44,8 +44,8 @@ runners:
     # container_mode: true
 
     # Left empty, the runner image is derived from FLEET_IMAGE_TAG, else the default tag.
-    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.7.1 生成
-    # container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
+    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.8.0 生成
+    # container_image: ghcr.io/soulteary/runner-fleet:v1.8.0-runner
     # container_network: runner-net
     # agent_port: 8081
 

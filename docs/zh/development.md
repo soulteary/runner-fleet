@@ -62,7 +62,7 @@ Docker socket 创建——这也是 Manager 必须拿到那个 socket、且不�
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
