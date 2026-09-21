@@ -305,6 +305,7 @@ func newEchoServer() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover(), middleware.RequestLogger(), middleware.Secure())
+	e.Use(metricsMiddleware())
 	e.HTTPErrorHandler = httpErrorHandler
 	// 放在鉴权之前：跨站请求无论带不带凭据，都该在这里就结束
 	trusted := trustedOrigins()
@@ -326,6 +327,8 @@ func newEchoServer() *echo.Echo {
 func registerRoutes(e *echo.Echo) {
 	e.GET("/health", handler.Health)
 	e.GET("/version", handler.VersionInfo)
+	// 不在 Skipper 里，因此配了 Basic Auth 后 /metrics 同样需要凭据
+	e.GET(metricsPath, metricsHandler())
 	e.GET("/", handler.Index)
 	e.GET("/api/runners", handler.ListRunners)
 	e.GET("/api/runners/:name", handler.GetRunner)

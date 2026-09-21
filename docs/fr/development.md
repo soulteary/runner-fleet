@@ -50,6 +50,7 @@ Avec Basic Auth, toutes les requêtes sauf `/health` doivent inclure `Authorizat
 |--------|---------|-------------|
 | `/health` | GET | Retourne `{"status":"ok"}` ; pour sondes Ingress/K8s ; toujours sans authentification. |
 | `/version` | GET | Retourne `{"version":"..."}`. |
+| `/metrics` | GET | Métriques Prometheus (nombre de requêtes et latence). Le label `path` utilise le modèle de route Echo (`/api/runners/:name`), pas l'URL de la requête. **Authentification requise** si Basic Auth est activé — configurez `basic_auth` dans le job de scrape. |
 | `/api/runners` | GET | Liste des runners. En mode conteneur, en cas d'échec de sonde retourne `status=unknown` avec `probe` structuré (`error/type/suggestion/check_command/fix_command`). |
 | `/api/runners/:name` | GET | Détails d'un runner. Même `probe` en cas d'échec de sonde en mode conteneur. |
 | `/api/runners/:name/start` | POST | Démarrer le runner. En cas d'échec de sonde tente quand même le démarrage, retourne `probe` structuré dans la réponse. |

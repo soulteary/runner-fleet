@@ -50,6 +50,7 @@ Mit Basic Auth müssen alle Anfragen außer `/health` den Header `Authorization:
 |------|---------|--------------|
 | `/health` | GET | Gibt `{"status":"ok"}` zurück; für Ingress/K8s-Probes; immer unauthentifiziert. |
 | `/version` | GET | Gibt `{"version":"..."}` zurück. |
+| `/metrics` | GET | Prometheus-Metriken (Anzahl und Latenz der Anfragen). Das Label `path` verwendet die Echo-Routenvorlage (`/api/runners/:name`), nicht die Anfrage-URL. **Erfordert Auth**, wenn Basic Auth aktiviert ist — `basic_auth` im Scrape-Job konfigurieren. |
 | `/api/runners` | GET | Runner-Liste. Im Containermodus bei Probe-Fehler `status=unknown` mit strukturiertem `probe` (`error/type/suggestion/check_command/fix_command`). |
 | `/api/runners/:name` | GET | Einzelner Runner. Gleiches `probe` bei Probe-Fehler im Containermodus. |
 | `/api/runners/:name/start` | POST | Runner starten. Bei Probe-Fehler startet trotzdem, gibt strukturiertes `probe` in der Antwort zurück. |
