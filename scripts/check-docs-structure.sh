@@ -41,9 +41,16 @@ headings() {
 
 failed=0
 
+# compared 记真正比过的英文原文份数。一份都没比就不能算通过：DOCS 里每一份都走
+# 「[ -f "$base" ] || continue」的话，循环体一次都不进，failed 保持 0，脚本照样打印
+# 「各语言文档章节结构一致」并 exit 0。复现过：在没有 docs/ 的目录里跑，全绿。
+# 目录挪了名字、路径写错、在错误的工作目录里跑，都是这一条。
+compared=0
+
 for doc in $DOCS; do
     base="docs/$doc"
     [ -f "$base" ] || continue
+    compared=$((compared + 1))
     base_seq=$(headings "$base")
     base_count=$(printf '%s\n' "$base_seq" | grep -c '#' || true)
 
@@ -77,6 +84,11 @@ for doc in $DOCS; do
 done
 
 if [ "$failed" != "0" ]; then
+    exit 1
+fi
+
+if [ "$compared" = "0" ]; then
+    echo "docs/ 下没有找到任何一份英文原文（${DOCS}），一份都没比过，不能判定通过。" >&2
     exit 1
 fi
 
