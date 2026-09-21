@@ -350,6 +350,27 @@ function resolveProbeType(data) {
   if (data && data.probe && data.probe.type) return data.probe.type;
   return 'unknown';
 }
+// ===== 弹窗的键盘可达性 =====
+// 此前弹窗没有 role/aria-modal，焦点也不受约束：Tab 会一路跑到弹窗背后的表格和
+// 表单上，读屏器把背景内容和弹窗混着念；关掉之后焦点落回 <body>，键盘用户得从
+// 页面开头一路 Tab 回原来的位置。
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let lastFocused = null;
+function focusablesIn(root) {
+  // offsetParent 为 null 即当前不可见（弹窗里大量按钮是按状态 display:none 的），
+  // 把它们算进去会让 Tab 停在看不见的地方
+  return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), function(el) {
+    return el.offsetParent !== null;
+  });
+}
+function trapTab(e, root) {
+  if (e.key !== 'Tab') return;
+  const items = focusablesIn(root);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
 const modal = document.getElementById('runnerModal');
 const modalTitle = document.getElementById('modalTitle');
 const modalView = document.getElementById('modalView');
@@ -395,6 +416,8 @@ async function copyCommandText(text) {
 }
 
 function openModal(mode, name) {
+  // 记在展示之前：一旦弹窗抢走焦点就问不出用户原来站在哪了
+  if (!modal.classList.contains('show')) lastFocused = document.activeElement;
   modalMsg.style.display = 'none';
   if (mode === 'view') {
     modalTitle.textContent = t('modal.view_title');
@@ -414,6 +437,10 @@ function openModal(mode, name) {
         document.getElementById('vTarget').textContent = data.target || '';
         document.getElementById('vLabels').textContent = Array.isArray(data.labels) ? data.labels.join(', ') : (data.labels || '');
         document.getElementById('vInstallDir').textContent = data.install_dir || '';
+        var driftRow = document.getElementById('vDriftRow');
+        document.getElementById('vDrift').textContent = data.container_drift || '';
+        driftRow.style.display = data.container_drift ? '' : 'none';
+        setRowWide('vDriftRow', data.container_drift);
         var jdbRow = document.getElementById('vJobDockerBackendRow');
         var jdbEl = document.getElementById('vJobDockerBackend');
         if (data.job_docker_backend) {
@@ -424,7 +451,7 @@ function openModal(mode, name) {
         }
         document.getElementById('vStatus').innerHTML = '<span class="badge ' + escapeHtml(data.status || '') + '">' + escapeHtml(data.status || '') + '</span>';
         document.getElementById('vRunning').innerHTML = data.running ? ' <span class="badge running">' + t('badge.running') + '</span>' : '';
-        document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy" title="' + escapeHtml(t('badge.busy_title')) + '">' + escapeHtml(t('badge.busy')) + '</span>' : '';
+        document.getElementById('vBusy').innerHTML = data.github_busy ? ' <span class="badge busy has-tip" tabindex="0" role="note">' + escapeHtml(t('badge.busy')) + '<span class="tip">' + escapeHtml(t('badge.busy_title')) + '</span></span>' : '';
         const probeError = resolveProbeError(data);
         setProbeRowsVisible(!!probeError);
         document.getElementById('vProbeErrorType').textContent = probeError ? resolveProbeType(data) : '—';
@@ -510,15 +537,22 @@ function openModal(mode, name) {
       .catch(() => { modalMsg.textContent = t('msg.load_failed'); modalMsg.style.display = 'block'; modalMsg.className = 'msg err'; });
   }
   modal.classList.add('show');
+  // 焦点送进弹窗，否则 Tab 仍从页面开头走，读屏器也还停在背景内容上
+  const firstInModal = focusablesIn(modal)[0];
+  if (firstInModal) firstInModal.focus();
 }
 
 function closeModal() {
   modal.classList.remove('show');
+  // 焦点还给打开它的那个按钮；元素可能已随自动刷新被换掉，所以先确认还在文档里
+  if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+  lastFocused = null;
 }
 
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+modal.addEventListener('keydown', (e) => trapTab(e, modal));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
 
 document.getElementById('modalEditBtn').addEventListener('click', () => {

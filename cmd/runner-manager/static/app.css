@@ -229,6 +229,28 @@ form button:hover { opacity: 0.9; }
 .reg-ok { color: var(--success); font-size: 12px; }
 .reg-err { color: var(--danger); font-size: 12px; }
 .probe-err { color: var(--danger); font-size: 12px; }
+/* 暗色背景上浏览器默认的焦点框几乎看不见，键盘用户会彻底迷路 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 悬停提示：原先这些信息只挂在 title 上，键盘和触屏根本拿不到——
+   而「漂移了什么」恰恰是决定要不要点「重建」的依据。
+   默认态用 clip-path 裁掉而不是 display:none：后者会把文本一并从无障碍树里
+   摘掉，读屏器就什么也读不到了。 */
+.has-tip { position: relative; }
+.has-tip .tip {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 60;
+  width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  padding: 0; border: 0; border-radius: 6px;
+  background: var(--bg); color: var(--text);
+  font-size: 12px; font-weight: 400; line-height: 1.5;
+  text-align: left; white-space: normal; word-break: break-word;
+}
+.has-tip:hover .tip, .has-tip:focus .tip, .has-tip:focus-within .tip {
+  width: max-content; max-width: 360px; height: auto;
+  overflow: visible; clip-path: none;
+  padding: 8px 10px; border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .github-yes { color: var(--success); }
 .github-no { color: var(--warn); }
 .github-unknown { color: var(--muted); }

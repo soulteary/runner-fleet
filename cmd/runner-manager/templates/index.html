@@ -12,7 +12,8 @@
 <body>
   <header class="page-head">
     <h1>{{index .T "page.h1"}}</h1>
-    <select id="langSelect" class="lang-select">
+    <label class="sr-only" for="langSelect">{{index .T "page.lang_label"}}</label>
+    <select id="langSelect" aria-label="{{index .T "page.lang_label"}}" class="lang-select">
       <option value="en" {{if eq .Lang "en"}}selected{{end}}>English</option>
       <option value="zh" {{if eq .Lang "zh"}}selected{{end}}>中文</option>
       <option value="fr" {{if eq .Lang "fr"}}selected{{end}}>Français</option>
@@ -22,6 +23,7 @@
     </select>
   </header>
 
+  <main>
   <div class="card">
     <h2>{{index .T "runner_list.title"}}</h2>
     <p class="card-hint">{{index .T "runner_list.hint"}}</p>
@@ -101,11 +103,14 @@
     </div>
   </div>
 
+  </main>
+
   <div id="runnerModal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-header">
         <h3 id="modalTitle">{{index .T "modal.title"}}</h3>
-        <button type="button" class="modal-close" id="modalClose">&times;</button>
+        {{/* &times; 对读屏器读作「times」，必须另给可访问名 */}}
+        <button type="button" class="modal-close" id="modalClose" aria-label="{{index .T "modal.btn_close"}}">&times;</button>
       </div>
       <div class="modal-body">
         <div id="modalView">
@@ -117,6 +122,7 @@
           <div class="row"><label>{{index .T "modal.label_install_dir"}}</label><div class="val path" id="vInstallDir"></div></div>
           <div class="row" id="vJobDockerBackendRow" style="display:none"><label>{{index .T "modal.label_docker_backend"}}</label><div class="val"><code id="vJobDockerBackend"></code></div></div>
           <div class="row"><label>{{index .T "modal.label_status"}}</label><div class="val"><span id="vStatus"></span><span id="vRunning"></span><span id="vBusy"></span></div></div>
+          <div class="row" id="vDriftRow" style="display:none"><label>{{index .T "modal.label_drift"}}</label><div class="val" id="vDrift"></div></div>
           <div class="row" id="vProbeErrorTypeRow"><label>{{index .T "modal.label_probe_error_type"}}</label><div class="val" id="vProbeErrorType"></div></div>
           <div class="row" id="vProbeSuggestionRow"><label>{{index .T "modal.label_suggestion"}}</label><div class="val" id="vProbeSuggestion"></div></div>
           <div class="row" id="vProbeCheckCmdRow"><label>{{index .T "modal.label_check_cmd"}}</label><div class="val"><button type="button" id="vCopyCheckCmdBtn" class="btn-copy-cmd" style="display:none">{{index .T "modal.btn_copy_cmd"}}</button><span id="vProbeCheckCommand"></span></div></div>
@@ -174,19 +180,19 @@
             {{if .Running}}<span class="badge running">{{index $.T "badge.running"}}</span>{{end}}
             {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
                  指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
-            {{if .GitHubBusyYes}}<span class="badge busy" title="{{index $.T "badge.busy_title"}}">{{index $.T "badge.busy"}}</span>{{end}}
-            {{if .ContainerDrift}}<span class="badge drift" title="{{.ContainerDrift}}">{{index $.T "badge.drift"}}</span>{{end}}
-            {{if .Probe}}<br><span class="probe-err" title="{{.Probe.Error}}">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}</span>{{end}}
+            {{if .GitHubBusyYes}}<span class="badge busy has-tip" tabindex="0" role="note">{{index $.T "badge.busy"}}<span class="tip">{{index $.T "badge.busy_title"}}</span></span>{{end}}
+            {{if .ContainerDrift}}<span class="badge drift has-tip" tabindex="0" role="note">{{index $.T "badge.drift"}}<span class="tip">{{.ContainerDrift}}</span></span>{{end}}
+            {{if .Probe}}<br><span class="probe-err has-tip" tabindex="0" role="note">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}<span class="tip">{{.Probe.Error}}</span></span>{{end}}
           </td>
           {{if $.Config.Runners.ContainerMode}}<td><code>{{.JobDockerBackend}}</code></td>{{end}}
           <td>
             {{if .RegistrationMessage}}
               {{if and (eq .Status "installed") .GitHubURL}}
-                {{/* title 仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
-                     「点了会去 GitHub」由虚下划线与下一行 GitHub ✓ 的 title 交代 */}}
-                <a class="reg-ok github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer" title="{{.RegistrationMessage}}">{{index $.T "reg.registered"}}</a>
+                {{/* 提示里仍是注册结果原文：那是这一格真正的诊断信息，变成链接不该把它挤掉。
+                     「点了会去 GitHub」由虚下划线与下一行的 GitHub ✓ 交代 */}}
+                <a class="reg-ok github-link has-tip" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">{{index $.T "reg.registered"}}<span class="tip">{{.RegistrationMessage}}</span></a>
               {{else}}
-                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}}" title="{{.RegistrationMessage}}">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}</span>
+                <span class="{{if eq .Status "installed"}}reg-ok{{else}}reg-err{{end}} has-tip" tabindex="0" role="note">{{if eq .Status "installed"}}{{index $.T "reg.registered"}}{{else}}{{index $.T "reg.failed"}}{{end}}<span class="tip">{{.RegistrationMessage}}</span></span>
               {{end}}
             {{else}}
               <span class="github-unknown">—</span>
@@ -198,7 +204,7 @@
             {{else if .GitHubNo}}
               <br><span class="github-no">{{index $.T "github.no"}}</span>
             {{else if .GitHubCheckAt}}
-              <br><span class="github-unknown" title="{{.GitHubCheckError}}">{{index $.T "github.failed"}}</span>
+              <br><span class="github-unknown has-tip" tabindex="0" role="note">{{index $.T "github.failed"}}<span class="tip">{{.GitHubCheckError}}</span></span>
             {{else if .RegistrationMessage}}
               <br><span class="github-unknown">{{index $.T "github.pending"}}</span>
             {{end}}
@@ -211,7 +217,7 @@
             <button type="button" class="btn-start" data-name="{{.Name}}" title="{{index $.T "btn.start_unknown_title"}}">{{index $.T "btn.start"}}</button>
             <button type="button" class="btn-stop" data-name="{{.Name}}" title="{{index $.T "btn.stop_unknown_title"}}">{{index $.T "btn.stop"}}</button>
             {{end}}
-            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}" title="{{.ContainerDrift}}">{{index $.T "btn.recreate"}}</button>{{end}}
+            {{if .ContainerDrift}}<button type="button" class="btn-recreate" data-name="{{.Name}}">{{index $.T "btn.recreate"}}</button>{{end}}
             <button type="button" class="btn-view" data-name="{{.Name}}" title="{{index $.T "btn.view_title"}}">{{index $.T "btn.view"}}</button>
             <button type="button" class="btn-edit" data-name="{{.Name}}" title="{{index $.T "btn.edit_title"}}">{{index $.T "btn.edit"}}</button>
             <button type="button" class="btn-del" data-name="{{.Name}}" title="{{index $.T "btn.del_title"}}">{{index $.T "btn.delete"}}</button>

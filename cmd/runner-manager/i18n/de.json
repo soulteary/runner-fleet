@@ -144,5 +144,7 @@
   "filter.search_placeholder": "Nach Name oder Ziel suchen",
   "filter.clear": "Zurücksetzen",
   "filter.showing": "{{shown}} von {{total}} angezeigt",
-  "filter.no_match": "Kein Runner entspricht dem aktuellen Filter."
+  "filter.no_match": "Kein Runner entspricht dem aktuellen Filter.",
+  "page.lang_label": "Oberflächensprache",
+  "modal.label_drift": "Konfigurationsabweichung"
 }

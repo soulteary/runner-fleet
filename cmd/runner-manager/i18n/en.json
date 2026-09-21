@@ -144,5 +144,7 @@
   "filter.search_placeholder": "Search name or target",
   "filter.clear": "Clear",
   "filter.showing": "Showing {{shown}} of {{total}}",
-  "filter.no_match": "No runners match the current filter."
+  "filter.no_match": "No runners match the current filter.",
+  "page.lang_label": "Interface language",
+  "modal.label_drift": "Config drift"
 }
