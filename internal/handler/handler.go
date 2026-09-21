@@ -36,9 +36,6 @@ var installRunnerScriptPath = "/app/scripts/install-runner.sh"
 // ConfigPath 配置文件路径，由 main 注入
 var ConfigPath string
 
-// Version 由 main 注入，供 /version 使用
-var Version string
-
 // lifecycleContext 为「启停 Runner」这类写操作派生上下文：只保留超时，丢掉请求的取消信号。
 //
 // 不能直接挂在 c.Request().Context() 上。浏览器刷新或跳转会取消在途请求，而容器操作
@@ -265,15 +262,6 @@ func writeRegistrationResult(installDir string, success bool, message string) {
 // Health 健康检查，供负载均衡或 K8s 探针使用
 func Health(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// VersionInfo 返回版本信息（未注入时返回 dev）
-func VersionInfo(c echo.Context) error {
-	v := Version
-	if v == "" {
-		v = "dev"
-	}
-	return c.JSON(http.StatusOK, map[string]string{"version": v})
 }
 
 // ListRunners 列出所有 runner；容器模式下用容器内 Agent 状态覆盖 Running/Status

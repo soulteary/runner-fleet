@@ -84,6 +84,7 @@ jobs:
         run: |
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Extract Docker metadata (tags, labels)
         if: steps.verify.outputs.has_go_source == 'true'
@@ -113,6 +114,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version || 'dev' }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
           platforms: linux/amd64,linux/arm64
           # scope 按 workflow 分开：tag push 会同时触发四个构建 workflow，
           # 而 type=gha 不指定 scope 时都落在 BuildKit 默认的 scope=buildkit 上，
