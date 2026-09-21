@@ -10,6 +10,8 @@
 
 ## 1. デプロイ (Docker)
 
+- **Linux のみ**、`linux/amd64` と `linux/arm64`。Runner が動いているかは `/proc` のプロセステーブルから読みます。ほかの OS ではすべての Runner が「停止中」と報告されるため、起動・停止も自動復帰も機能しません。公開イメージはこの 2 アーキテクチャを対象にしています。
+- **画面は翻訳済み、メッセージは未翻訳。** UI の外枠は 6 言語ありますが、サーバーが返すもの——API メッセージ、トースト、ログ行——は現在すべて中国語です。セルフチェックのログ行には `[preflight …]` という接頭辞が付くので中国語が読めなくても拾えますが、本文は中国語です。これは既知の制約であり、訳し残しではありません。
 - イメージは **Ubuntu** ベースで .NET Core 6.0 の依存関係を含み、**UID 1001** で実行されます。ホストにマウントするディレクトリはこのユーザーが書き込み可能である必要があります（例: `chown 1001:1001 config runners`）。
 - 起動から約 15 秒後に、登録済みだが停止している Runner が自動で起動し、5 分ごとに定期チェックされます。
 
@@ -135,12 +137,56 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.agent_port` | コンテナ内 Agent ポート | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind` 時の DinD ホスト名 | `runner-dind` |
+| `runners.docker_gid` | `job_docker_backend=host-socket` のとき Runner コンテナに追加するホストの docker グループ GID。空または `0` で `docker.sock` から自動検出 | 空（自動検出） |
 | `runners.volume_host_path` | コンテナモード時の runners のホスト絶対パス（必須） | 空 |
+| `runners.items[].name` | 表示名。インストールディレクトリ名でもあり、コンテナモードではコンテナ名。一意で、作成後は変更不可 | 必須 |
+| `runners.items[].path` | `base_path` 配下のサブディレクトリ。空なら `name` を使用 | 空（= `name`） |
+| `runners.items[].target_type` | `org` または `repo` | 必須 |
+| `runners.items[].target` | Organization 名、または `owner/repo` | 必須 |
+| `runners.items[].labels` | カスタムラベル。workflow の `runs-on` がこれで選ぶ | 空 |
 | `runners.items[].container_image` | Runner ごとのイメージ上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.items[].job_docker_backend` | Runner ごとの Docker バックエンド上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.resources` | Runner コンテナのリソース上限（`cpus` / `memory` / `memory_swap` / `pids_limit`）。`docker create` に渡すほか、起動時に `docker update` で既存コンテナにも適用します | 空（無制限） |
 
-上記の一部フィールドは環境変数で上書き可能（`MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` など）。フルコンテナ時は `.env` のみ変更すればよい。`.env.example` を参照。
+上記のうちコンテナデプロイで変更が必要なフィールドはすべて環境変数から与えられるため、フルコンテナ構成は `.env` だけで済みます——下の[環境変数](#環境変数)を参照。
+
+### 環境変数
+
+起動時に一度だけ読まれるため、変更には Manager の再起動が必要です。2 つの名前が同じ設定を指す
+場合は表の順に読まれるので、両方を設定したときは**後の方**が有効になります。
+
+| 変数 | 上書き対象 | 既定値 / 備考 |
+|---|---|---|
+| `MANAGER_PORT`、`SERVER_PORT` | `server.port` | `8080`。compose はコンテナ内の `SERVER_PORT` を固定し `MANAGER_PORT` をそこへマップするので、公開ポートと待ち受けポートは異なってよい |
+| `SERVER_ADDR` | `server.addr` | 空（全インターフェース） |
+| `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`。イメージ内では `/app/runners` |
+| `CONTAINER_MODE` | `runners.container_mode` | `false`。`true` と `1` のみ読む: この変数はコンテナモードを**有効にはできるが無効にはできない**。書き間違いひとつでデプロイの形態が黙って変わらないようにするため |
+| `RUNNER_IMAGE`、`CONTAINER_IMAGE` | `runners.container_image` | 未設定なら `MANAGER_IMAGE` から導出（`:v1.7.1` → `:v1.7.1-runner`）、次に `FLEET_IMAGE_TAG` |
+| `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
+| `VOLUME_HOST_PATH`、`RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | 空。コンテナモードでは必須 |
+| `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
+| `DOCKER_GID` | `runners.docker_gid` | 空 = `docker.sock` から検出 |
+
+以下は設定ファイルに対応項目がありません:
+
+| 変数 | 役割 | 既定値 |
+|---|---|---|
+| `BASIC_AUTH_PASSWORD` | 設定すると Basic 認証が有効になる | 空（認証なし） |
+| `BASIC_AUTH_USER` | Basic 認証のユーザー名 | `admin` |
+| `TRUSTED_ORIGINS` | クロスサイト判定を免除するオリジン（カンマ区切り）。[4. セキュリティと検証](#4-セキュリティと検証)を参照 | 空 |
+| `LOG_LEVEL` | `trace` / `debug` / `info` / `warn` / `error` | `info` |
+| `LOG_FORMAT` | 人が読むなら `console`、ELK や Loki へ送るなら `json`。未知の値は起動を失敗させず `console` に回帰 | `console` |
+| `DOCKER_HOST` | **Manager 自身**が使う Docker デーモン。コンテナモードではホストの socket が必須——DinD を指すと Runner コンテナを作成できない | `unix:///var/run/docker.sock` |
+| `MANAGER_IMAGE` | compose が取得する Manager イメージ。Runner イメージもここから導出される | リリースの tag |
+| `FLEET_IMAGE_TAG` | ほかに決め手がないときの既定 Runner イメージの tag | `v1.7.1` |
+
+`scripts/install-runner.sh` はさらに `RUNNER_VERSION`、`RUNNER_SHA256`、
+`RUNNER_FORCE_REINSTALL` を読みます——[自動インストールと登録](#自動インストールと登録)を参照。
+
+Runner コンテナ内の Agent は `AGENT_TOKEN`、`AGENT_PORT`、`RUNNER_INSTALL_DIR` を読みます。
+3 つとも Manager がコンテナ作成時に注入するもので、手で設定することは通常のデプロイには
+含まれません。
+
 
 **検証**: 名前の重複不可。コンテナモードではコンテナ名の衝突をチェック。`job_docker_backend` は `dind`/`host-socket`/`none` のみ。コンテナモードでコンテナの `base_path` を使う場合は `volume_host_path` 必須。`job_docker_backend` を省略すると `dind`。バックエンド変更後、**停止中**のコンテナは次回起動時に自動で作り直され、**実行中**のものは「設定変更あり」と表示され、その行の「コンテナを再作成」で即座に反映されます——上記「設定変更とコンテナの再作成」を参照。
 
@@ -186,5 +232,50 @@ runners:
 **機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 
 **Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。
+
+---
+
+## 5. 運用
+
+### プローブ
+
+| パス | 用途 |
+|---|---|
+| `GET /health` | 存活。プロセスが生きている限り 200 で、依存チェックは一切しない——設定が壊れていてもマウントが使えなくても 200 のまま。K8s の `livenessProbe` 向け: 再起動はハングしたプロセスへの正しい答えであり、壊れた設定への誤った答えです |
+| `GET /ready` | 就緒。設定が読めない、または `runners.base_path` が無い・書き込めないときは 503——実際に書き込みプローブを行うので、`/health` では見えないディレクトリ所有者の誤りを捕まえます。K8s の `readinessProbe` 向けで、デプロイを変更したあとに確認すべきはこちら |
+
+Basic 認証を有効にしても、この 2 つは認証不要のままです。プローブは資格情報を持てないからです。
+どちらも*どの*チェックが失敗したかは言いません。それはログにあります。
+
+### メトリクス
+
+`GET /metrics` は Prometheus テキストを返します——ルートごとの呼び出し量とレイテンシ。`path`
+ラベルはリクエスト URL ではなく Echo のルートテンプレート（`/api/runners/:name`）なので、
+Runner の数だけラベル値が増えることはありません。
+
+プローブと違い、Basic 認証が有効なとき `/metrics` は**認証を要求します**。全エンドポイントの
+呼び出し量を露出する運用データであり、`/api` より公開される理由がないからです。スクレイプ設定は
+それに合わせてください:
+
+```yaml
+scrape_configs:
+  - job_name: runner-fleet
+    static_configs:
+      - targets: ['runner-manager:8080']
+    basic_auth:
+      username: admin
+      password: <BASIC_AUTH_PASSWORD>
+```
+
+### バージョンとログ
+
+`GET /version` はバージョンだけを返します。ビルド詳細は意図的に含めていません: `go_version` が
+あると、公表済みの Go ランタイム CVE を、あなたが実行している正確なランタイムに結び付けられて
+しまいます。`runner-manager -version` は commit、ビルド日時、Go バージョン、プラットフォームを
+表示しますが、こちらはホスト上で実行するもので外部には出ません。
+
+ログは `LOG_LEVEL` と `LOG_FORMAT` で制御します。ELK や Loki へ送るなら `LOG_FORMAT=json`。
+起動時セルフチェックは項目ごとに 1 行を出力し、各行の先頭は `[preflight …]` ——
+[トラブルシューティング](#トラブルシューティング)全体で使う grep のアンカーがこれです。
 
 [← プロジェクトホームへ](../../README.md)

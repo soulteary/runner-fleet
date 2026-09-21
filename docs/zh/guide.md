@@ -10,6 +10,8 @@
 
 ## 一、部署（Docker）
 
+- **仅支持 Linux**，`linux/amd64` 与 `linux/arm64`。Runner 是否在运行是查 `/proc` 的进程表得来的；换别的操作系统上每个 Runner 都会读成「未运行」，启停与自动拉起因而都无法工作。已发布镜像覆盖这两种架构。
+- **界面翻译了，消息没有。** 界面外壳有六种语言，但服务端说出来的每一句——API 消息、提示条、日志——目前只有中文。自检日志的行首是 `[preflight …]`，不认识汉字也能把它们捞出来，但正文是中文。这是已知的边界，不是没译完。
 - 镜像基于 **Ubuntu**，预装 .NET Core 6.0 依赖；以 **UID 1001** 运行，宿主机挂载目录需对该用户可写（如 `chown 1001:1001 config runners`）。
 - 启动约 15 秒后自动拉起已注册未运行的 Runner，并每 5 分钟定时检查。
 
@@ -135,12 +137,55 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.agent_port` | 容器内 Agent 端口 | `8081` |
 | `runners.job_docker_backend` | Job 内 Docker：`dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | `job_docker_backend=dind` 时 DinD 主机名 | `runner-dind` |
+| `runners.docker_gid` | `job_docker_backend=host-socket` 时给 Runner 容器追加的宿主机 docker 组 GID；留空或 `0` 表示从 `docker.sock` 自动探测 | 空（自动探测） |
 | `runners.volume_host_path` | 容器模式下宿主机 runners 绝对路径（必填） | 空 |
+| `runners.items[].name` | 显示名称，同时是安装目录名、容器模式下的容器名。唯一，创建后不可改 | 必填 |
+| `runners.items[].path` | `base_path` 下的子目录；留空则用 `name` | 空（= `name`） |
+| `runners.items[].target_type` | `org` 或 `repo` | 必填 |
+| `runners.items[].target` | 组织名，或 `owner/repo` | 必填 |
+| `runners.items[].labels` | 自定义标签；workflow 的 `runs-on` 按它挑 Runner | 空 |
 | `runners.items[].container_image` | 按 Runner 覆盖容器镜像（仅容器模式），留空回落全局 | 空 |
 | `runners.items[].job_docker_backend` | 按 Runner 覆盖 Job Docker 后端（仅容器模式），留空回落全局 | 空 |
 | `runners.resources` | Runner 容器资源上限（`cpus` / `memory` / `memory_swap` / `pids_limit`），透传给 `docker create`；启动时通过 `docker update` 对存量容器同样生效 | 空（不限制） |
 
-以上部分字段可通过环境变量覆盖（如 `MANAGER_PORT`、`CONTAINER_MODE`、`VOLUME_HOST_PATH`、`JOB_DOCKER_BACKEND` 等），便于全容器部署时仅改 `.env` 而无需改 config/config.yaml，见 `.env.example`。
+以上凡是容器部署需要改的字段，都可以改从环境变量来，所以全容器部署只改 `.env` 就够——见下面的[环境变量](#环境变量)。
+
+### 环境变量
+
+只在启动时读一次，改完要重启 Manager。两个名字映射到同一项设置时按下表顺序读取，
+所以两个都设了的话，**后一个**生效。
+
+| 变量 | 覆盖 | 默认值 / 说明 |
+|---|---|---|
+| `MANAGER_PORT`、`SERVER_PORT` | `server.port` | `8080`。compose 把容器内的 `SERVER_PORT` 钉死、再把 `MANAGER_PORT` 映射过去，所以对外端口可以与监听端口不同 |
+| `SERVER_ADDR` | `server.addr` | 空（所有网卡） |
+| `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`；镜像内为 `/app/runners` |
+| `CONTAINER_MODE` | `runners.container_mode` | `false`。只认 `true` 与 `1`：这个变量只能把容器模式**打开，不能关闭**，免得一个写错的取值静默换掉一套部署的运行形态 |
+| `RUNNER_IMAGE`、`CONTAINER_IMAGE` | `runners.container_image` | 都不设时由 `MANAGER_IMAGE` 推导（`:v1.7.1` → `:v1.7.1-runner`），再退到 `FLEET_IMAGE_TAG` |
+| `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
+| `VOLUME_HOST_PATH`、`RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | 空；容器模式下必填 |
+| `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
+| `DOCKER_GID` | `runners.docker_gid` | 空 = 从 `docker.sock` 探测 |
+
+下面这些在配置文件里没有对应项：
+
+| 变量 | 作用 | 默认值 |
+|---|---|---|
+| `BASIC_AUTH_PASSWORD` | 设了就启用 Basic Auth | 空（不鉴权） |
+| `BASIC_AUTH_USER` | Basic Auth 用户名 | `admin` |
+| `TRUSTED_ORIGINS` | 免除跨站检查的来源，逗号分隔；见[四、安全与校验](#四安全与校验) | 空 |
+| `LOG_LEVEL` | `trace` / `debug` / `info` / `warn` / `error` | `info` |
+| `LOG_FORMAT` | `console` 给人读，`json` 给 ELK、Loki；取值不认识时回落 `console`，不会导致启动失败 | `console` |
+| `DOCKER_HOST` | **Manager 自己**用哪个 Docker daemon。容器模式必须用宿主机 socket——指向 DinD 会让 Runner 容器建不出来 | `unix:///var/run/docker.sock` |
+| `MANAGER_IMAGE` | compose 拉哪个 Manager 镜像；Runner 镜像也由它推导 | 发布版本的 tag |
+| `FLEET_IMAGE_TAG` | 其它都没决定时，默认 Runner 镜像的 tag | `v1.7.1` |
+
+`scripts/install-runner.sh` 另外还读 `RUNNER_VERSION`、`RUNNER_SHA256` 与
+`RUNNER_FORCE_REINSTALL`——见[自动安装与注册](#自动安装与注册)。
+
+Runner 容器内的 Agent 读 `AGENT_TOKEN`、`AGENT_PORT` 与 `RUNNER_INSTALL_DIR`。这三个都由
+Manager 在创建容器时注入，正常部署里不需要手工设置。
+
 
 **校验**：不得同名；容器模式会校验名称映射后容器名冲突。`job_docker_backend` 仅允许 `dind`/`host-socket`/`none`；容器模式且 `base_path` 为容器内路径时必填 `volume_host_path`。未配 `job_docker_backend` 视为 `dind`。改后端后：**已停止**的容器在下次启动时自动重建，**正在运行**的会标出「配置已变更」，点该行「重建容器」立即生效——详见上文「改了配置与容器重建」。
 
@@ -186,5 +231,46 @@ runners:
 **敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
 
 **Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep '\[preflight'`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
+
+---
+
+## 五、运维
+
+### 探针
+
+| 路径 | 用途 |
+|---|---|
+| `GET /health` | 存活。进程活着就恒为 200，不挂任何依赖检查——配置坏了、挂载不可用时它照样 200。给 K8s `livenessProbe` 用：进程卡死该重启，配置写错重启治不好 |
+| `GET /ready` | 就绪。配置读不了，或 `runners.base_path` 缺失、不可写时返回 503——它会真写一个探测文件，所以能发现 `/health` 看不见的目录属主问题。给 K8s `readinessProbe` 用，也是改完部署后该查的那一个 |
+
+启用 Basic Auth 时这两个仍然免鉴权，因为探针带不了凭据。两者都不会说是**哪一项**没过，
+那在日志里。
+
+### 指标
+
+`GET /metrics` 吐 Prometheus 文本——按路由的调用量与延迟。`path` 标签取的是 Echo 的路由模板
+（`/api/runners/:name`）而不是请求 URL，所以一队 Runner 不会变成一队标签值。
+
+与探针不同，启用 Basic Auth 后 `/metrics` **需要鉴权**：它会吐出全部接口的调用量，属于运维
+数据，没理由比 `/api` 更公开。抓取任务要按此配置：
+
+```yaml
+scrape_configs:
+  - job_name: runner-fleet
+    static_configs:
+      - targets: ['runner-manager:8080']
+    basic_auth:
+      username: admin
+      password: <BASIC_AUTH_PASSWORD>
+```
+
+### 版本与日志
+
+`GET /version` 只返回版本号。构建细节是刻意不放的：`go_version` 能让任何人把一条已公布的 Go
+运行时 CVE 对到你正在跑的确切版本上。`runner-manager -version` 会打出 commit、构建时间、Go
+版本与平台——那条在宿主机上执行，不对外。
+
+日志由 `LOG_LEVEL` 与 `LOG_FORMAT` 控制；要送进 ELK 或 Loki 时设 `LOG_FORMAT=json`。启动自检
+每项一行，行首都是 `[preflight …]`——[排障](#排障)一节里的 grep 锚点就是它。
 
 [← 返回项目首页](../../README.md)

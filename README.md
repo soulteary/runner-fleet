@@ -6,6 +6,8 @@
 
 HTTP management UI built with Golang Echo to view and manage multiple self-hosted GitHub Actions Runners on one machine. YAML-based config, no database required.
 
+**Linux only** (`linux/amd64`, `linux/arm64`): runner liveness is read from `/proc`. The UI is translated into six languages, but server-side messages and logs are currently Chinese only — see the [User Guide](docs/guide.md#1-deployment-docker).
+
 ![](.github/assets/preview.jpg)
 
 ## Highlights
@@ -40,7 +42,7 @@ docker network create runner-net 2>/dev/null || true
 docker compose up -d
 ```
 
-Open http://localhost:8080. The default image tag is the stable release (e.g. v1.7.1). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Health: `GET /health`; version: `GET /version`.
+Open http://localhost:8080. The default image tag is the stable release (e.g. v1.7.1). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Probes, Prometheus metrics and logging: [Operations](docs/guide.md#5-operations) — `GET /health` (liveness), `GET /ready` (readiness), `GET /metrics`, `GET /version`.
 
 Two copy-and-go deployments live in [`examples/deploy/`](examples/deploy/): `standalone/` (single container, runner processes inside the Manager — `docker run` or Compose) and `fleet/` (one container per runner, image and toolchain caches shared, build caches isolated).
 

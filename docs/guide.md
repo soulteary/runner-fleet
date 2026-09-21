@@ -10,6 +10,8 @@ Deployment, configuration, adding runners, and security are covered here. For co
 
 ## 1. Deployment (Docker)
 
+- **Linux only**, `linux/amd64` and `linux/arm64`. Whether a runner is running is read from the process table through `/proc`; on any other OS every runner reports "not running", so start/stop and the self-heal sweep cannot work. Published images cover those two architectures.
+- **The interface is translated; the messages are not.** The UI shell has six languages, but everything the server says back — API messages, toasts and log lines — is Chinese only. Self-check log lines are prefixed `[preflight …]` so you can find them without reading Chinese, but their text is Chinese. A known limit, not an unfinished translation.
 - Image is **Ubuntu**-based with .NET Core 6.0 dependencies; runs as **UID 1001**—host-mounted dirs must be writable by that user (e.g. `chown 1001:1001 config runners`).
 - ~15 seconds after start, registered but stopped runners are auto-started; periodic check every 5 minutes.
 
@@ -135,12 +137,55 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.agent_port` | In-container Agent port | `8081` |
 | `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
 | `runners.dind_host` | DinD hostname when `job_docker_backend=dind` | `runner-dind` |
+| `runners.docker_gid` | Host docker group GID added to runner containers when `job_docker_backend=host-socket`; empty or `0` detects it from `docker.sock` | empty (auto-detect) |
 | `runners.volume_host_path` | Host absolute path to runners in container mode (required) | empty |
+| `runners.items[].name` | Display name; also the install directory name and, in container mode, the container name. Unique, and read-only once created | required |
+| `runners.items[].path` | Subdirectory under `base_path`; empty uses `name` | empty (= `name`) |
+| `runners.items[].target_type` | `org` or `repo` | required |
+| `runners.items[].target` | Org name, or `owner/repo` | required |
+| `runners.items[].labels` | Custom labels; a workflow's `runs-on` selects on them | empty |
 | `runners.items[].container_image` | Per-runner image override (container mode); falls back to the global value | empty |
 | `runners.items[].job_docker_backend` | Per-runner Docker backend override (container mode); falls back to the global value | empty |
 | `runners.resources` | Resource limits for runner containers (`cpus` / `memory` / `memory_swap` / `pids_limit`), passed to `docker create` and applied to existing containers via `docker update` on start | empty (unlimited) |
 
-Some fields above can be overridden by environment variables (e.g. `MANAGER_PORT`, `CONTAINER_MODE`, `VOLUME_HOST_PATH`, `JOB_DOCKER_BACKEND`), so you can run full-container with only `.env` changes; see `.env.example`.
+Every field above that a container deployment needs to change can also come from the environment, so a full-container setup is `.env` only — see [Environment variables](#environment-variables) below.
+
+### Environment variables
+
+Read once at startup, so changing one needs a Manager restart. Where two names map to the same
+setting they are read in the order listed, so the **second** one wins if both are set.
+
+| Variable | Overrides | Default / note |
+|---|---|---|
+| `MANAGER_PORT`, `SERVER_PORT` | `server.port` | `8080`. Compose pins `SERVER_PORT` inside the container and maps `MANAGER_PORT` to it, so the published port can differ from the listening one |
+| `SERVER_ADDR` | `server.addr` | empty (all interfaces) |
+| `RUNNERS_BASE_PATH` | `runners.base_path` | `./runners`; `/app/runners` in the image |
+| `CONTAINER_MODE` | `runners.container_mode` | `false`. Only `true` and `1` are read: this variable turns container mode **on, never off**, so one stray value cannot silently change a deployment's shape |
+| `RUNNER_IMAGE`, `CONTAINER_IMAGE` | `runners.container_image` | Unset: derived from `MANAGER_IMAGE` (`:v1.7.1` → `:v1.7.1-runner`), else from `FLEET_IMAGE_TAG` |
+| `CONTAINER_NETWORK` | `runners.container_network` | `runner-net` |
+| `VOLUME_HOST_PATH`, `RUNNERS_VOLUME_HOST_PATH` | `runners.volume_host_path` | empty; required in container mode |
+| `JOB_DOCKER_BACKEND` | `runners.job_docker_backend` | `dind` |
+| `DOCKER_GID` | `runners.docker_gid` | empty = detect from `docker.sock` |
+
+These have no config-file counterpart:
+
+| Variable | What it does | Default |
+|---|---|---|
+| `BASIC_AUTH_PASSWORD` | Setting it enables Basic Auth | empty (no auth) |
+| `BASIC_AUTH_USER` | Basic Auth user name | `admin` |
+| `TRUSTED_ORIGINS` | Comma-separated origins exempt from the cross-site check; see [4. Security and validation](#4-security-and-validation) | empty |
+| `LOG_LEVEL` | `trace` / `debug` / `info` / `warn` / `error` | `info` |
+| `LOG_FORMAT` | `console` for people, `json` for ELK or Loki; an unrecognized value falls back to `console` rather than failing startup | `console` |
+| `DOCKER_HOST` | Which Docker daemon the **Manager itself** uses. Container mode needs the host socket — pointing this at DinD breaks runner creation | `unix:///var/run/docker.sock` |
+| `MANAGER_IMAGE` | Which Manager image Compose pulls; the runner image is derived from it | the release tag |
+| `FLEET_IMAGE_TAG` | Tag for the default runner image when nothing else decides it | `v1.7.1` |
+
+`scripts/install-runner.sh` additionally reads `RUNNER_VERSION`, `RUNNER_SHA256` and
+`RUNNER_FORCE_REINSTALL` — see [Auto install & register](#auto-install--register).
+
+Inside a runner container the Agent reads `AGENT_TOKEN`, `AGENT_PORT` and `RUNNER_INSTALL_DIR`.
+The Manager sets all three when it creates the container; setting them by hand is not part of
+any normal deployment.
 
 **Validation**: No duplicate names; container mode checks for container name conflicts. `job_docker_backend` only allows `dind`/`host-socket`/`none`; in container mode with container `base_path`, `volume_host_path` is required. Omitted `job_docker_backend` defaults to `dind`. After changing the backend, a **stopped** container is rebuilt on its next start, while a **running** one is marked "config changed" and the row's "Recreate" button applies it immediately — see "Config changes and container rebuilds" above.
 
@@ -186,5 +231,50 @@ Multiple runners per machine: use separate subdirs.
 **Sensitive files**: config/config.yaml and .env are in `.gitignore`. For each runner's `.github_check_token` use `chmod 600`; add `**/.github_check_token` to `.gitignore` if under version control.
 
 **Runner directory permissions**: each runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams` there — the RSA private key the runner authenticates to GitHub with — and actions/runner sets no Unix permissions on it, so the directory mode is what keeps other local users on the host from reading it and impersonating that runner. Directories created by earlier versions are still 0755; the startup self-test names them (`docker compose logs runner-manager | grep '\[preflight'`) with the exact `chmod 700` to run. It does not change them for you: under a UID mismatch (Manager as root, container as app(1001)) tightening a directory breaks a deployment that currently works, so look before you run it.
+
+---
+
+## 5. Operations
+
+### Probes
+
+| Path | Purpose |
+|---|---|
+| `GET /health` | Liveness. 200 for as long as the process is up, with no dependency checks — it stays 200 when the config is broken or the mount is unusable. For a K8s `livenessProbe`: a restart is the right answer to a hung process, and the wrong one to a bad config |
+| `GET /ready` | Readiness. 503 when the config cannot be loaded, or when `runners.base_path` is missing or not writable — it write-probes, so it catches the directory-ownership mistake that `/health` cannot see. For a K8s `readinessProbe`, and the one to check after changing a deployment |
+
+Both stay unauthenticated when Basic Auth is on, because a probe carries no credentials.
+Neither reports *which* check failed; that is in the log.
+
+### Metrics
+
+`GET /metrics` serves Prometheus text — per-route call volume and latency. The `path` label is
+Echo's route template (`/api/runners/:name`), not the request URL, so a fleet of runners does
+not become a fleet of label values.
+
+Unlike the probes, `/metrics` **requires auth** when Basic Auth is enabled: it exposes the call
+volume of every endpoint, which is operational data with no reason to be more public than
+`/api`. Configure the scrape job for it:
+
+```yaml
+scrape_configs:
+  - job_name: runner-fleet
+    static_configs:
+      - targets: ['runner-manager:8080']
+    basic_auth:
+      username: admin
+      password: <BASIC_AUTH_PASSWORD>
+```
+
+### Version and logs
+
+`GET /version` returns the version and nothing else. Build details are deliberately not there:
+`go_version` would let anyone match a published Go runtime CVE to the exact runtime you are
+running. `runner-manager -version` prints the commit, build date, Go version and platform —
+that one runs on the host and is not exposed.
+
+`LOG_LEVEL` and `LOG_FORMAT` control the log; set `LOG_FORMAT=json` when shipping to ELK or
+Loki. The startup self-check writes one line per item, each prefixed `[preflight …]` — that
+prefix is the grep anchor used throughout [Troubleshooting](#troubleshooting).
 
 [← Back to project home](../README.md)

@@ -8,10 +8,11 @@
 
 **审计基准**：`main` @ `0e812a7`，最新发布 v1.7.1。<!-- version-check-ignore -->
 
-**执行状态**：**第 1 批已完成，第 5 节的五条检查已全部落地**（§1.1、§1.2、§1.4、§1.5、§2.1、
-§5.1–§5.5）。第 2 批起未开始。每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、
-且只有那一条会红——记录在 §5 各条末尾。下面的问题描述保留审计当时的原文，
-改掉它们会让「为什么要加这条检查」失去凭据；已修的条目在标题上标注。
+**执行状态**：**第 1、2 批已完成，第 5 节的五条检查已全部落地**（§1.1–§1.5、§2.1、
+§2.4–§2.7、§5.1–§5.5）。第 3 批起未开始，§1.3 只做到「如实写明边界」那一半。
+每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、且只有那一条会红。
+下面的问题描述保留审计当时的原文，改掉它们会让「为什么要加这条检查」失去凭据；
+已修的条目在标题上标注。
 
 ---
 
@@ -93,7 +94,7 @@ docker compose logs runner-manager | grep 自检
 `internal/docsconsistency/preflight_marker_test.go` 守文档里让人 grep 的词就是这个常量。
 **日志正文仍是中文**——那是 §1.3，这里只解决「怎么把这些行捞出来」。
 
-### 1.3 API 提示语不跟随界面语言
+### 1.3 API 提示语不跟随界面语言  ⚠️ 已写明边界，未补 i18n
 
 界面有 152 个 i18n 键 × 6 种语言（`cmd/runner-manager/i18n/`，且 `i18n_test.go` 交叉校验键集），
 但那只覆盖模板里的静态文案。用户操作后真正读到的那句话来自服务端，是中文硬编码：
@@ -167,7 +168,7 @@ and GitHub」一节），译文一份没动；`797959a` 作为补译把 `### 删
 
 **修法**：先补那一行（5 分钟），再把检查扩到表格行数与代码块（见 §5.2）。
 
-### 2.2 examples/ 只有中文，而英文 README 直接往那儿送人
+### 2.2 examples/ 只有中文，而英文 README 直接往那儿送人  ⏳ 待第 7 节决策
 
 | 文件 | 行数 | 语言 | 谁会点进来 |
 |---|---|---|---|
@@ -184,13 +185,13 @@ signal: killed`、GitHub 上只出现一个十六进制名字的 Runner、`_work
 从英文 README 一路点进来的人
 被送进中文文档后，再被送回中文文档。
 
-### 2.3 用户会复制走的两个模板文件只有中文
+### 2.3 用户会复制走的两个模板文件只有中文  ⏳ 待第 7 节决策
 
 `config.yaml.example`（每个用户第一步 `cp` 走）与 `.env.example`（容器模式的主要配置面）
 全文中文注释。英文用户 `cp config.yaml.example config/config.yaml` 之后，得到的是一份
 自己读不懂的配置文件——而 §1.4 里那条指向 `docs/config.md` 的「详细字段说明」还是断的。
 
-### 2.4 环境变量没有一处完整清单
+### 2.4 环境变量没有一处完整清单  ✅ 已修
 
 代码里从环境变量读的配置项与文档覆盖情况：
 
@@ -206,7 +207,7 @@ signal: killed`、GitHub 上只出现一个十六进制名字的 Runner、`_work
 `guide.md:157` 只写了「Some fields above can be overridden by environment variables
 (e.g. …); see `.env.example`」——把人指向一份中文文件，而那份文件本身还漏了三个变量。
 
-### 2.5 配置字段表不全
+### 2.5 配置字段表不全  ✅ 已修
 
 `guide.md` 第 2 节的表覆盖了全局字段，但缺：
 
@@ -216,7 +217,7 @@ signal: killed`、GitHub 上只出现一个十六进制名字的 Runner、`_work
 结果是：想手写 `config.yaml` 的人必须去读 `config.yaml.example`（中文）或
 `internal/config/config.go` 的 struct tag。
 
-### 2.6 运维接口写在了贡献者文档里
+### 2.6 运维接口写在了贡献者文档里  ✅ 已修
 
 `/ready`、`/metrics`、`/version` 三个端点只在 `development.md`（"This doc is for
 contributors: local build and debug"）里有表格说明。但它们的读者是运维：
@@ -225,7 +226,7 @@ contributors: local build and debug"）里有表格说明。但它们的读者�
 
 README 的一句 "Health: `GET /health`; version: `GET /version`" 也停在 v1.7.0 之前的状态。 <!-- version-check-ignore -->
 
-### 2.7 平台限制没写进面向用户的文档
+### 2.7 平台限制没写进面向用户的文档  ✅ 已修
 
 `development.md:139` 说得很清楚：
 
@@ -397,7 +398,7 @@ Mutation：新增一份未登记策略的 `examples/*/README.md` → 红。
 **验收**：在干净机器上逐条复制 `guide.md` 第 1 节的命令，全程零报错，
 `curl localhost:8080/health` 返回 200。
 
-### 第 2 批：补内容缺口（2～3 天）
+### 第 2 批：补内容缺口  ✅ 已完成
 
 6. §2.4 `guide.md` 新增「环境变量参考」表，收齐 12 个变量（含两个别名与 `AGENT_PORT`），六语言
 7. §2.5 配置表补 `docker_gid` 与 `items[]` 五个字段
@@ -405,6 +406,13 @@ Mutation：新增一份未登记策略的 `examples/*/README.md` → 红。
    含 Prometheus `basic_auth` 抓取示例；README 的一行同步
 9. §2.7 README 与 `guide.md` 开头写明：Linux only、linux/amd64 + linux/arm64
 10. §1.3 如实写明服务端消息与日志的语言边界（在补 i18n 之前，这是诚实的过渡态）
+
+**已落地**：§2.4 与 §2.5 各自顺手长出一条检查，理由相同——补一张表只解决这一次。
+`internal/docsconsistency/envvars_test.go` 要求代码读的每个环境变量在六份 guide 里都查得到
+（21 个直接调用点 + 端口那两个循环读的 + install 脚本的三个）；
+`configfields_test.go` 对 `config.go` 的 24 个 yaml 字段做同样的事。
+两者都按标识符边界匹配而不是子串——第一版用 `strings.Contains`，
+把译文里的变量名写长一个字母测试纹丝不动，那是自己踩出来的坑。
 
 ### 第 3 批：语言与结构（1 周，含一次拍板；其中第 15 项的五条检查已提前落地）
 
