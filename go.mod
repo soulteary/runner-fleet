@@ -12,7 +12,7 @@ require (
 	github.com/soulteary/metrics-kit/v3 v3.0.0
 	github.com/soulteary/preflight-kit v1.0.0
 	github.com/soulteary/procfind-kit v1.0.0
-	github.com/soulteary/secure-kit/v2 v2.0.0
+	github.com/soulteary/secure-kit/v2 v2.1.0
 	github.com/soulteary/version-kit/v4 v4.0.0
 	go.yaml.in/yaml/v3 v3.0.5
 )

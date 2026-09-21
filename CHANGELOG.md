@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dependencies
+
+- **`secure-kit/v2` v2.0.0 → v2.1.0.** Nothing in this repository changed, and nothing had to: the module path keeps its `/v2` suffix (same major), and the library files are byte-identical between the two tags — the four symbols called here, `ConstantTimeEqual`, `RandomHex`, `RandomString` and `CharsetAlphanumericLower`, are untouched, so `cmd/runner-manager`, `cmd/runner-agent`, `internal/runner/agenttoken.go` and `internal/handler/handler.go` keep the imports they had. What v2.1.0 changes is the kit's own test suite: it dropped testify for the standard library, which takes `github.com/stretchr/testify` and `go.yaml.in/yaml/v3` out of *its* `go.mod`. `go mod tidy` in an importing module walks the tests of the packages it imports, so those two used to reach this module's graph through a test binary this repository never builds.
+- That last part has no effect on our `go.sum`, which is worth writing down rather than leaving to read as a missed `tidy`: `go.yaml.in/yaml/v3` is a direct dependency here — `internal/config` imports it — and testify still arrives by exactly the route secure-kit just closed, through `echo/v4`'s tests. So the diff is the one version line in `go.mod` plus secure-kit's own two hash lines, and nothing else.
+
 ### Added
 
 - **Server-side messages follow the interface language.** The UI had six languages, but everything the server said back — every toast, every error — was a hardcoded Chinese string, so switching to English gave you an English shell and Chinese messages. `handler.go`'s 53 literals are now 36 `api.*` keys resolved through `tr`/`trf`, which sit between the `resolveLang` and `I18nLoader` that already existed. The plumbing was there; it had simply never been connected to the API side.
