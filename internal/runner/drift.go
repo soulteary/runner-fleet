@@ -11,14 +11,12 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
+	docker "github.com/soulteary/docker-kit"
 	"github.com/soulteary/runner-fleet/internal/config"
 )
 
@@ -145,94 +143,24 @@ func (s containerSpec) createArgs() ([]string, error) {
 }
 
 // containerFacts docker inspect 中与创建参数有关的实际值
-type containerFacts struct {
-	Running  bool
-	Status   string
-	ImageRef string // 创建时写下的镜像引用
-	ImageID  string // 实际使用的镜像 ID，同名 tag 重新构建后会变
-	Binds    []string
-	Env      []string
-	Networks []string
-	// NetworkMode 是 docker create --network 传进去的那个，与事后 connect 上来的区分开
-	NetworkMode string
-	GroupAdd    []string
-	Labels      map[string]string
-}
-
-// dockerInspectRaw 只取需要的字段，其余忽略
-type dockerInspectRaw struct {
-	Image string `json:"Image"`
-	State struct {
-		Status  string `json:"Status"`
-		Running bool   `json:"Running"`
-	} `json:"State"`
-	Config struct {
-		Image  string            `json:"Image"`
-		Env    []string          `json:"Env"`
-		Labels map[string]string `json:"Labels"`
-	} `json:"Config"`
-	HostConfig struct {
-		Binds       []string `json:"Binds"`
-		GroupAdd    []string `json:"GroupAdd"`
-		NetworkMode string   `json:"NetworkMode"`
-	} `json:"HostConfig"`
-	NetworkSettings struct {
-		Networks map[string]json.RawMessage `json:"Networks"`
-	} `json:"NetworkSettings"`
-}
+// containerFacts 是 docker inspect 读出来的既成事实。
+//
+// 类型别名而非新类型：它**就是** docker.Facts，既有用例里那些直接构造
+// containerFacts{...} 的地方一行不用改，也不会出现「两个长得一样但不能互相赋值」
+// 的类型。字段与原先逐个对应（含 NetworkMode 与 Networks 的分别收集）。
+type containerFacts = docker.Facts
 
 // inspectRunnerContainer 取容器实际状态与创建参数；容器不存在时返回 (nil, nil)
 func inspectRunnerContainer(ctx context.Context, containerName string) (*containerFacts, error) {
-	out, err := dockerCmd(ctx, "inspect", containerName)
-	if err != nil {
-		if containerNotFound(out) {
-			return nil, nil
-		}
-		return nil, dockerCmdError("docker inspect", out, err)
-	}
-	return parseInspect(out)
+	return docker.Inspect(ctx, containerName)
 }
 
 // parseInspect 解析 docker inspect 的输出（数组，取第一项）
-func parseInspect(out []byte) (*containerFacts, error) {
-	var raw []dockerInspectRaw
-	if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, fmt.Errorf("解析 docker inspect 输出失败: %w", err)
-	}
-	if len(raw) == 0 {
-		return nil, nil
-	}
-	c := raw[0]
-	facts := &containerFacts{
-		Running:  c.State.Running,
-		Status:   c.State.Status,
-		ImageRef: c.Config.Image,
-		ImageID:  c.Image,
-		Binds:    c.HostConfig.Binds,
-		Env:      c.Config.Env,
-		GroupAdd: c.HostConfig.GroupAdd,
-		Labels:   c.Config.Labels,
-	}
-	facts.NetworkMode = c.HostConfig.NetworkMode
-	// 网络名在 NetworkMode 与 NetworkSettings.Networks 里都能拿到，两处都收
-	if c.HostConfig.NetworkMode != "" {
-		facts.Networks = append(facts.Networks, c.HostConfig.NetworkMode)
-	}
-	for name := range c.NetworkSettings.Networks {
-		if name != c.HostConfig.NetworkMode {
-			facts.Networks = append(facts.Networks, name)
-		}
-	}
-	return facts, nil
-}
+func parseInspect(out []byte) (*containerFacts, error) { return docker.ParseInspect(out) }
 
 // resolveImageID 取镜像引用当前对应的镜像 ID；镜像不在本地时返回空串（此时只比对引用本身，不去拉取）
 func resolveImageID(ctx context.Context, imageRef string) string {
-	out, err := dockerCmd(ctx, "image", "inspect", "-f", "{{.Id}}", imageRef)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return docker.ImageID(ctx, imageRef)
 }
 
 // imageIDCache 缓存「镜像引用 → 镜像 ID」。
@@ -242,47 +170,28 @@ func resolveImageID(ctx context.Context, imageRef string) string {
 // 短暂过期只会让「配置已变更」徽标晚几秒出现。
 //
 // 启停路径不走这个缓存：那里刚重新构建完就点「启动」是常见操作，读到旧 ID 会让重建不发生。
-var imageIDCache sync.Map // imageRef -> imageIDEntry
+// docker-kit 在 ImageIDCache 的注释里把这条写成了使用禁忌，含义与这里一致。
+var imageIDCache = &docker.ImageIDCache{} // TTL 取默认的 10 秒
 
-type imageIDEntry struct {
-	id string
-	at time.Time
-}
-
-const imageIDCacheTTL = 10 * time.Second
+// resetImageIDCache 丢掉全部缓存条目，供用例隔离用。
+// docker-kit 的 ImageIDCache 没有单条删除，整只换掉即可——它内部是 sync.Map，
+// 换成新的比暴露一个只有测试用的 Delete 更省事，语义也更强（连别的键一起清）。
+func resetImageIDCache() { imageIDCache = &docker.ImageIDCache{} }
 
 // cachedImageID 带 TTL 的镜像 ID 查询，供状态展示使用
 func cachedImageID(ctx context.Context, imageRef string) string {
-	if v, ok := imageIDCache.Load(imageRef); ok {
-		if e := v.(imageIDEntry); time.Since(e.at) < imageIDCacheTTL {
-			return e.id
-		}
-	}
-	id := resolveImageID(ctx, imageRef)
-	imageIDCache.Store(imageRef, imageIDEntry{id: id, at: time.Now()})
-	return id
+	return imageIDCache.Get(ctx, imageRef)
 }
 
-// envValue 从 docker inspect 的 Env 里取某个变量的值
+// envValue 从 docker inspect 的 Env 里取某个变量的值。
+// 保留「取切片」的签名：本包与用例都是拿着 Env 切片调的，而 kit 上挂的是 Facts 的方法。
 func envValue(env []string, key string) (string, bool) {
-	prefix := key + "="
-	for _, e := range env {
-		if strings.HasPrefix(e, prefix) {
-			return strings.TrimPrefix(e, prefix), true
-		}
-	}
-	return "", false
+	return (&docker.Facts{Env: env}).EnvValue(key)
 }
 
 // bindSource 从 Binds 里找挂到 dest 的宿主机路径
 func bindSource(binds []string, dest string) (string, bool) {
-	for _, b := range binds {
-		parts := strings.Split(b, ":")
-		if len(parts) >= 2 && parts[1] == dest {
-			return parts[0], true
-		}
-	}
-	return "", false
+	return (&docker.Facts{Binds: binds}).BindSource(dest)
 }
 
 // driftReason 比对已有容器与期望形态，返回差异说明；"" 表示一致。
