@@ -48,9 +48,22 @@ ENV PATH="${PATH}:${FLUTTER_HOME}/bin"
 # 容器以 UID 1001 运行，而这两个目录在 Job 里都会被写入（license 标记、缓存、下载的组件）
 RUN chown -R 1001:1001 "${ANDROID_HOME}" "${FLUTTER_HOME}"
 
+# safe.directory 走 --system（/etc/gitconfig），不能用 --global。
+# --global 写的是 $HOME/.gitconfig，而容器模式下 app 的 HOME 就是 /runner —— Manager
+# 建容器时正是把宿主机目录挂在这里，镜像里那份 .gitconfig 在每个 Job 里都被盖掉，
+# 等于白写。/etc/gitconfig 在挂载点之外，才真的留得住。
+#
+# 这一条在构建期其实用不上（下面切到 app 之后，FLUTTER_HOME 已经 chown 给 1001，
+# 属主与 euid 相同，git 不会报 dubious ownership）。它是给 Job 里以 root 跑 flutter
+# 的情况准备的——基础镜像默认带免密 sudo，而 `sudo -i` 这类丢掉 SUDO_UID 的用法，
+# git 就会拒绝这个 1001 属主的仓库。
+RUN git config --system --add safe.directory "${FLUTTER_HOME}"
+
 USER app
 
-# 预热必须在切回 app 之后，否则产物属主仍是 root
-RUN git config --global --add safe.directory "${FLUTTER_HOME}" \
-    && flutter precache --android \
+# 预热必须在切回 app 之后，否则产物属主仍是 root。
+# 产物落在 ${FLUTTER_HOME}/bin/cache（/opt 下，挂载点之外，所有 Job 共用这一份）；
+# 而 Job 里 flutter pub get 的包走 $PUB_CACHE，默认是 $HOME/.pub-cache = /runner/.pub-cache，
+# 在挂载点里、每个 Runner 各一份，镜像预热不到。要共享就显式设 ENV PUB_CACHE 到 /opt 下。
+RUN flutter precache --android \
     && flutter --version
