@@ -64,6 +64,8 @@ func main() {
 		os.Exit(0)
 	}
 
+	setupLogging()
+
 	handler.ConfigPath = *configPath
 	handler.Version = Version
 	handler.StartRegistrationWorker()
@@ -304,7 +306,7 @@ func loadI18n(lang string) (map[string]string, error) {
 func newEchoServer() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(middleware.Recover(), middleware.RequestLogger(), middleware.Secure())
+	e.Use(middleware.Recover(), requestLogger(), middleware.Secure())
 	e.HTTPErrorHandler = httpErrorHandler
 	// 放在鉴权之前：跨站请求无论带不带凭据，都该在这里就结束
 	trusted := trustedOrigins()
