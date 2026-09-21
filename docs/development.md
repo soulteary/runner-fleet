@@ -17,7 +17,7 @@ For production use container deployment; see [User Guide](guide.md). This doc is
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent
@@ -228,6 +228,13 @@ A few conventions worth knowing before adding to the suite:
   `innerHTML` assignment that skipped `escapeHtml`. Both are covered by rendering the real
   template or scanning it, because a test of the Go helper alone would not have noticed
   either.
+- **Documentation is checked like code.** `internal/docsconsistency` holds tests and no
+  runtime code. They compare each translation against the English original *below* the
+  heading level ci-recipes checks — table rows, code blocks, list items, resolved link
+  targets — because the drift that actually happened was a table row, not a heading. They
+  also assert that paths referenced from non-Markdown files exist, that the marker the
+  troubleshooting docs tell you to `grep` is the one the code logs, and that every README
+  under `examples/` has a declared language policy.
 
 ## Releasing
 
@@ -257,5 +264,15 @@ five translations fails the PR instead of going unnoticed:
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+Two checks fire at release time instead of on every PR. `.github/actions/check-release-version`
+runs on a `v*.*.*` tag and refuses it unless the baseline in `internal/config/config.go` equals
+the tag and `CHANGELOG.md` carries a matching `## [X.Y.Z]` section with its link definition.
+`check-version-consistency` cannot see this: it takes that baseline as the truth, so a repo that
+is internally consistent one patch behind the published release passes it — which is exactly how
+one release went out with nothing in the tree pointing at it. The `Quick start runs` job in
+`CI (Consistency)` executes the guide's quick-start block against a locally built image and then
+asks for `GET /ready`, because a documented procedure that nobody runs is a procedure nobody
+knows is broken.
 
 [← Back to docs](README.md)

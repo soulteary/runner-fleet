@@ -29,6 +29,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check release version consistency
+        uses: ./.github/actions/check-release-version
+        with:
+          tag: ${{ github.ref_name }}
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

@@ -8,6 +8,11 @@
 
 **审计基准**：`main` @ `0e812a7`，最新发布 v1.7.1。<!-- version-check-ignore -->
 
+**执行状态**：**第 1 批已完成，第 5 节的五条检查已全部落地**（§1.1、§1.2、§1.4、§1.5、§2.1、
+§5.1–§5.5）。第 2 批起未开始。每条检查都做了 mutation 验证：把缺陷放回去，对应的那一条、
+且只有那一条会红——记录在 §5 各条末尾。下面的问题描述保留审计当时的原文，
+改掉它们会让「为什么要加这条检查」失去凭据；已修的条目在标题上标注。
+
 ---
 
 ## 0. 先说结论
@@ -30,7 +35,7 @@
 
 ## 1. P0：照着文档做会失败
 
-### 1.1 快速开始的命令块跑不通，六份译文同错
+### 1.1 快速开始的命令块跑不通，六份译文同错  ✅ 已修
 
 `docs/guide.md:29-38` 以及 zh/fr/de/ja/ko 的同一处（行号完全一致，六份文件都是 191 行）：
 
@@ -64,7 +69,7 @@ mkdir -p config runners && cp config.yaml.example config/config.yaml
 sudo chown -R 1001:1001 config runners
 ```
 
-### 1.2 英/法/德/日/韩文档让用户 grep 一个中文词
+### 1.2 英/法/德/日/韩文档让用户 grep 一个中文词  ✅ 已修（grep 锚点部分）
 
 `docs/guide.md:99`、`:103`、`:189` 以及五份译文的对应位置：
 
@@ -80,8 +85,13 @@ docker compose logs runner-manager | grep 自检
 的日志与自检标题全是中文字面量，没有走 i18n。
 
 **修法**（短期，纯文档，1 小时内）：把 grep 的锚点从中文词换成语言无关的前缀。
-代码侧给自检输出加一个稳定标记（如 `[preflight]`），文档统一 `grep '\[preflight\]'`。
+代码侧给自检输出加一个稳定标记，文档统一 `grep '\[preflight'`。
 一次性改动，之后译文不用再跟着日志文案走。
+
+**已落地**：标记是 `internal/runner.PreflightLogMarker`（`[preflight ✓]` / `[preflight !]` /
+`[preflight ✗]`）。两侧各有一条测试守着：`preflight_test.go` 守每一级都带标记且标记是纯 ASCII，
+`internal/docsconsistency/preflight_marker_test.go` 守文档里让人 grep 的词就是这个常量。
+**日志正文仍是中文**——那是 §1.3，这里只解决「怎么把这些行捞出来」。
 
 ### 1.3 API 提示语不跟随界面语言
 
@@ -103,7 +113,7 @@ echo.NewHTTPError(http.StatusBadRequest, "name、target_type、target 必填")
 与日志目前仅中文」。**装作没这回事是最差的选项**——它让翻译看起来像没做完，而不是
 一个已知的、有边界的限制。
 
-### 1.4 两处指向不存在文件的引用
+### 1.4 两处指向不存在文件的引用  ✅ 已修
 
 | 位置 | 引用 | 实际 |
 |---|---|---|
@@ -119,10 +129,10 @@ Markdown 之间的相对链接目前是全绿的（写脚本全量查过，0 处
 **修法**：改成 `docs/guide.md#2-configuration`（及译文对应锚点），并把链接检查扩展到
 `*.yml`/`*.example`/`Dockerfile*`（见 §5.3）。
 
-### 1.5 v1.7.1 已发布，仓库里没有一处指向它<!-- version-check-ignore -->
+### 1.5 v1.7.1 已发布，仓库里没有一处指向它  ✅ 已修<!-- version-check-ignore -->
 
 - GitHub 最新 release：**v1.7.1**（2026-09-21 11:51，PR #58）<!-- version-check-ignore -->
-- `internal/config/config.go:48`：`tag = "v1.7.0"`
+- `internal/config/config.go:48`：`tag = "v1.7.0"` <!-- version-check-ignore -->
 - 全仓库 91 处 `v1.7.0`，0 处 v1.7.1<!-- version-check-ignore -->
 - `CHANGELOG.md:8` 的 `## [Unreleased]` 里躺着的三条，正是 v1.7.1 发布的内容<!-- version-check-ignore -->
 
@@ -139,7 +149,7 @@ Markdown 之间的相对链接目前是全绿的（写脚本全量查过，0 处
 
 ## 2. P1：内容缺失与语言断层
 
-### 2.1 译文漂移：结构检查只看标题，表格少一行照样过
+### 2.1 译文漂移：结构检查只看标题，表格少一行照样过  ✅ 已修
 
 `docs/development.md` 的 HTTP API 表有 **14 行**，五份译文都只有 **13 行**——
 少的是同一行：
@@ -186,7 +196,7 @@ signal: killed`、GitHub 上只出现一个十六进制名字的 Runner、`_work
 
 | 变量 | guide.md | .env.example | 说明 |
 |---|---|---|---|
-| `LOG_LEVEL` / `LOG_FORMAT` | ✗ | 仅中文 | v1.7.0 新增的日志配置，正式文档一字未提 |
+| `LOG_LEVEL` / `LOG_FORMAT` | ✗ | 仅中文 | v1.7.0 新增的日志配置，正式文档一字未提 | <!-- version-check-ignore -->
 | `FLEET_IMAGE_TAG` | ✗ | 仅中文 | 决定默认 Runner 镜像 tag |
 | `SERVER_ADDR` / `RUNNERS_BASE_PATH` | ✗ | 仅中文 | |
 | `AGENT_PORT` | ✗ | ✗ | 代码里有，两边都没写 |
@@ -213,7 +223,7 @@ contributors: local build and debug"）里有表格说明。但它们的读者�
 `/ready` 是给 K8s `readinessProbe` 的，`/metrics` 需要在 Prometheus 抓取任务里配
 `basic_auth`。`guide.md` 里 `/metrics` 出现 **0 次**，`Prometheus` **0 次**。
 
-README 的一句 "Health: `GET /health`; version: `GET /version`" 也停在 v1.7.0 之前的状态。
+README 的一句 "Health: `GET /health`; version: `GET /version`" 也停在 v1.7.0 之前的状态。 <!-- version-check-ignore -->
 
 ### 2.7 平台限制没写进面向用户的文档
 
@@ -312,11 +322,19 @@ determined"、"Runner directory permissions"、"Runner removal and GitHub"）和
 
 ### 5.1 发布版本一致性
 
+**已落地**：`.github/actions/check-release-version`，挂在两个 release workflow 的 checkout 之后。
+Mutation：以 v1.7.1 对 v1.7.0 基准试跑，基准不符、缺 `## [1.7.1]` 小节、缺链接定义三条同时报出；<!-- version-check-ignore -->
+修好后通过。
+
 现有 `check-version-consistency` 拿 `config.go` 当基准，保证仓库内部自洽。
 补一条 tag 触发的检查：`release-*.yml` 里断言 `config.go` 的基准 tag == 正在打的 tag，
 且 `CHANGELOG.md` 有对应的 `## [X.Y.Z]` 小节。**这条直接挡住 §1.5。**
 
 ### 5.2 译文内容（不只是标题）
+
+**已落地**：`internal/docsconsistency/translations_test.go`，按节比表格行、代码块（只数非注释行）、
+列表项与解析后的链接目标；语言与文件清单读 `scripts/ci-recipes.conf`，加第七种语言仍只改那一处。
+Mutation：删掉 zh 译文里的 DELETE 行 → 红；补回 → 绿。
 
 `check-docs-structure` 扩展，或本地补一条脚本，逐文件比对英文原文与五份译文的：
 
@@ -328,11 +346,20 @@ determined"、"Runner directory permissions"、"Runner removal and GitHub"）和
 
 ### 5.3 链接检查覆盖非 Markdown 文件
 
+**已落地**：`internal/docsconsistency/pathrefs_test.go`。
+Mutation：把 `docs/config.md` 那条引用放回 `config.yaml.example` → 红；改回 → 绿。
+附带约束：注释里也不能写失效路径，这是有意的。
+
 目前 Markdown 之间零断链，断的全在 `.yml` / `.example` 的注释里（§1.4）。
 把 `docs/*.md`、`examples/**` 这类路径引用的检查扩到
 `*.yml` `*.yaml` `*.example` `Makefile` `*Dockerfile*` `*.sh`。
 
 ### 5.4 快速开始真跑一次
+
+**已落地**：`CI (Consistency)` 的 `Quick start runs` job。就地构建镜像（不拉已发布 tag——
+升版本的那个 PR 里新 tag 的镜像还不存在），整段执行抽出来的命令块，再请求 `GET /ready`。
+查 `/ready` 而不是 `/health`：后者只要进程活着就恒为 200，挂载目录不可写照样绿。
+Mutation：把旧命令块放回去，在 `set -e` 下第一条 `chown` 即退出 1。
 
 新增 job：在干净容器里，把 `guide.md` 第 1 节的命令块抽出来 `set -e` 执行到
 `docker compose up -d`，然后 `curl -fsS localhost:8080/health`。
@@ -340,6 +367,11 @@ determined"、"Runner directory permissions"、"Runner removal and GitHub"）和
 而且它顺带保证了 README / guide / examples 三处命令块不会再各走各的。
 
 ### 5.5 examples/ 纳入或明确豁免
+
+**已落地**：豁免写进了 `scripts/ci-recipes.conf` 的注释，并由
+`internal/docsconsistency/examples_policy_test.go` 守着——声明为中文单语的必须确实是中文、
+且确实没有译文副本。
+Mutation：新增一份未登记策略的 `examples/*/README.md` → 红。
 
 `scripts/ci-recipes.conf` 的 `docs_files` 目前是 `development.md guide.md README.md`。
 决定 §2.2 之后：要么把 examples 的两份 README 纳入译文检查，
@@ -352,7 +384,7 @@ determined"、"Runner directory permissions"、"Runner removal and GitHub"）和
 
 四批，每批一个 PR，互相不阻塞。
 
-### 第 1 批：把路跑通（半天）
+### 第 1 批：把路跑通  ✅ 已完成
 
 > 目标：照着文档做不会失败。纯文档改动，无代码风险。
 
@@ -374,7 +406,7 @@ determined"、"Runner directory permissions"、"Runner removal and GitHub"）和
 9. §2.7 README 与 `guide.md` 开头写明：Linux only、linux/amd64 + linux/arm64
 10. §1.3 如实写明服务端消息与日志的语言边界（在补 i18n 之前，这是诚实的过渡态）
 
-### 第 3 批：语言与结构（1 周，含一次拍板）
+### 第 3 批：语言与结构（1 周，含一次拍板；其中第 15 项的五条检查已提前落地）
 
 11. **决策**：examples/ 与两个 `.example` 模板的语言策略（见 §7）
 12. 按决策执行；`examples/deploy/README.md:174` 的收尾链接改成语言中立或跟随当前语言

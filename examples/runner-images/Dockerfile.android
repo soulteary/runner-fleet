@@ -10,7 +10,7 @@
 # 说明见同目录 README.md。基础镜像已含 git/unzip/xz-utils/build-essential 等，
 # 本文件只补 Android 与 Flutter 这类体积大、版本因项目而异的工具链。
 
-ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+ARG RUNNER_IMAGE=ghcr.io/soulteary/runner-fleet:v1.7.1-runner
 FROM ${RUNNER_IMAGE}
 
 ARG ANDROID_CMDLINE_TOOLS=11076708

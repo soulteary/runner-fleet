@@ -230,6 +230,36 @@ func TestLogPreflight_FormatsByLevel(t *testing.T) {
 	}
 }
 
+// 六种语言的排障第一步都是 `docker compose logs runner-manager | grep '\[preflight'`。
+// 那个关键词就是这里的行首标记，而标记是普通字符串常量——改掉它不会有任何东西报错，
+// 排障第一步只会静默地一行都 grep 不到。这条守住每一级都带标记；
+// internal/docsconsistency 那边再守住文档里写的关键词与这个常量对得上。
+func TestLogPreflight_EveryLineCarriesTheDocumentedMarker(t *testing.T) {
+	var lines []string
+	orig := preflightLogf
+	preflightLogf = func(format string, args ...any) {
+		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(format, "%s", "")+joinAny(args)))
+	}
+	defer func() { preflightLogf = orig }()
+
+	LogPreflight([]CheckResult{
+		ok("A", "正常"),
+		warn("B", "有点问题", "建议 B"),
+		fail("C", "挂了", "建议 C"),
+	})
+	for _, l := range lines {
+		if !strings.HasPrefix(l, PreflightLogMarker) {
+			t.Errorf("自检日志没有以 %q 开头，文档里的 grep 会捞不到它: %q", PreflightLogMarker, l)
+		}
+	}
+	// 标记必须是语言无关的：混进汉字就等于让五份非中文文档里的 grep 又打不出来了。
+	for _, r := range PreflightLogMarker {
+		if r > 0x7f {
+			t.Fatalf("标记 %q 含非 ASCII 字符 %q；它要能被任何键盘打出来", PreflightLogMarker, r)
+		}
+	}
+}
+
 func joinAny(args []any) string {
 	var b strings.Builder
 	for _, a := range args {

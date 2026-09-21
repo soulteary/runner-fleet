@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # バージョン付き（/version とデバッグ用）
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent のみビルド（コンテナモード用）
 go build -o runner-agent ./cmd/runner-agent
@@ -57,6 +57,7 @@ Basic Auth 有効時、`/health` と `/ready` 以外のリクエストには Hea
 | `/api/runners/:name/start` | POST | Runner を起動。probe 失敗時も起動を試み、レスポンスに構造化された `probe` を返す。 |
 | `/api/runners/:name/stop` | POST | Runner を停止。probe 失敗時も停止を試み、レスポンスに構造化された `probe` を返す。 |
 | `/api/runners` | POST | Runner を追加（任意でインストールと登録）。名前が衝突した場合は黙って改名せず **409** を返し、`conflicts` と `suggested_name` を含めます。従来の自動リネームが必要なら `auto_rename: true` を送ってください。 |
+| `/api/runners/:name` | DELETE | Runner を削除：停止し、PAT があれば GitHub から登録解除し、インストールディレクトリを削除し、設定から取り除きます。レスポンスには `github_deregistered` と、GitHub 側で何が起きたかを伝える `message` が入ります。 |
 | `/api/runners/:name/recreate` | POST | 現在の設定で Runner コンテナを削除して作り直します（コンテナモードのみ）。実行中の Job は中断されます。停止中のコンテナは「開始」時に作成パラメータの不一致を検出して自動で作り直されます。 |
 | `/api/runner-precheck` | GET | 追加前の名前チェック: `?name=&path=`。`available`、`suggested_name`、検出した `conflicts`（`name_taken`、`container_name`、`install_dir`、`dir_registered`、`dir_adopt`、`dir_exists`、`container_exists`）を返します。各項目は `level`（`error`/`warn`）、`message`、`detail`、任意の `fix_command` を持ちます。読み取り専用で、画面は入力中に随時呼び出します。 |
 | `/api/runner-rows` | GET | 一覧の `<tbody>` だけを、初回描画と同じテンプレート断片からレンダリングします。画面はこれをポーリングして一覧をその場で更新します。 |
@@ -225,6 +226,12 @@ PAT がなければ登録解除はできません。GitHub は PAT か新しい 
   `innerHTML` 代入が `escapeHtml` を飛ばした件です。どちらも実テンプレートを描画するか走査することで
   カバーしています。Go のヘルパーだけをテストしても、どちらにも気づけないからです。
 
+- **ドキュメントもコードと同じように検査される。** `internal/docsconsistency` にはテストだけがあり、
+  ランタイムコードはありません。ci-recipes が見る見出しレベルの**下**——表の行、コードブロック、
+  リスト項目、解決後のリンク先——で各訳文を英語原文と比べます。実際に起きた乖離が見出しではなく
+  表の 1 行だったからです。さらに、Markdown 以外のファイルから参照されるパスが実在すること、
+  トラブルシューティングが `grep` を勧めるマーカーがコードの出力そのものであること、
+  `examples/` 配下のすべての README に言語方針が登録されていることも検査します。
 
 ## リリース
 
@@ -253,5 +260,15 @@ make install-ci-recipes
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+二つの検査は PR ごとではなくリリース時に動きます。`.github/actions/check-release-version` は
+`v*.*.*` タグで動き、`internal/config/config.go` の基準バージョンがそのタグと等しく、かつ
+`CHANGELOG.md` に対応する `## [X.Y.Z]` 節とリンク定義があることを要求します。
+`check-version-consistency` にはこれが見えません。その基準自体を真実として扱うため、
+公開済みリリースより 1 パッチ遅れていても内部的に整合していればそのまま通ります——
+あるリリースが出たのにツリーのどこもそれを指していなかったのは、まさにこれが理由です。
+`CI (Consistency)` の `Quick start runs` は、ローカルでビルドしたイメージに対してガイドの
+クイックスタートのコマンド列をそのまま実行し、`GET /ready` を要求します。
+誰も実行しない手順書は、壊れていることを誰も知らない手順書だからです。
 
 [← ドキュメントへ戻る](README.md)

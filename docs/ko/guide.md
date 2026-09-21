@@ -15,10 +15,10 @@
 
 ### 공개 이미지 사용 (권장)
 
-운영 환경에서는 특정 버전(예: v1.7.0)을 사용하세요. 개발 시에는 `main` 태그를 쓸 수 있습니다.
+운영 환경에서는 특정 버전(예: v1.7.1)을 사용하세요. 개발 시에는 `main` 태그를 쓸 수 있습니다.
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 ### docker-compose 빠른 시작
@@ -26,11 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
 저장소 루트에 `docker-compose.yml`이 있습니다. 컨테이너 모드에서 Job에 Docker가 필요하고 `job_docker_backend: dind`일 때만 DinD를 활성화하세요.
 
 ```bash
-mkdir -p config && cp config.yaml.example config/config.yaml
+mkdir -p config runners && cp config.yaml.example config/config.yaml
 # config/config.yaml 편집: runners.base_path를 /app/runners로 설정
 
-chown 1001:1001 config runners
-mkdir -p runners && chown 1001:1001 runners
+sudo chown -R 1001:1001 config runners
 
 docker network create runner-net 2>/dev/null || true
 docker compose up -d
@@ -48,7 +47,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.7.0
+  ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 호스트 디렉터리는 UID 1001이 쓸 수 있어야 합니다. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. Job에서 Docker가 필요하면 `-v /var/run/docker.sock:/var/run/docker.sock`을 추가하고(이미지에 GID 999의 `docker` 그룹이 포함되어 있으며 빌드 인자 `DOCKER_GID`로 변경 가능. 호스트 docker GID가 999가 아니면 `--group-add $(getent group docker | cut -d: -f3)`도 필요), 또는 DinD 사용(저장소 `docker-compose.yml`의 `--profile dind` 참조). 두 이미지에는 Docker CLI와 함께 GitHub 호스팅 runner에 맞춘 명령줄 기반 계층이 포함되어 있습니다. `scripts/apt-packages.txt`는 `actions/runner-images`의 `toolset-2404.json` apt 패키지 집합을 가져온 것으로 `git`, `unzip`, `jq`, `rsync`, `sudo`, `xvfb` 등이 들어 있습니다. 언어·플랫폼 SDK는 의도적으로 제외했습니다 — `setup-*` action을 쓰거나 이미지를 확장하세요. 호스팅 runner와 마찬가지로 두 이미지 모두 Job 사용자에게 비밀번호 없는 `sudo`를 부여하므로 `sudo apt-get install -y …`가 그대로 동작합니다. 제거하려면 `--build-arg ALLOW_SUDO=false`로 빌드하세요.
@@ -70,7 +69,7 @@ docker exec runner-manager /app/scripts/install-runner.sh <name> [version]
 각 Runner는 자체 컨테이너에서 실행됩니다. Manager는 호스트 Docker로 시작/중지하고, 컨테이너 내 Agent로부터 HTTP로 상태를 가져옵니다.
 
 **방법 1: env만 사용 (전체 컨테이너 시 권장)**
-config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `config/config.yaml`을 만들지 않아도 위 변수를 `.env`에 설정해 두면 첫 실행 시 자동 생성됩니다. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.7.0 → v1.7.0-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
+config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<runners 호스트 절대 경로>`(예: `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net` 설정. `config/config.yaml`을 만들지 않아도 위 변수를 `.env`에 설정해 두면 첫 실행 시 자동 생성됩니다. `RUNNER_IMAGE`를 설정하지 않으면 Runner 이미지는 `MANAGER_IMAGE`에서 자동 유도(예: v1.7.1 → v1.7.1-runner). 마운트한 `config`와 `runners`는 여전히 `chown 1001:1001` 필요. 자세한 내용은 `.env.example`의 오버라이드 변수 참조.
 
 **방법 2: config/config.yaml에서 활성화** (`config.yaml.example` 참조):
 
@@ -78,7 +77,7 @@ config/config.yaml 수정 없이 사용. `cp .env.example .env` 후 예: `CONTAI
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -86,7 +85,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.7.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
+Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.7.1-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
 **Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 네 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 비밀번호 없는 sudo 상속, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
 
@@ -96,11 +95,11 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 ### 문제 해결
 
-- **문제가 있으면 먼저 시작 자가 점검 확인**: `docker compose logs runner-manager | grep 自检`. 시작 시 runners 디렉터리, Docker 접근성, 네트워크, Runner 이미지, Job 내 Docker 백엔드를 점검하며, 실패 항목에는 바로 실행 가능한 수정 명령이 표시됩니다.
+- **문제가 있으면 먼저 시작 자가 점검 확인**: `docker compose logs runner-manager | grep '\[preflight'`. 시작 시 runners 디렉터리, Docker 접근성, 네트워크, Runner 이미지, Job 내 Docker 백엔드를 점검하며, 실패 항목에는 바로 실행 가능한 수정 명령이 표시됩니다.
 - **compose down 후 Runner가 시작되지 않음**: 한 번 `docker network create runner-net` 실행. 계속 실패하면 UI에서 "Start"로 재생성하거나 `docker rm -f github-runner-<name>` 후 "Start".
 - **root로 실행**: 마운트된 디렉터리는 프로세스 사용자가 쓸 수 있어야 함. root 사용 시 `RUNNER_ALLOW_RUNASROOT=1` 설정.
 - **Job에서 docker.sock `permission denied`**: `job_docker_backend: host-socket`에서는 컨테이너 사용자(UID 1001)가 socket 소유 그룹에 속해야 합니다. Manager가 컨테이너 생성 시 감지한 호스트 docker GID로 `--group-add`를 추가합니다. GID가 맞지 않는 컨테이너는 "설정 변경됨"으로 표시되어 다음 시작 때 자동으로 재생성됩니다(실행 중이면 배지가 뜨므로 "컨테이너 재생성"을 사용하세요). 감지에 실패하면 `runners.docker_gid`(또는 `.env`의 `DOCKER_GID`)를 `getent group docker | cut -d: -f3` 값으로 설정합니다.
-- **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep 自检`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
+- **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
 - **이전 Runner 이미지**: pull하거나 다시 빌드한 뒤 Runner를 시작하면 Manager가 이미지 변경(참조와 이미지 ID를 모두 비교하므로 같은 tag 재빌드도 포함)을 감지해 컨테이너를 다시 만듭니다. 실행 중인 컨테이너는 건드리지 않으니 중단해도 될 때 행의 "컨테이너 재생성"을 쓰세요.
 - **로그에 5분마다 `已定时拉起 runner: <이름>` 이 반복되고, UI에서도 실행 중으로 표시되지 않음**: 이번 버전에서 수정되었습니다. 업그레이드만 하면 되며 Runner를 다시 등록할 필요는 없습니다. 실행 상태를 그동안 pid 파일(`Runner.Listener.pid`, 없으면 `.path`)에서 읽었지만 actions/runner는 둘 다 쓰지 않습니다. 시작 스크립트 어디에도 pid 파일을 쓰는 곳이 없고 `.path`에는 PATH 문자열이 들어 있습니다. 그래서 모든 Runner가 "등록됨, 실행 중 아님"으로 읽혔고 5분마다 도는 점검이 매번 전부를 다시 시작시켰습니다. 이제는 프로세스 테이블에서 판단하며, 컨테이너 모드에서는 각 컨테이너 안의 Agent에게 물어봅니다 — Manager는 다른 컨테이너의 프로세스를 볼 수 없습니다. 같은 원인으로 기본(비컨테이너) 모드의 "정지"는 항상 `未找到 runner pid 文件或 pid 无效` 로 실패했습니다.
 - **UI에서 삭제한 Runner가 GitHub에 남아 있고, 같은 이름으로 다시 추가하면 등록이 실패함**: 이제 삭제 시 GitHub 등록 해제도 함께 수행합니다. 단 해당 Runner 디렉터리에 `.github_check_token`(선택 PAT, 조직은 `admin:org`, 저장소는 `repo`)이 있어야 합니다. 없으면 해제할 자격 증명이 없으므로 삭제 응답에 그 사실과 Settings → Actions → Runners 경로를 안내합니다. 이전 버전에서 삭제한 Runner는 해제된 적이 없으니 직접 정리하세요.
@@ -111,7 +110,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -131,7 +130,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Runner 설치 디렉터리 루트 경로; **컨테이너에서는 `/app/runners`로 설정** | `./runners` |
 | `runners.items` | 미리 정의된 Runner 목록 | Web UI에서도 추가 가능 |
 | `runners.container_mode` | 컨테이너 모드 활성화 | `false` |
-| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet:v1.7.0-runner` |
+| `runners.container_image` | 컨테이너 모드에서 Runner 이미지(-runner 태그) | `ghcr.io/soulteary/runner-fleet:v1.7.1-runner` |
 | `runners.container_network` | 컨테이너 모드에서 Runner 네트워크 | `runner-net` |
 | `runners.agent_port` | 컨테이너 내 Agent 포트 | `8081` |
 | `runners.job_docker_backend` | Job 내 Docker: `dind` / `host-socket` / `none` | `dind` |
@@ -186,6 +185,6 @@ runners:
 
 **민감한 파일**: config/config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
 
-**Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep 自检`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
+**Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
 
 [← 프로젝트 홈으로](../../README.md)

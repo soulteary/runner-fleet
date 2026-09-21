@@ -1,6 +1,6 @@
 # 示例配置。使用前请复制为 config/config.yaml 后按需修改。
 #   mkdir -p config && cp config.yaml.example config/config.yaml
-# 详细字段说明见 docs/config.md
+# 详细字段说明见 docs/zh/guide.md 的「二、配置」（English: docs/guide.md）
 #
 # Docker / docker-compose：请将 runners.base_path 改为 /app/runners（与镜像内卷挂载一致）
 # 全容器部署时可通过 .env 设置 CONTAINER_MODE、VOLUME_HOST_PATH、JOB_DOCKER_BACKEND 等覆盖下列注释项，无需在本文件中取消注释或填写。
@@ -25,8 +25,8 @@ runners:
     # 容器模式：每个 Runner 运行在独立容器中，Manager 通过宿主机 Docker（socket）启停，并与 Runner 容器同网络
     # 启用后 Manager 必须使用宿主机 docker（勿设 DOCKER_HOST=tcp://runner-dind:2375）
     # container_mode: true
-    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.7.0 生成；示例：ghcr.io/soulteary/runner-fleet:v1.7.0-runner
-    # container_image: ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+    # container_image 不填则按 FLEET_IMAGE_TAG 或默认 v1.7.1 生成；示例：ghcr.io/soulteary/runner-fleet:v1.7.1-runner
+    # container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
     # container_network: runner-net
     # agent_port: 8081
     # Job 内 Docker 后端：dind（DinD 服务）、host-socket（挂载宿主机 socket）、none（不提供）

@@ -15,10 +15,10 @@ Deployment, configuration, adding runners, and security are covered here. For co
 
 ### Use published image (recommended)
 
-Production: use a specific version (e.g. v1.7.0). For development you can use the `main` tag.
+Production: use a specific version (e.g. v1.7.1). For development you can use the `main` tag.
 
 ```bash
-docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
+docker pull ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 ### docker-compose quick start
@@ -26,11 +26,10 @@ docker pull ghcr.io/soulteary/runner-fleet:v1.7.0
 The repo root has `docker-compose.yml`. Enable DinD only when using container mode and jobs need Docker with `job_docker_backend: dind`.
 
 ```bash
-mkdir -p config && cp config.yaml.example config/config.yaml
+mkdir -p config runners && cp config.yaml.example config/config.yaml
 # Edit config/config.yaml: set runners.base_path to /app/runners
 
-chown 1001:1001 config runners
-mkdir -p runners && chown 1001:1001 runners
+sudo chown -R 1001:1001 config runners
 
 docker network create runner-net 2>/dev/null || true
 docker compose up -d
@@ -48,7 +47,7 @@ docker run -d --name runner-manager \
   -p 8080:8080 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/runners:/app/runners \
-  ghcr.io/soulteary/runner-fleet:v1.7.0
+  ghcr.io/soulteary/runner-fleet:v1.7.1
 ```
 
 Host dirs must be writable by UID 1001. Basic Auth: `-e BASIC_AUTH_PASSWORD=password`, `-e BASIC_AUTH_USER=admin`. For Docker in jobs add `-v /var/run/docker.sock:/var/run/docker.sock` plus `--group-add $(getent group docker | cut -d: -f3)` if the host docker GID is not 999 (the image ships a `docker` group at GID 999, overridable with build arg `DOCKER_GID`), or use DinD (see repo `docker-compose.yml` `--profile dind`). Both images ship the Docker CLI plus a command-line base layer aligned with GitHub-hosted runners: `scripts/apt-packages.txt` mirrors the `apt` package set from `actions/runner-images` (`toolset-2404.json`), so `git`, `unzip`, `jq`, `rsync`, `sudo`, `xvfb` and the rest are present. Language and platform SDKs are deliberately not included — use the `setup-*` actions or extend the image. Like hosted runners, both images give the job user passwordless `sudo`, so `sudo apt-get install -y …` works; build with `--build-arg ALLOW_SUDO=false` to drop it.
@@ -70,7 +69,7 @@ Or on the host extract [actions-runner](https://github.com/actions/runner/releas
 Each runner runs in its own container; Manager starts/stops via host Docker and gets status over HTTP from the in-container Agent.
 
 **Option 1: Env only (recommended for full-container)**
-No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If you do not create `config/config.yaml`, the program will generate it on first start from these env vars. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.7.0` → `v1.7.0-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
+No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CONTAINER_MODE=true`, `VOLUME_HOST_PATH=<host absolute path to runners>` (e.g. `realpath runners`), `JOB_DOCKER_BACKEND=host-socket`, `CONTAINER_NETWORK=runner-net`. If you do not create `config/config.yaml`, the program will generate it on first start from these env vars. If `RUNNER_IMAGE` is unset, the runner image is derived from `MANAGER_IMAGE` (e.g. `v1.7.1` → `v1.7.1-runner`). Mounted `config` and `runners` still need `chown 1001:1001`. See `.env.example` for all override variables.
 
 **Option 2: Enable in config/config.yaml** (see `config.yaml.example`):
 
@@ -78,7 +77,7 @@ No need to edit config/config.yaml. Copy `cp .env.example .env` and set e.g. `CO
 runners:
   base_path: /app/runners
   container_mode: true
-  container_image: ghcr.io/soulteary/runner-fleet:v1.7.0-runner
+  container_image: ghcr.io/soulteary/runner-fleet:v1.7.1-runner
   container_network: runner-net
   agent_port: 8081
   job_docker_backend: dind   # dind | host-socket | none
@@ -86,7 +85,7 @@ runners:
   volume_host_path: /abs/path/on/host/to/runners
 ```
 
-Runner image: same name as Manager with `-runner` tag (production: use a version tag e.g. v1.7.0-runner; dev: main-runner), or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. For `job_docker_backend: host-socket`, the Manager passes `--group-add <host docker GID>` to the runner container (auto-detected from `docker.sock`, override with `runners.docker_gid` / `DOCKER_GID`); the image also ships a `docker` group (build arg `DOCKER_GID`, default 999). Runner names are normalized to container names; duplicates after mapping will conflict.
+Runner image: same name as Manager with `-runner` tag (production: use a version tag e.g. v1.7.1-runner; dev: main-runner), or build locally: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .`. Manager must use host Docker (mount `docker.sock`), not DinD via `DOCKER_HOST`; in Compose use `group_add` for host docker GID or `user: "0:0"`. For `job_docker_backend: host-socket`, the Manager passes `--group-add <host docker GID>` to the runner container (auto-detected from `docker.sock`, override with `runners.docker_gid` / `DOCKER_GID`); the image also ships a `docker` group (build arg `DOCKER_GID`, default 999). Runner names are normalized to container names; duplicates after mapping will conflict.
 
 **Extending the runner image**: GitHub-hosted runners bundle toolchains (Android SDK, Node, Python…) that self-hosted runners do not. Workflows written for `ubuntu-24.04` often rely on this implicitly and fail after the move — `SDK location not found`, `node: command not found`. Layer your toolchain on top of this repo's runner image; ready-to-use examples and the four rules that matter (chown to UID 1001, bake env vars into the image, passwordless sudo is inherited, warm caches after `USER app`) are in [`examples/runner-images/`](../examples/runner-images/). Point a single runner at it with `items[].container_image` and select it from the workflow with a label.
 
@@ -96,11 +95,11 @@ Runner image: same name as Manager with `-runner` tag (production: use a version
 
 ### Troubleshooting
 
-- **Anything not working**: Check the startup self-test first — `docker compose logs runner-manager | grep 自检`. It reports the runners directory, Docker reachability, network, runner image and in-job Docker backend at boot, each failing item with a copy-pasteable fix.
+- **Anything not working**: Check the startup self-test first — `docker compose logs runner-manager | grep '\[preflight'`. It reports the runners directory, Docker reachability, network, runner image and in-job Docker backend at boot, each failing item with a copy-pasteable fix.
 - **Runner won't start after compose down**: Run `docker network create runner-net` once. If it still fails, use "Start" in the UI to recreate, or `docker rm -f github-runner-<name>` then "Start".
 - **Running as root**: Mounted dirs must be writable by the process user; for root set `RUNNER_ALLOW_RUNASROOT=1`.
 - **`permission denied` on docker.sock in jobs**: With `job_docker_backend: host-socket` the container user (UID 1001) must be in the socket's group. The Manager adds `--group-add` with the detected host docker GID when creating the container; a container created without the right GID is flagged as drifted and recreated the next time it is started (a running one shows "config changed" with a Recreate button). If detection fails, set `runners.docker_gid` (or `DOCKER_GID` in `.env`) to `getent group docker | cut -d: -f3`.
-- **`command not found` or a missing SDK inside jobs**: Self-hosted runners do not bundle what GitHub-hosted ones do. Check the startup self-test (`docker compose logs runner-manager | grep 自检`) — it reports which of `git`/`unzip`/`tar`/`curl` each configured runner image lacks. For language and platform SDKs, extend the image; see [`examples/runner-images/`](../examples/runner-images/).
+- **`command not found` or a missing SDK inside jobs**: Self-hosted runners do not bundle what GitHub-hosted ones do. Check the startup self-test (`docker compose logs runner-manager | grep '\[preflight'`) — it reports which of `git`/`unzip`/`tar`/`curl` each configured runner image lacks. For language and platform SDKs, extend the image; see [`examples/runner-images/`](../examples/runner-images/).
 - **Old runner image**: Pull or rebuild it, then start the runner — the Manager notices the image changed (by reference and by image ID, so rebuilding the same tag counts) and recreates the container. A running container is not touched; use the row's "Recreate" button when you can afford to interrupt its job.
 - **Log repeats `已定时拉起 runner: <name>` every 5 minutes, and no runner is ever shown as running**: fixed in this version — upgrade is enough, nothing needs re-registering. Running state used to come from a pid file (`Runner.Listener.pid`, falling back to `.path`), and actions/runner writes neither: none of its start scripts writes a pid file, and `.path` holds a PATH string. Every runner therefore read as "registered but not running", so the 5-minute sweep started each of them again on every pass. It is now read from the process table, and in container mode from the Agent inside each container — the Manager cannot see another container's processes. Same root cause: in default (non-container) mode "Stop" always failed with `未找到 runner pid 文件或 pid 无效`.
 - **A runner you deleted is still listed on GitHub, and adding it back under the same name fails**: deletion now also deregisters it from GitHub, but only when that runner directory holds a `.github_check_token` (the optional PAT — organization needs `admin:org`, repository needs `repo`). Without one there is no credential to do it with, and the delete response says so and points at Settings → Actions → Runners. Runners deleted by older versions were never deregistered; remove those by hand.
@@ -111,7 +110,7 @@ Runner image: same name as Manager with `-runner` tag (production: use a version
 
 ```bash
 docker build -t runner-manager .
-docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.0-runner .
+docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.7.1-runner .
 ```
 
 Make: `make docker-build`, `make docker-run`, `make docker-stop`.
@@ -131,7 +130,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.base_path` | Root path for runner install dirs; **set to `/app/runners` in container** | `./runners` |
 | `runners.items` | Predefined runner list | Can also add via Web UI |
 | `runners.container_mode` | Enable container mode | `false` |
-| `runners.container_image` | Runner image in container mode (tag with -runner) | `ghcr.io/soulteary/runner-fleet:v1.7.0-runner` |
+| `runners.container_image` | Runner image in container mode (tag with -runner) | `ghcr.io/soulteary/runner-fleet:v1.7.1-runner` |
 | `runners.container_network` | Network for runners in container mode | `runner-net` |
 | `runners.agent_port` | In-container Agent port | `8081` |
 | `runners.job_docker_backend` | Docker in jobs: `dind` / `host-socket` / `none` | `dind` |
@@ -186,6 +185,6 @@ Multiple runners per machine: use separate subdirs.
 
 **Sensitive files**: config/config.yaml and .env are in `.gitignore`. For each runner's `.github_check_token` use `chmod 600`; add `**/.github_check_token` to `.gitignore` if under version control.
 
-**Runner directory permissions**: each runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams` there — the RSA private key the runner authenticates to GitHub with — and actions/runner sets no Unix permissions on it, so the directory mode is what keeps other local users on the host from reading it and impersonating that runner. Directories created by earlier versions are still 0755; the startup self-test names them (`docker compose logs runner-manager | grep 自检`) with the exact `chmod 700` to run. It does not change them for you: under a UID mismatch (Manager as root, container as app(1001)) tightening a directory breaks a deployment that currently works, so look before you run it.
+**Runner directory permissions**: each runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams` there — the RSA private key the runner authenticates to GitHub with — and actions/runner sets no Unix permissions on it, so the directory mode is what keeps other local users on the host from reading it and impersonating that runner. Directories created by earlier versions are still 0755; the startup self-test names them (`docker compose logs runner-manager | grep '\[preflight'`) with the exact `chmod 700` to run. It does not change them for you: under a UID mismatch (Manager as root, container as app(1001)) tightening a directory breaks a deployment that currently works, so look before you run it.
 
 [← Back to project home](../README.md)

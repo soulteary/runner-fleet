@@ -17,7 +17,7 @@
 go build -o runner-manager ./cmd/runner-manager
 
 # 버전 포함 (/version 및 디버깅용)
-go build -ldflags "-X main.Version=1.7.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.7.1" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent만 빌드 (컨테이너 모드)
 go build -o runner-agent ./cmd/runner-agent
@@ -57,6 +57,7 @@ Basic Auth 사용 시 `/health`와 `/ready`를 제외한 모든 요청에 Header
 | `/api/runners/:name/start` | POST | Runner 시작. probe 실패 시에도 시작 시도, 응답에 구조화된 `probe` 반환. |
 | `/api/runners/:name/stop` | POST | Runner 중지. probe 실패 시에도 중지 시도, 응답에 구조화된 `probe` 반환. |
 | `/api/runners` | POST | Runner 추가(선택적으로 설치 및 등록). 이름이 충돌하면 조용히 이름을 바꾸지 않고 **409**와 함께 `conflicts`, `suggested_name`을 반환합니다. 예전의 자동 개명 동작이 필요하면 `auto_rename: true`를 보내세요. |
+| `/api/runners/:name` | DELETE | Runner 삭제: 중지하고, PAT가 있으면 GitHub에서 등록 해제하고, 설치 디렉터리를 지우고, 설정에서 제거합니다. 응답에는 `github_deregistered`와 GitHub 쪽에서 무슨 일이 있었는지 알려주는 `message`가 담깁니다. |
 | `/api/runners/:name/recreate` | POST | 현재 설정으로 Runner 컨테이너를 삭제 후 다시 만듭니다(컨테이너 모드 전용). 실행 중인 Job은 중단됩니다. 정지된 컨테이너는 "시작"할 때 생성 파라미터 불일치를 감지해 자동으로 재생성됩니다. |
 | `/api/runner-precheck` | GET | 추가 전 이름 사전 점검: `?name=&path=`. `available`, `suggested_name`과 발견된 `conflicts`(`name_taken`, `container_name`, `install_dir`, `dir_registered`, `dir_adopt`, `dir_exists`, `container_exists`)를 반환하며, 각 항목에는 `level`(`error`/`warn`), `message`, `detail`과 선택적 `fix_command`가 있습니다. 읽기 전용이며 웹 UI가 입력 중에 호출합니다. |
 | `/api/runner-rows` | GET | 목록의 `<tbody>`만 렌더링하며, 첫 화면과 같은 템플릿 조각을 사용합니다. 웹 UI가 이를 폴링해 목록을 제자리에서 갱신합니다. |
@@ -219,6 +220,12 @@ CI에서 돕니다. 로컬에서 돌릴 수 없다면 `go run`으로 부르는 `
   대입이 `escapeHtml`을 건너뛴 건. 둘 다 실제 템플릿을 렌더링하거나 훑는 방식으로 덮습니다.
   Go 헬퍼만 테스트해서는 어느 쪽도 알아채지 못했을 것이기 때문입니다.
 
+- **문서도 코드처럼 검사된다.** `internal/docsconsistency`에는 테스트만 있고 런타임 코드는 없습니다.
+  ci-recipes가 보는 제목 수준 **아래**——표의 행, 코드 블록, 목록 항목, 해석된 링크 대상——에서
+  각 번역본을 영어 원문과 비교합니다. 실제로 일어난 드리프트가 제목이 아니라 표의 한 줄이었기
+  때문입니다. 또한 Markdown이 아닌 파일에서 참조하는 경로가 실제로 존재하는지, 문제 해결 문서가
+  `grep`하라고 알려주는 마커가 코드가 실제로 남기는 것인지, `examples/` 아래 모든 README에
+  언어 정책이 등록되어 있는지도 확인합니다.
 
 ## 릴리스
 
@@ -247,5 +254,15 @@ make install-ci-recipes
 ```bash
 ci-recipes runner-fleet check-docs-structure
 ```
+
+두 가지 검사는 모든 PR이 아니라 릴리스 시점에 동작합니다. `.github/actions/check-release-version`은
+`v*.*.*` 태그에서 실행되며, `internal/config/config.go`의 기준 버전이 그 태그와 같고
+`CHANGELOG.md`에 대응하는 `## [X.Y.Z]` 절과 링크 정의가 있어야 통과시킵니다.
+`check-version-consistency`는 이것을 볼 수 없습니다. 그 기준 자체를 사실로 삼기 때문에,
+공개된 릴리스보다 한 패치 뒤처져 있어도 내부적으로 일관되면 그대로 통과합니다 —
+어떤 릴리스가 나왔는데 트리 어디에서도 그것을 가리키지 않았던 이유가 바로 이것입니다.
+`CI (Consistency)`의 `Quick start runs`는 로컬에서 빌드한 이미지를 상대로 가이드의 빠른 시작
+명령 블록을 그대로 실행한 뒤 `GET /ready`를 요청합니다. 아무도 실행하지 않는 문서화된 절차는,
+망가진 줄 아무도 모르는 절차이기 때문입니다.
 
 [← 문서로 돌아가기](README.md)
