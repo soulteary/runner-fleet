@@ -28,6 +28,8 @@ github.com/soulteary/i18n-kit/v3 v3.0.0 h1:dEXGnF47X5lGQbuH+PGjqVioDoc4tq4liELwo
 github.com/soulteary/i18n-kit/v3 v3.0.0/go.mod h1:kdY9FY9gPw/r1sNYnS99xDOMwtPzH3IrMNpgoFxdUaU=
 github.com/soulteary/logger-kit/v3 v3.0.0 h1:oCsNss5cRgMJD5Ub5mjWjgFmtvExlqilSPuz/cIu8AE=
 github.com/soulteary/logger-kit/v3 v3.0.0/go.mod h1:zAV0BXZ42KFp5yXL6MMFtXg6O0xzxENx5VEW3/BKwEQ=
+github.com/soulteary/preflight-kit v1.0.0 h1:abXeDyKwdLYemOUNOqrjrGX5wj3ETLer6eZa688fsSs=
+github.com/soulteary/preflight-kit v1.0.0/go.mod h1:O3wu9sNDj1iL5vRdE5pvONF0Q4AfydWe2g2L7HsOVKw=
 github.com/soulteary/secure-kit v1.6.0 h1:QvvLkOhHq1lBWRkjWvELqeUiFPnKiuqBEqNSDVKE+p8=
 github.com/soulteary/secure-kit v1.6.0/go.mod h1:vNpwew8IBGYaxWnJMlTTSyRBVxHWmfhe3XXGs+Crby4=
 github.com/soulteary/version-kit/v3 v3.0.0 h1:dRlleqy7uupj3+kW1KJW8tRVX+CUFfFHDeNJElfkCBc=

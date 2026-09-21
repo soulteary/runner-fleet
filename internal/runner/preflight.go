@@ -12,32 +12,35 @@ import (
 	"strings"
 	"time"
 
+	preflight "github.com/soulteary/preflight-kit"
 	"github.com/soulteary/runner-fleet/internal/config"
 )
 
-// CheckLevel 自检结果级别
-type CheckLevel string
-
-const (
-	CheckOK    CheckLevel = "ok"
-	CheckWarn  CheckLevel = "warn"  // 不影响启动，但很可能在跑 Job 时出问题
-	CheckError CheckLevel = "error" // 当前配置下基本可以确定跑不起来
+// 自检的结果模型来自 preflight-kit。这里用**类型别名**而不是新类型：
+// CheckResult 就是 preflight.Result，既有调用方与用例一行不用改，
+// 也不会出现「两个长得一样但不能互相赋值」的类型。
+type (
+	// CheckLevel 自检结果级别
+	CheckLevel = preflight.Level
+	// CheckResult 单项自检结果
+	CheckResult = preflight.Result
 )
 
-// CheckResult 单项自检结果
-type CheckResult struct {
-	Name    string     `json:"name"`
-	Level   CheckLevel `json:"level"`
-	Message string     `json:"message"`
-	Hint    string     `json:"hint,omitempty"` // 可直接照做的修复建议
-}
+const (
+	CheckOK    = preflight.LevelOK
+	CheckWarn  = preflight.LevelWarn  // 不影响启动，但很可能在跑 Job 时出问题
+	CheckError = preflight.LevelError // 当前配置下基本可以确定跑不起来
+)
 
-func ok(name, msg string) CheckResult { return CheckResult{Name: name, Level: CheckOK, Message: msg} }
-func warn(name, msg, hint string) CheckResult {
-	return CheckResult{Name: name, Level: CheckWarn, Message: msg, Hint: hint}
-}
-func fail(name, msg, hint string) CheckResult {
-	return CheckResult{Name: name, Level: CheckError, Message: msg, Hint: hint}
+func ok(name, msg string) CheckResult         { return preflight.OK(name, msg) }
+func warn(name, msg, hint string) CheckResult { return preflight.Warn(name, msg, hint) }
+func fail(name, msg, hint string) CheckResult { return preflight.Fail(name, msg, hint) }
+
+// runCheck 跑一项检查，顺带拿到 preflight.Run 的 panic 兜底：
+// 自检自己崩了不该把 Manager 的启动一起带走。名字只在兜底结果里用得上，
+// 正常路径的 Name 由检查自己填。
+func runCheck(ctx context.Context, name string, f func(context.Context) CheckResult) CheckResult {
+	return preflight.Run(ctx, preflight.Named(name, f))[0]
 }
 
 // Preflight 按当前配置执行一组只读自检，不修改任何状态。
@@ -46,16 +49,21 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 	if cfg == nil {
 		return []CheckResult{fail("config", "配置为空", "")}
 	}
-	results := []CheckResult{checkBasePath(cfg)}
-	results = append(results, checkRunnerDirPermissions(cfg))
-	if !cfg.Runners.ContainerMode {
-		return append(results, checkDefaultModeDocker(ctx))
+	results := []CheckResult{
+		runCheck(ctx, "runners 目录", func(context.Context) CheckResult { return checkBasePath(cfg) }),
+		runCheck(ctx, "Runner 目录权限", func(context.Context) CheckResult { return checkRunnerDirPermissions(cfg) }),
 	}
-	results = append(results, checkDockerReachable(ctx))
-	results = append(results, checkNetwork(ctx, cfg))
+	if !cfg.Runners.ContainerMode {
+		return append(results, runCheck(ctx, "Job 内 Docker", checkDefaultModeDocker))
+	}
+	results = append(results,
+		runCheck(ctx, "Docker 可达性", checkDockerReachable),
+		runCheck(ctx, "容器网络", func(ctx context.Context) CheckResult { return checkNetwork(ctx, cfg) }),
+	)
 	results = append(results, checkRunnerImages(ctx, cfg)...)
-	results = append(results, checkJobDockerBackend(ctx, cfg))
-	return results
+	return append(results, runCheck(ctx, "Job 内 Docker", func(ctx context.Context) CheckResult {
+		return checkJobDockerBackend(ctx, cfg)
+	}))
 }
 
 // checkBasePath 检查 runners 根目录存在且对当前进程可写（容器内以 UID 1001 运行，
@@ -220,15 +228,22 @@ func RunnerImages(cfg *config.Config) []string {
 func checkRunnerImages(ctx context.Context, cfg *config.Config) []CheckResult {
 	var results []CheckResult
 	for _, img := range RunnerImages(cfg) {
-		if _, err := dockerCmd(ctx, "image", "inspect", img); err != nil {
-			results = append(results, warn("Runner 镜像",
-				fmt.Sprintf("%s 不在本地，首次启动 Runner 时才会拉取（私有仓库需先 docker login）", img),
-				"docker pull "+img))
+		present := runCheck(ctx, "Runner 镜像", func(ctx context.Context) CheckResult {
+			if _, err := dockerCmd(ctx, "image", "inspect", img); err != nil {
+				return warn("Runner 镜像",
+					fmt.Sprintf("%s 不在本地，首次启动 Runner 时才会拉取（私有仓库需先 docker login）", img),
+					"docker pull "+img)
+			}
+			return ok("Runner 镜像", img+" 已就绪")
+		})
+		results = append(results, present)
+		// 镜像已在本地才做工具链检查，避免在自检阶段触发一次镜像拉取
+		if present.Level != CheckOK {
 			continue
 		}
-		results = append(results, ok("Runner 镜像", img+" 已就绪"))
-		// 镜像已在本地才做工具链检查，避免在自检阶段触发一次镜像拉取
-		results = append(results, checkRunnerImageTools(ctx, img))
+		results = append(results, runCheck(ctx, "Runner 镜像工具链", func(ctx context.Context) CheckResult {
+			return checkRunnerImageTools(ctx, img)
+		}))
 	}
 	return results
 }
