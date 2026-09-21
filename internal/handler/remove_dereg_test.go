@@ -123,6 +123,7 @@ func TestRemoveRunner_DeregistersBeforeDeletingInstallDir(t *testing.T) {
 // 注销失败不阻断本地删除——用户要的是「从这里去掉它」——
 // 但必须如实说出 GitHub 上还留着一个，以及该去哪儿删
 func TestRemoveRunner_DeregisterFailureIsReportedNotSwallowed(t *testing.T) {
+	defer withI18n(map[string]string{"api.removed": "REMOVED-FROM-CONFIG %s"})()
 	_, _ = removeTestSetup(t, false)
 	stubDereg(t, func(_ context.Context, _, _, _, _ string) githubcheck.DeregisterResult {
 		return githubcheck.DeregisterResult{
@@ -139,7 +140,9 @@ func TestRemoveRunner_DeregisterFailureIsReportedNotSwallowed(t *testing.T) {
 		t.Fatalf("响应应标明未注销，得到 %v", body)
 	}
 	msg, _ := body["message"].(string)
-	for _, want := range []string{"已从配置中移除", "未被删除", "Settings"} {
+	// 第一项是本地化后的外壳，按键断言；后两项来自 githubcheck 的 Message，
+	// 那部分目前仍是中文——跨包消息还没接进 i18n。
+	for _, want := range []string{"REMOVED-FROM-CONFIG", "未被删除", "Settings"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("响应消息 %q 里应含 %q", msg, want)
 		}

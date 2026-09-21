@@ -314,6 +314,11 @@ func TestRecreateRunner_RejectsNonContainerMode(t *testing.T) {
 
 // TestRecreateRunner_RejectsUnregistered 没注册的 Runner 不存在容器，别去删
 func TestRecreateRunner_RejectsUnregistered(t *testing.T) {
+	// 断言走 i18n 的键而不是某一种语言的措辞：消息现在按请求语言翻译，
+	// 再断言中文原文等于把这条用例钉死在一种语言上。
+	defer withI18n(map[string]string{
+		"api.recreate_requires_registered": "ONLY-REGISTERED %s",
+	})()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.MkdirAll(filepath.Join(dir, "r1"), 0755); err != nil {
@@ -343,7 +348,10 @@ func TestRecreateRunner_RejectsUnregistered(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "已注册") {
+	if !strings.Contains(rec.Body.String(), "ONLY-REGISTERED") {
 		t.Fatalf("应说明只有已注册的 Runner 可重建，实际: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "new") {
+		t.Fatalf("消息里应带上当前状态，实际: %s", rec.Body.String())
 	}
 }

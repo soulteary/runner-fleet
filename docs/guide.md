@@ -11,7 +11,7 @@ Deployment, configuration, adding runners, and security are covered here. For co
 ## 1. Deployment (Docker)
 
 - **Linux only**, `linux/amd64` and `linux/arm64`. Whether a runner is running is read from the process table through `/proc`; on any other OS every runner reports "not running", so start/stop and the self-heal sweep cannot work. Published images cover those two architectures.
-- **The interface is translated; the messages are not.** The UI shell has six languages, but everything the server says back — API messages, toasts and log lines — is Chinese only. Self-check log lines are prefixed `[preflight …]` so you can find them without reading Chinese, but their text is Chinese. A known limit, not an unfinished translation.
+- **The interface and its messages are translated; the logs are not.** The UI and what the server says back — API messages and toasts — follow your language, chosen from `?lang=`, the language cookie, or `Accept-Language`. A script that sends no `Accept-Language` gets English. **Log lines are still Chinese**, including the startup self-check; they are prefixed `[preflight …]` so you can find them without reading Chinese. A few messages that originate deeper in the code (the GitHub deregistration result, for one) still pass through Chinese text. A known limit, not an unfinished translation.
 - Image is **Ubuntu**-based with .NET Core 6.0 dependencies; runs as **UID 1001**—host-mounted dirs must be writable by that user (e.g. `chown 1001:1001 config runners`).
 - ~15 seconds after start, registered but stopped runners are auto-started; periodic check every 5 minutes.
 
