@@ -224,10 +224,11 @@ warnt; der Modus schützt vor anderen lokalen Benutzern, nicht davor.
 
 `DELETE /api/runners/:name` entfernt einen Runner aus diesem Werkzeug **und** aus GitHub. Die
 GitHub-Seite braucht Zugangsdaten, und die einzigen, die dieses Werkzeug je besitzt, sind das
-optionale, pro Runner hinterlegte PAT in `<Runner-Verzeichnis>/.github_check_token` — dieselbe
-Datei, die auch die Sichtbarkeitsprüfung verwendet. Die Abmeldung läuft deshalb *vor* dem
-Löschen des Installationsverzeichnisses, denn dort wohnt das Token; diese Reihenfolge zu
-missachten heißt, die Möglichkeit dazu stillschweigend zu verlieren.
+optionale, pro Runner hinterlegte PAT in `config/tokens/<Runner-Name>` — dieselbe
+Datei, die auch die Sichtbarkeitsprüfung verwendet. Die Abmeldung läuft deshalb weiterhin *vor* dem
+Löschen des Installationsverzeichnisses: Ein PAT, das eine frühere Version dort hinterlassen hat,
+wird dabei herausgeholt; diese Reihenfolge zu missachten heißt, die Möglichkeit dazu
+stillschweigend zu verlieren.
 
 Ohne PAT lässt sich der Runner nicht abmelden: GitHub will ein PAT oder einen frischen Removal
 Token, und `config.sh remove` will Letzteren. Die Antwort sagt das dann ausdrücklich und nennt,

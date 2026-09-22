@@ -193,9 +193,9 @@ Runner 的安装目录按 0700 创建。`config.sh` 会把 `.credentials_rsapara
 ### 删除 Runner 与 GitHub
 
 `DELETE /api/runners/:name` 会把 Runner 从本工具**以及** GitHub 上都删掉。GitHub 那一侧需要凭据，
-而本工具手上唯一可能有的，就是可选的、每个 Runner 各自的 PAT——`<runner 目录>/.github_check_token`，
-与可见性检查用的是同一个文件。所以注销必须发生在删除安装目录**之前**，因为令牌就住在那里；
-顺序错了就等于悄悄失去了注销的能力。
+而本工具手上唯一可能有的，就是可选的、每个 Runner 各自的 PAT——`config/tokens/<Runner 名称>`，
+与可见性检查用的是同一个文件。所以注销仍然必须发生在删除安装目录**之前**：旧版本留在那个目录里的
+PAT 会在这一步被顺手搬出来，顺序错了就等于悄悄失去了注销的能力。
 
 没有 PAT 就注销不了：GitHub 要么要 PAT，要么要一个新鲜的 removal token，而 `config.sh remove`
 要的正是后者。此时响应会如实说明，并指出去哪里手动删除。这件事值得说出来而不是咽下去——

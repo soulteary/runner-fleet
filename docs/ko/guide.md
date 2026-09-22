@@ -104,7 +104,7 @@ Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전
 - **Job에서 `command not found` 또는 SDK 누락**: 셀프 호스팅 runner에는 GitHub 호스팅처럼 툴체인이 포함되어 있지 않습니다. 먼저 시작 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)을 확인하세요. 설정된 각 Runner 이미지에서 `git`/`unzip`/`tar`/`curl` 중 무엇이 빠졌는지 알려줍니다. 언어·플랫폼 SDK는 이미지를 확장하세요([`examples/runner-images/`](../../examples/runner-images/)).
 - **이전 Runner 이미지**: pull하거나 다시 빌드한 뒤 Runner를 시작하면 Manager가 이미지 변경(참조와 이미지 ID를 모두 비교하므로 같은 tag 재빌드도 포함)을 감지해 컨테이너를 다시 만듭니다. 실행 중인 컨테이너는 건드리지 않으니 중단해도 될 때 행의 "컨테이너 재생성"을 쓰세요.
 - **로그에 5분마다 `已定时拉起 runner: <이름>` 이 반복되고, UI에서도 실행 중으로 표시되지 않음**: 이번 버전에서 수정되었습니다. 업그레이드만 하면 되며 Runner를 다시 등록할 필요는 없습니다. 실행 상태를 그동안 pid 파일(`Runner.Listener.pid`, 없으면 `.path`)에서 읽었지만 actions/runner는 둘 다 쓰지 않습니다. 시작 스크립트 어디에도 pid 파일을 쓰는 곳이 없고 `.path`에는 PATH 문자열이 들어 있습니다. 그래서 모든 Runner가 "등록됨, 실행 중 아님"으로 읽혔고 5분마다 도는 점검이 매번 전부를 다시 시작시켰습니다. 이제는 프로세스 테이블에서 판단하며, 컨테이너 모드에서는 각 컨테이너 안의 Agent에게 물어봅니다 — Manager는 다른 컨테이너의 프로세스를 볼 수 없습니다. 같은 원인으로 기본(비컨테이너) 모드의 "정지"는 항상 `未找到 runner pid 文件或 pid 无效` 로 실패했습니다.
-- **UI에서 삭제한 Runner가 GitHub에 남아 있고, 같은 이름으로 다시 추가하면 등록이 실패함**: 이제 삭제 시 GitHub 등록 해제도 함께 수행합니다. 단 해당 Runner 디렉터리에 `.github_check_token`(선택 PAT, 조직은 `admin:org`, 저장소는 `repo`)이 있어야 합니다. 없으면 해제할 자격 증명이 없으므로 삭제 응답에 그 사실과 Settings → Actions → Runners 경로를 안내합니다. 이전 버전에서 삭제한 Runner는 해제된 적이 없으니 직접 정리하세요.
+- **UI에서 삭제한 Runner가 GitHub에 남아 있고, 같은 이름으로 다시 추가하면 등록이 실패함**: 이제 삭제 시 GitHub 등록 해제도 함께 수행합니다. 단 `config/tokens/<Runner 이름>`에 선택 PAT(조직은 `admin:org`, 저장소는 `repo`)이 있어야 합니다. 없으면 해제할 자격 증명이 없으므로 삭제 응답에 그 사실과 Settings → Actions → Runners 경로를 안내합니다. 이전 버전에서 삭제한 Runner는 해제된 적이 없으니 직접 정리하세요.
 - **어떤 Runner가 "GitHub 조회 실패"로 표시됨**: 조회는 했지만 답을 얻지 못한 상태입니다(토큰 만료, 권한 부족, 레이트 리밋, 대상이 보이지 않음 — 마우스를 올리면 원인 표시). "GitHub 미표시"(GitHub가 응답했고 목록에 없음)와는 다릅니다. 이전 버전은 전자도 후자로 보고했습니다.
 - **status=unknown**: 상세 팝업에서 probe 확인; "Start/Stop"으로 자가 복구 시도.
 
@@ -211,7 +211,7 @@ runners:
 
 **Runner가 설치되지 않은 경우**: [GitHub Actions Runner](https://github.com/actions/runner/releases)에서 다운로드 후 `runners/<name>/`에 풀고, UI에 토큰 입력 또는 해당 디렉터리에서 `./config.sh` 실행. 컨테이너 배포 시 UI에서 토큰 제출 시 먼저 설치 후 등록. 컨테이너 모드는 먼저 Runner 이미지와 `volume_host_path` 설정 필요(위 컨테이너 모드 참조).
 
-**등록 결과**: 해당 Runner 디렉터리의 `.registration_result.json`에 기록. **GitHub 표시 확인**(선택): Runner 디렉터리에 `.github_check_token`(PAT; 조직은 `admin:org`, 저장소는 `repo` 필요)을 두면 약 5분마다 확인하며 결과는 `.github_status.json`에 기록. 같은 검사에서 GitHub 상의 해당 Runner가 **작업을 실행 중인지**도 기록하며, 목록에는 '작업 중' 배지로, 설정 대화상자에는 별도 행으로 표시됩니다. 약 5분 주기를 공유하므로 최대 5분까지 지연될 수 있고, PAT가 없으면 '유휴'가 아니라 '알 수 없음'으로 남습니다. 목록의 '등록됨'과 'GitHub ✓'는 모두 해당 대상의 Runners 설정 페이지로 연결됩니다.
+**등록 결과**: 해당 Runner 디렉터리의 `.registration_result.json`에 기록. **GitHub 표시 확인**(선택): PAT를 `config/tokens/<Runner 이름>`(모드 0600; 조직은 `admin:org`, 저장소는 `repo` 필요)에 두면 약 5분마다 확인하며 결과는 `.github_status.json`에 기록. 이전 버전에서 Runner 디렉터리에 남은 PAT는 자동으로 그곳으로 옮겨지고 Runner 디렉터리에서 삭제됩니다 — 그 디렉터리는 Runner 컨테이너에 마운트되어 작업이 읽을 수 있기 때문입니다. 같은 검사에서 GitHub 상의 해당 Runner가 **작업을 실행 중인지**도 기록하며, 목록에는 '작업 중' 배지로, 설정 대화상자에는 별도 행으로 표시됩니다. 약 5분 주기를 공유하므로 최대 5분까지 지연될 수 있고, PAT가 없으면 '유휴'가 아니라 '알 수 없음'으로 남습니다. 목록의 '등록됨'과 'GitHub ✓'는 모두 해당 대상의 Runners 설정 페이지로 연결됩니다.
 
 **이름 충돌 검사**: 이름을 입력하는 동안 폼이 `/api/runner-precheck`를 호출해 제출 전에 문제를 보여 줍니다 — 설정에 같은 이름의 Runner가 있음, 정규화하면 다른 Runner와 컨테이너 이름이 같아짐, 설치 디렉터리가 이미 사용 중, 등록된 Runner가 남아 있는 디렉터리(`.runner` 존재), 호스트에 같은 이름의 컨테이너가 남아 있음. 차단성 항목은 빨간색으로 표시되고 한 번의 클릭으로 쓸 수 있는 추천 이름을 제공합니다. 경고(비어 있지 않은 디렉터리를 재사용)는 계속 진행할 수 있습니다. 그대로 제출해도 서버가 **409**와 동일한 충돌 정보로 거부합니다 — 예전의 '조용히 임의 접미사를 붙이는' 동작은 없어졌습니다(원하면 `auto_rename: true`).
 
@@ -233,7 +233,7 @@ runners:
 
 **Runner에 전달되는 환경 변수**: Manager와 Agent는 자신이 시작하는 모든 프로세스(`run.sh`와 그것이 실행하는 Job, `config.sh`, `install-runner.sh`)의 환경에서 `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER`, `AGENT_TOKEN`을 제거합니다. 나머지는 `DOCKER_HOST`와 프록시 설정을 포함해 그대로 전달됩니다. 이렇게 하면 관리용 자격 증명이 Job 로그에 남지 않지만, 격리 경계는 아닙니다. 기본 모드에서 Job은 Manager와 같은 사용자로 실행됩니다([SECURITY.md](../../SECURITY.md) 참고).
 
-**민감한 파일**: config/config.yaml과 .env는 `.gitignore`에 있음. 각 Runner의 `.github_check_token`은 `chmod 600` 권장. 버전 관리 under 시 `.gitignore`에 `**/.github_check_token` 추가.
+**민감한 파일**: config/config.yaml, .env와 `config/tokens/`는 `.gitignore`에 있음. 각 Runner의 선택 PAT는 `config/tokens/<Runner 이름>`에 두며, Manager가 디렉터리는 0700, 파일은 0600으로 만듭니다. Runner 디렉터리에는 두지 마세요 — 컨테이너 모드에서 그 디렉터리는 Runner 컨테이너에 마운트되어 작업이 읽을 수 있습니다.
 
 **Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
 
@@ -304,13 +304,13 @@ README는 설정이 곧 백업이라고 말합니다. *설정*에 대해서는 �
 Runner의 자격 증명은 그 설치 디렉터리에 있고, 그것이 없으면 복원한 배포는 하나씩 다시 등록하는
 수밖에 없습니다.
 
-`config/config.yaml`과 각 `runners/<이름>/` 디렉터리를 백업하되 `_work/`는 제외하세요.
+`config/` 디렉터리(`config.yaml`과 `tokens/`)와 각 `runners/<이름>/` 디렉터리를 백업하되 `_work/`는 제외하세요.
 
 | `runners/<이름>/` 안의 것 | 작성자 | 잃으면 |
 |---|---|---|
 | `.runner`, `.credentials_rsaparams` 등 `config.sh`가 쓴 파일 | actions/runner | 그 Runner는 사라집니다. 다시 등록해야 하며, 먼저 GitHub의 남은 항목을 지우세요 — 예전 것이 목록에 있는 동안에는 같은 이름으로 재등록이 실패합니다 |
 | `.agent_token` | Manager(권한 `0600`) | 다시 생성됩니다. 해당 컨테이너는 드리프트로 판정되어 다음 시작 때 재생성됩니다 |
-| `.github_check_token` | 선택적으로 직접 둠 | 가시성 확인이 멈추고, Runner를 삭제해도 GitHub에서 등록을 해제할 수 없게 됩니다 |
+| `config/tokens/<이름>`(Runner 디렉터리 밖) | 선택적으로 직접 둠 | 가시성 확인이 멈추고, Runner를 삭제해도 GitHub에서 등록을 해제할 수 없게 됩니다 |
 | `.registration_result.json`, `.github_status.json` | Manager | 표시용일 뿐 — 다음 등록이나 확인 때 다시 만들어집니다 |
 | `_work/` | Job 자신 | 남길 가치가 없습니다. 체크아웃과 빌드 산출물이며, 디스크에서 가장 크고 계속 자랍니다 |
 

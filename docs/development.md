@@ -212,9 +212,10 @@ against other local users, not against that.
 
 `DELETE /api/runners/:name` removes a runner from this tool **and** from GitHub. The GitHub
 side needs a credential, and the only one this tool ever has is the optional per-runner PAT
-at `<runner dir>/.github_check_token` — the same file the visibility check uses. So
-deregistration runs *before* the install directory is deleted, because that is where the
-token lives, and skipping that order silently loses the ability to do it at all.
+at `config/tokens/<runner name>` — the same file the visibility check uses. So
+deregistration runs *before* the install directory is deleted: a PAT left there by an
+earlier version is migrated out of it on the way, and skipping that order silently loses
+the ability to do it at all.
 
 With no PAT the runner cannot be deregistered: GitHub wants a PAT or a fresh removal token,
 and `config.sh remove` wants the latter. The response then says so and names where to delete

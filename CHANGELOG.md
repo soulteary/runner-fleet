@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.
+- The optional GitHub PAT moves from `runners/<name>/.github_check_token` to `config/tokens/<name>`. In container mode the runner directory is mounted into the runner's container, so any job could read a token that for organization targets carries `admin:org`. Existing tokens are moved on startup and removed from the runner directory.
 
 ### Upgrading
 
 - A workflow that read `BASIC_AUTH_*` or `AGENT_TOKEN` from its environment now gets nothing; every other variable in the job environment is unchanged.
+- Nothing to do for the PAT: tokens are migrated automatically. Scripts or runbooks that write the PAT into the runner directory still work — it is moved on the next check — but should write to `config/tokens/<name>` instead. Rotate any PAT that was in a runner directory while untrusted workflows could run there.
 
 ## [1.8.0] - 2026-09-21
 

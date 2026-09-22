@@ -104,7 +104,7 @@ Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバ�
 - **Job 内で `command not found` や SDK 不足**: セルフホスト runner には GitHub ホストのようなツールチェーンは同梱されていません。まず起動時セルフチェック（`docker compose logs runner-manager | grep '\[preflight'`）を確認してください。設定中の各 Runner イメージに `git`/`unzip`/`tar`/`curl` のどれが欠けているかを示します。言語・プラットフォーム SDK はイメージを拡張してください（[`examples/runner-images/`](../../examples/runner-images/)）。
 - **古い Runner イメージ**: pull または再ビルドしてから Runner を起動すれば、Manager がイメージの変化（参照とイメージ ID の両方を見るので同じ tag の再ビルドも対象）を検出してコンテナを作り直します。実行中のコンテナには触れないので、中断してよいタイミングで行の「コンテナ再作成」を使ってください。
 - **ログに 5 分ごとに `已定时拉起 runner: <名前>` が繰り返し出力され、UI でも「実行中」にならない**: 本バージョンで修正済みです。アップグレードするだけでよく、Runner の再登録は不要です。実行状態はこれまで pid ファイル（`Runner.Listener.pid`、なければ `.path`）から読んでいましたが、actions/runner はそのどちらも書きません。起動スクリプトのどこにも pid ファイルの書き出しはなく、`.path` の中身は PATH 文字列です。そのためすべての Runner が「登録済みだが未実行」と判定され、5 分ごとの巡回が毎回すべてを起動し直していました。現在はプロセステーブルを見て判定し、コンテナモードでは各コンテナ内の Agent に問い合わせます（Manager から他コンテナのプロセスは見えないため）。同じ原因で、デフォルト（非コンテナ）モードの「停止」は必ず `未找到 runner pid 文件或 pid 无效` で失敗していました。
-- **UI で削除した Runner が GitHub 側に残り、同じ名前で追加し直すと登録に失敗する**: 削除時に GitHub からの登録解除も行うようになりました。ただしその Runner ディレクトリに `.github_check_token`（任意の PAT。組織は `admin:org`、リポジトリは `repo`）がある場合に限ります。無い場合は解除する手段がないため、削除レスポンスでその旨と Settings → Actions → Runners を案内します。旧バージョンで削除した Runner は解除されていないので手動で削除してください。
+- **UI で削除した Runner が GitHub 側に残り、同じ名前で追加し直すと登録に失敗する**: 削除時に GitHub からの登録解除も行うようになりました。ただし `config/tokens/<Runner 名>` に任意の PAT（組織は `admin:org`、リポジトリは `repo`）がある場合に限ります。無い場合は解除する手段がないため、削除レスポンスでその旨と Settings → Actions → Runners を案内します。旧バージョンで削除した Runner は解除されていないので手動で削除してください。
 - **ある Runner が「GitHub 照会失敗」と表示される**: 照会は行ったが答えが得られなかった状態です（トークン期限切れ、権限不足、レート制限、対象が見えない——ホバーで原因を表示）。「GitHub 未表示」＝GitHub が応答し一覧に無かった、とは別物です。旧バージョンは前者も後者として報告していました。
 - **status=unknown**: 詳細ポップアップの probe を確認。「Start/Stop」で自己修復を試す。
 
@@ -211,7 +211,7 @@ runners:
 
 **Runner が未インストールの場合**: [GitHub Actions Runner](https://github.com/actions/runner/releases) からダウンロードし、`runners/<name>/` に展開。その後 UI でトークン入力またはそのディレクトリで `./config.sh` を実行。コンテナデプロイでは UI でトークン送信時にまずインストール、続いて登録。コンテナモードでは先に Runner イメージと `volume_host_path` の設定が必要（上記コンテナモード参照）。
 
-**登録結果**: その Runner ディレクトリの `.registration_result.json` に書き込み。**GitHub 表示チェック**（任意）: Runner ディレクトリに `.github_check_token`（PAT。組織は `admin:org`、リポジトリは `repo` が必要）を置くと約 5 分ごとにチェックし、結果は `.github_status.json` に書き込み。 同じチェックで GitHub 側の Runner が**ジョブ実行中**かどうかも記録し、一覧では「ジョブ実行中」バッジ、設定ダイアログでは独立した行として表示します。同じ約 5 分間隔のため最大 5 分遅れることがあり、PAT がない場合は「不明」のままで、アイドルとは報告しません。一覧の「登録済み」と「GitHub ✓」はいずれも対象の Runners 設定ページへのリンクです。
+**登録結果**: その Runner ディレクトリの `.registration_result.json` に書き込み。**GitHub 表示チェック**（任意）: PAT を `config/tokens/<Runner 名>`（モード 0600。組織は `admin:org`、リポジトリは `repo` が必要）に置くと約 5 分ごとにチェックし、結果は `.github_status.json` に書き込み。旧バージョンで Runner ディレクトリに残った PAT は自動でそこへ移され、Runner ディレクトリからは削除されます——そのディレクトリは Runner のコンテナにマウントされ、ジョブから読めてしまうためです。 同じチェックで GitHub 側の Runner が**ジョブ実行中**かどうかも記録し、一覧では「ジョブ実行中」バッジ、設定ダイアログでは独立した行として表示します。同じ約 5 分間隔のため最大 5 分遅れることがあり、PAT がない場合は「不明」のままで、アイドルとは報告しません。一覧の「登録済み」と「GitHub ✓」はいずれも対象の Runners 設定ページへのリンクです。
 
 **名前の衝突チェック**: 名前を入力している間にフォームが `/api/runner-precheck` を呼び、送信前に問題を提示します——設定に同名の Runner がある、正規化すると他とコンテナ名が同じになる、インストール先が他の Runner に使われている、登録済みの Runner が残ったディレクトリ（`.runner` がある）、ホストに同名のコンテナが残っている。送信を妨げるものは赤で表示し、ワンクリックで使える候補名を出します。警告（中身のあるディレクトリを再利用する）は続行できます。無理に送信してもサーバー側が **409** と同じ衝突情報で拒否します——従来の「黙ってランダムな接尾辞を付ける」動作は廃止しました（必要なら `auto_rename: true`）。
 
@@ -233,7 +233,7 @@ runners:
 
 **Runner に渡される環境変数**: Manager と Agent は、自分が起動するすべてのプロセス——`run.sh` とそれが実行する Job、`config.sh`、`install-runner.sh`——の環境から `BASIC_AUTH_PASSWORD`、`BASIC_AUTH_USER`、`AGENT_TOKEN` を取り除きます。それ以外は `DOCKER_HOST` やプロキシ設定も含めてそのまま渡します。これにより管理用の認証情報が Job のログに出なくなりますが、分離の境界ではありません。デフォルトモードでは Job は Manager と同じユーザーで動作します（[SECURITY.md](../../SECURITY.md) を参照）。
 
-**機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
+**機密ファイル**: config/config.yaml、.env と `config/tokens/` は `.gitignore` に含まれています。各 Runner の任意の PAT は `config/tokens/<Runner 名>` に置かれ、Manager がディレクトリを 0700、ファイルを 0600 で作成します。Runner ディレクトリには置かないでください——コンテナモードではそのディレクトリが Runner のコンテナにマウントされ、ジョブから読めてしまいます。
 
 **Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。
 
@@ -305,13 +305,13 @@ README には「設定がバックアップだ」とあります。これは*設
 当てはまりません。Runner の資格情報はそのインストールディレクトリにあり、それが無ければ復元した
 デプロイは一つずつ登録し直すしかありません。
 
-`config/config.yaml` と、各 `runners/<名前>/` ディレクトリ（`_work/` を除く）をバックアップしてください。
+`config/` ディレクトリ（`config.yaml` と `tokens/`）と、各 `runners/<名前>/` ディレクトリ（`_work/` を除く）をバックアップしてください。
 
 | `runners/<名前>/` の中身 | 書き手 | 失うと |
 |---|---|---|
 | `.runner`、`.credentials_rsaparams` など `config.sh` が書いたファイル | actions/runner | その Runner は失われます。登録し直しが必要で、先に GitHub 側の古いエントリを削除してください——古いものが一覧に残っている間は、同じ名前での再登録は失敗します |
 | `.agent_token` | Manager（パーミッション `0600`） | 再生成されます。そのコンテナはドリフトと判定され、次回起動時に作り直されます |
-| `.github_check_token` | 任意で自分が置く | 可視性チェックが止まり、Runner を削除しても GitHub から登録解除できなくなります |
+| `config/tokens/<名前>`（Runner ディレクトリの外） | 任意で自分が置く | 可視性チェックが止まり、Runner を削除しても GitHub から登録解除できなくなります |
 | `.registration_result.json`、`.github_status.json` | Manager | 影響は表示だけ——次の登録またはチェックで作り直されます |
 | `_work/` | Job 自身 | 残す価値はありません。チェックアウトとビルド成果物で、ディスク上で最大かつ増え続ける部分です |
 

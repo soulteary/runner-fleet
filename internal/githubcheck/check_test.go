@@ -13,6 +13,7 @@ import (
 
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/secrets"
 )
 
 // fakeAPI 把 apiBase 指向一个本地服务，返回它记录下的请求路径
@@ -39,15 +40,42 @@ func runnersJSON(total int, names ...string) string {
 	return string(b)
 }
 
-func withToken(t *testing.T, token string) string {
+// withToken 建一个 Runner 安装目录，并把 PAT 放进 Manager 侧的凭据目录。
+//
+// 凭据目录刻意与安装目录分开：新位置在配置目录下，而配置目录不会被挂进
+// Runner 容器。两者同根只是为了 t.TempDir 好清理。
+func withToken(t *testing.T, token string) (string, *secrets.Store) {
 	t.Helper()
-	dir := t.TempDir()
+	root := t.TempDir()
+	dir := filepath.Join(root, "runners", "alpha")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	store := &secrets.Store{Dir: filepath.Join(root, "config", "tokens")}
 	if token != "" {
-		if err := os.WriteFile(filepath.Join(dir, RunnerTokenFile), []byte(token+"\n"), 0600); err != nil {
+		if err := os.MkdirAll(store.Dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		p, err := store.Path("alpha")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(token+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return dir
+	return dir, store
+}
+
+// withLegacyToken 建一个安装目录，并把 PAT 放进旧位置（Runner 目录下），
+// 用来验证迁移：读取前会把它搬走。
+func withLegacyToken(t *testing.T, token string) (string, *secrets.Store) {
+	t.Helper()
+	dir, store := withToken(t, "")
+	if err := os.WriteFile(filepath.Join(dir, secrets.LegacyRunnerTokenFile), []byte(token+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir, store
 }
 
 func statusOf(t *testing.T, dir string) (registered *bool, checkAt, checkErr string) {
@@ -106,11 +134,11 @@ func runCfgIn(installDir, name, targetType, target string) *config.Config {
 }
 
 func TestRun_RegisteredWritesTrue(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	reg, at, errMsg := statusOf(t, dir)
 	if reg == nil || !*reg {
@@ -125,11 +153,11 @@ func TestRun_RegisteredWritesTrue(t *testing.T) {
 }
 
 func TestRun_NotRegisteredWritesFalse(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "别的 runner"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	reg, _, _ := statusOf(t, dir)
 	if reg == nil || *reg {
@@ -158,7 +186,7 @@ func TestRun_FailureIsUnknownNotUnregistered(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := withToken(t, "pat")
+			dir, store := withToken(t, "pat")
 			fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 				for k, v := range tc.headers {
 					w.Header().Set(k, v)
@@ -166,7 +194,7 @@ func TestRun_FailureIsUnknownNotUnregistered(t *testing.T) {
 				w.WriteHeader(tc.status)
 				_, _ = fmt.Fprint(w, tc.body)
 			})
-			Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+			Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 			reg, at, errMsg := statusOf(t, dir)
 			if reg != nil {
@@ -184,11 +212,11 @@ func TestRun_FailureIsUnknownNotUnregistered(t *testing.T) {
 
 // 没有 PAT 的 runner 直接跳过，不写状态文件——保持「从未检查」
 func TestRun_NoTokenWritesNothing(t *testing.T) {
-	dir := withToken(t, "")
+	dir, store := withToken(t, "")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("没有令牌时不应发起请求")
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 	if _, err := os.Stat(filepath.Join(dir, runner.GitHubStatusFile)); !os.IsNotExist(err) {
 		t.Fatal("没有令牌时不应写状态文件")
 	}
@@ -196,7 +224,7 @@ func TestRun_NoTokenWritesNothing(t *testing.T) {
 
 // 超过一页的组织：只取第一页会把后面的 Runner 判成没登记
 func TestRun_PaginatesBeyondFirstPage(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	first := make([]string, apiPerPage)
 	for i := range first {
 		first[i] = fmt.Sprintf("filler-%d", i)
@@ -209,7 +237,7 @@ func TestRun_PaginatesBeyondFirstPage(t *testing.T) {
 			_, _ = fmt.Fprint(w, runnersJSON(apiPerPage+1, "alpha"))
 		}
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	reg, _, errMsg := statusOf(t, dir)
 	if reg == nil || !*reg {
@@ -222,11 +250,11 @@ func TestRun_PaginatesBeyondFirstPage(t *testing.T) {
 
 // 第一页不满就该停，不能白白多打一次 API
 func TestRun_StopsAfterShortPage(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 	if len(*seen) != 1 {
 		t.Fatalf("单页即可取完，不应继续翻页，实际请求: %v", *seen)
 	}
@@ -237,7 +265,7 @@ func TestListRunners_EscapesPathSegments(t *testing.T) {
 	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(0))
 	})
-	_, err := listRunners(context.Background(), http.DefaultClient, "pat", "org", "my org?x=1")
+	_, err := listRunners(context.Background(), http.DefaultClient, tokenRef{value: "pat"}, "org", "my org?x=1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +284,7 @@ func TestListRunners_RejectsInvalidTarget(t *testing.T) {
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("target 无效时不应发起请求")
 	})
-	if _, err := listRunners(context.Background(), http.DefaultClient, "pat", "repo", "没有斜杠"); err == nil {
+	if _, err := listRunners(context.Background(), http.DefaultClient, tokenRef{value: "pat"}, "repo", "没有斜杠"); err == nil {
 		t.Fatal("repo 类型的 target 缺少 owner/repo 结构，应直接报错")
 	}
 }
@@ -265,7 +293,7 @@ func TestListRunners_RejectsInvalidTarget(t *testing.T) {
 
 // 从本工具删掉不等于从 GitHub 删掉：必须真的调 DELETE
 func TestDeregister_DeletesByID(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusNoContent)
@@ -273,7 +301,7 @@ func TestDeregister_DeletesByID(t *testing.T) {
 		}
 		_, _ = fmt.Fprint(w, runnersJSON(2, "别的", "alpha"))
 	})
-	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
 	if !res.Done {
 		t.Fatalf("应注销成功，得到 %+v", res)
 	}
@@ -292,11 +320,11 @@ func TestDeregister_DeletesByID(t *testing.T) {
 
 // GitHub 上本来就没有：目的已经达到，不该报成失败
 func TestDeregister_AbsentRunnerIsDone(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "别的"))
 	})
-	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
 	if !res.Done {
 		t.Fatalf("GitHub 上没有同名 Runner 应视为已完成，得到 %+v", res)
 	}
@@ -310,11 +338,11 @@ func TestDeregister_AbsentRunnerIsDone(t *testing.T) {
 // 没有 PAT 就注销不了。这不是能默默吞掉的情况——
 // 留在 GitHub 上的那个会让之后用同一名称重新添加时因重名而注册失败。
 func TestDeregister_NoTokenSaysWhereToDeleteManually(t *testing.T) {
-	dir := withToken(t, "")
+	dir, store := withToken(t, "")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("没有令牌时不应发起请求")
 	})
-	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
 	if res.Done {
 		t.Fatal("没有令牌时不可能注销成功")
 	}
@@ -324,17 +352,21 @@ func TestDeregister_NoTokenSaysWhereToDeleteManually(t *testing.T) {
 	if res.MessageKey != "github.dereg.no_pat" {
 		t.Fatalf("键应为 github.dereg.no_pat，实际 %q", res.MessageKey)
 	}
-	if len(res.MessageArgs) != 2 || res.MessageArgs[0] != RunnerTokenFile || res.MessageArgs[1] != "alpha" {
-		t.Fatalf("参数应为 [%s alpha]，实际 %v", RunnerTokenFile, res.MessageArgs)
+	wantPath, err := store.Path("alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.MessageArgs) != 2 || res.MessageArgs[0] != wantPath || res.MessageArgs[1] != "alpha" {
+		t.Fatalf("参数应为 [%s alpha]，实际 %v", wantPath, res.MessageArgs)
 	}
 }
 
 func TestDeregister_APIFailureIsReported(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	})
-	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
 	if res.Done {
 		t.Fatal("API 报 401 时不能算注销成功")
 	}
@@ -349,7 +381,7 @@ func TestDeregister_APIFailureIsReported(t *testing.T) {
 
 // 删除接口返回 404：说明它已经不在了，同样算达成
 func TestDeregister_DeleteReturning404IsDone(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusNotFound)
@@ -357,7 +389,7 @@ func TestDeregister_DeleteReturning404IsDone(t *testing.T) {
 		}
 		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
 	})
-	res := Deregister(context.Background(), dir, "repo", "o/r", "alpha")
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
 	if !res.Done {
 		t.Fatalf("DELETE 返回 404 说明已不存在，应视为完成，得到 %+v", res)
 	}
@@ -365,11 +397,11 @@ func TestDeregister_DeleteReturning404IsDone(t *testing.T) {
 
 // GitHub 的 busy 字段就是「这个 Runner 正在跑 Job」，要能落到状态文件里
 func TestRun_BusyRunnerIsRecorded(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, busyRunnersJSON(true, "alpha"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	if busy := busyOf(t, dir); busy == nil || !*busy {
 		t.Fatalf("GitHub 说它忙，应记为忙碌，得到 %v", busy)
@@ -377,11 +409,11 @@ func TestRun_BusyRunnerIsRecorded(t *testing.T) {
 }
 
 func TestRun_IdleRunnerIsRecordedAsNotBusy(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, busyRunnersJSON(false, "alpha"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	if busy := busyOf(t, dir); busy == nil || *busy {
 		t.Fatalf("GitHub 说它不忙，应记为空闲，得到 %v", busy)
@@ -391,11 +423,11 @@ func TestRun_IdleRunnerIsRecordedAsNotBusy(t *testing.T) {
 // 「没查到这个 Runner」不等于「它不忙」。写成 false 会让界面对一个
 // GitHub 上根本不存在的 Runner 打包票说它空闲——和 registered 那个三态同一个错。
 func TestRun_BusyIsUnknownWhenRunnerAbsent(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "别的 runner"))
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	if busy := busyOf(t, dir); busy != nil {
 		t.Fatalf("GitHub 上没有这个 Runner，忙碌状态应为未知，得到 %v", *busy)
@@ -404,13 +436,162 @@ func TestRun_BusyIsUnknownWhenRunnerAbsent(t *testing.T) {
 
 // 查询本身失败时同理：不知道就是不知道
 func TestRun_BusyIsUnknownWhenCheckFails(t *testing.T) {
-	dir := withToken(t, "pat")
+	dir, store := withToken(t, "pat")
 	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	})
-	Run(runCfgIn(dir, "alpha", "repo", "o/r"))
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
 
 	if busy := busyOf(t, dir); busy != nil {
 		t.Fatalf("查询失败时忙碌状态应为未知，得到 %v", *busy)
 	}
+}
+
+// ---- 旧位置的 PAT：读取前先搬走 ----
+
+// 用户照旧文档把 PAT 放进 Runner 目录的，检查照样要能用上它——
+// 但用完之后那个文件不能还留在挂载进容器的目录里。
+func TestRun_MigratesLegacyTokenAndStillAuthenticates(t *testing.T) {
+	dir, store := withLegacyToken(t, "legacy-pat")
+	var auth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = append(auth, r.Header.Get("Authorization"))
+		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
+	}))
+	t.Cleanup(srv.Close)
+	orig := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = orig })
+
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
+
+	// 1) 旧位置的令牌确实被用上了
+	if len(auth) == 0 {
+		t.Fatal("没有发起请求，说明旧位置的 PAT 没被读到")
+	}
+	if auth[0] != "Bearer legacy-pat" {
+		t.Fatalf("请求应带着旧位置的 PAT，实际 Authorization=%q", auth[0])
+	}
+	// 2) 旧文件已经不在了——这才是本 PR 要关掉的那个暴露
+	legacy := filepath.Join(dir, secrets.LegacyRunnerTokenFile)
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("旧位置 %s 仍然存在（err=%v），容器里的 Job 还能读到它", legacy, err)
+	}
+	// 3) 令牌搬到了新位置
+	if got := store.GitHubToken("alpha"); got != "legacy-pat" {
+		t.Fatalf("新位置应有该令牌，得到 %q", got)
+	}
+	// 4) 检查结果照旧写出
+	if reg, _, _ := statusOf(t, dir); reg == nil || !*reg {
+		t.Fatalf("应记为已登记，得到 %v", reg)
+	}
+}
+
+// 删除 Runner 时的注销同理：旧位置的 PAT 仍然管用，用完旧文件也不再留着
+func TestDeregister_MigratesLegacyToken(t *testing.T) {
+	dir, store := withLegacyToken(t, "legacy-pat")
+	var auth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = append(auth, r.Header.Get("Authorization"))
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
+	}))
+	t.Cleanup(srv.Close)
+	orig := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = orig })
+
+	res := Deregister(context.Background(), store, dir, "repo", "o/r", "alpha")
+	if !res.Done {
+		t.Fatalf("应注销成功，得到 %+v", res)
+	}
+	for _, a := range auth {
+		if a != "Bearer legacy-pat" {
+			t.Fatalf("请求应带着旧位置的 PAT，实际 %q", a)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, secrets.LegacyRunnerTokenFile)); !os.IsNotExist(err) {
+		t.Fatalf("旧位置仍然存在（err=%v）", err)
+	}
+}
+
+// 401 要指向新位置：用户得知道该去改哪个文件
+func TestRun_UnauthorizedNamesTheNewLocation(t *testing.T) {
+	dir, store := withToken(t, "pat")
+	fakeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
+
+	_, _, errMsg := statusOf(t, dir)
+	wantPath, err := store.Path("alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errMsg, wantPath) {
+		t.Fatalf("401 的说明应指向 %s，得到 %q", wantPath, errMsg)
+	}
+	if strings.Contains(errMsg, secrets.LegacyRunnerTokenFile) {
+		t.Fatalf("不应再把用户指向 Runner 目录下的旧文件，得到 %q", errMsg)
+	}
+}
+
+// store 为 nil 时不该 panic，也不该去打 API
+func TestRun_NilStoreDoesNothing(t *testing.T) {
+	dir, _ := withToken(t, "pat")
+	fakeAPI(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("没有 store 就没有凭据，不该发起请求")
+	})
+	Run(runCfgIn(dir, "alpha", "repo", "o/r"), nil)
+	if reg, _, _ := statusOf(t, dir); reg != nil {
+		t.Fatalf("不该写出状态，得到 %v", reg)
+	}
+}
+
+func TestDeregister_NilStoreNamesTheNewLocation(t *testing.T) {
+	dir, _ := withToken(t, "pat")
+	res := Deregister(context.Background(), nil, dir, "repo", "o/r", "alpha")
+	if res.Done {
+		t.Fatal("没有凭据不可能注销成功")
+	}
+	if res.MessageKey != "github.dereg.no_pat" {
+		t.Fatalf("应回报 no_pat，得到 %q", res.MessageKey)
+	}
+	if len(res.MessageArgs) != 2 || res.MessageArgs[0] != secrets.PathDescription {
+		t.Fatalf("参数应指向新位置的通用写法，得到 %v", res.MessageArgs)
+	}
+}
+
+// TokenForRunner 是本包对外的读取入口：新位置直接读，旧位置先搬再读
+func TestTokenForRunner(t *testing.T) {
+	t.Run("新位置", func(t *testing.T) {
+		dir, store := withToken(t, "pat")
+		if got := TokenForRunner(store, "alpha", dir); got != "pat" {
+			t.Fatalf("得到 %q", got)
+		}
+	})
+	t.Run("旧位置先迁移", func(t *testing.T) {
+		dir, store := withLegacyToken(t, "legacy-pat")
+		if got := TokenForRunner(store, "alpha", dir); got != "legacy-pat" {
+			t.Fatalf("得到 %q", got)
+		}
+		if _, err := os.Stat(filepath.Join(dir, secrets.LegacyRunnerTokenFile)); !os.IsNotExist(err) {
+			t.Fatalf("旧文件应已被搬走（err=%v）", err)
+		}
+	})
+	t.Run("都没有时为空串", func(t *testing.T) {
+		dir, store := withToken(t, "")
+		if got := TokenForRunner(store, "alpha", dir); got != "" {
+			t.Fatalf("得到 %q", got)
+		}
+	})
+	t.Run("store 为 nil 时为空串", func(t *testing.T) {
+		dir, _ := withToken(t, "pat")
+		if got := TokenForRunner(nil, "alpha", dir); got != "" {
+			t.Fatalf("得到 %q", got)
+		}
+	})
 }
