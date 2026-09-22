@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- In container mode with a DinD backend, the startup self-check lists containers on `runner-net` that are not part of the deployment, since the stock DinD service accepts unauthenticated connections from anything on that network.
+
+### Changed
+
+- `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
+
 ### Fixed
 
 - `config.yaml`, `.github_status.json` and `.registration_result.json` are now replaced atomically, so a request that reads them during a save no longer sees an empty or half-written file, and a crash mid-save no longer truncates the config. A config directory the Manager cannot write, or a config file bind-mounted on its own, falls back to the previous in-place write with a one-time warning.

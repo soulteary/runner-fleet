@@ -37,7 +37,12 @@ not account for them is the more likely problem.
   password. See [4. Security and validation](docs/guide.md#4-security-and-validation).
 - **`job_docker_backend: host-socket` gives jobs the host.** A job can bind-mount any host path
   through the shared Docker socket. That is the point of the backend, and it means a workflow you
-  run is as trusted as root on that machine. `dind` isolates instead.
+  run is as trusted as root on that machine. `dind` keeps jobs off the host's filesystem, but it is
+  one privileged daemon shared by every runner: a job can list, exec into and remove containers
+  that other jobs started there.
+- **`runner-net` is a trust boundary.** The stock DinD service listens on port 2375 without TLS or
+  authentication, so any container attached to `runner-net` controls that privileged daemon. Attach
+  nothing else to it; the startup self-check lists unexpected members in container mode.
 - **The Manager needs the host Docker socket in container mode.** Access to it is equivalent to
   root on the host.
 - **Anyone who can add a runner can run code.** Adding a runner and pointing it at a repository
