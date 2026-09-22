@@ -69,7 +69,7 @@ Manager가 Runner의 프로세스를 볼 수 없습니다. 그래서 Agent에게
 go build -o runner-manager ./cmd/runner-manager
 
 # 버전 포함 (/version 및 디버깅용)
-go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.9.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent만 빌드 (컨테이너 모드)
 go build -o runner-agent ./cmd/runner-agent

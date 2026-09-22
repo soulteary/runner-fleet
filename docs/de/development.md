@@ -72,7 +72,7 @@ per Referenz verglichen, ein Neubau desselben Tags zählt also ebenfalls.
 go build -o runner-manager ./cmd/runner-manager
 
 # Mit Version (für /version und Debug)
-go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.9.0" -o runner-manager ./cmd/runner-manager
 
 # Nur Runner Agent bauen (Containermodus)
 go build -o runner-agent ./cmd/runner-agent

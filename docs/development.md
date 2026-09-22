@@ -70,7 +70,7 @@ compared by ID as well as by reference, so rebuilding the same tag counts.
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.9.0" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent

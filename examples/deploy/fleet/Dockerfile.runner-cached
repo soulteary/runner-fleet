@@ -12,7 +12,7 @@
 #
 # 语言与平台 SDK（Android、Flutter 等）的扩展方式见 ../../runner-images/。
 
-ARG RUNNER_BASE_IMAGE=ghcr.io/soulteary/runner-fleet:v1.8.0-runner
+ARG RUNNER_BASE_IMAGE=ghcr.io/soulteary/runner-fleet:v1.9.0-runner
 FROM ${RUNNER_BASE_IMAGE}
 
 USER root

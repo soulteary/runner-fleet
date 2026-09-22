@@ -64,7 +64,7 @@ Runner 做同样的事。两者前面都站着 `tini`，负责回收 Job 留下�
 go build -o runner-manager ./cmd/runner-manager
 
 # 注入版本号（便于 /version 与排障）
-go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.9.0" -o runner-manager ./cmd/runner-manager
 
 # 仅构建 Runner Agent（容器模式用）
 go build -o runner-agent ./cmd/runner-agent
