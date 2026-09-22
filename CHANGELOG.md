@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-22
+
 ### Added
 
 - The startup self-check warns when the default mode runs more than one runner, since a job on any of them can read the others' credentials.
@@ -392,7 +394,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/soulteary/runner-fleet/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/soulteary/runner-fleet/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/soulteary/runner-fleet/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/soulteary/runner-fleet/compare/v1.6.0...v1.7.0

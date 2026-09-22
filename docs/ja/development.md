@@ -70,7 +70,7 @@ Manager は各コンテナの実際の作成パラメータを現在の設定と
 go build -o runner-manager ./cmd/runner-manager
 
 # バージョン付き（/version とデバッグ用）
-go build -ldflags "-X main.Version=1.8.0" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=1.9.0" -o runner-manager ./cmd/runner-manager
 
 # Runner Agent のみビルド（コンテナモード用）
 go build -o runner-agent ./cmd/runner-agent
