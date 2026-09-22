@@ -20,6 +20,8 @@
 #
 # 两种形态的完整可复制配置（单容器 / 多容器并行 + 共享缓存）见 examples/deploy/
 services:
+  # 注意：此 DinD 关闭了 TLS，2375 端口对 runner-net 上的任何容器免认证开放，且以 privileged 运行。
+  # 不要把无关容器接入 runner-net；各 Runner 共用这一个 daemon，Job 之间彼此可见。
   runner-dind:
     profiles:
       - dind

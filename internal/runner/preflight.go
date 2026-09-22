@@ -4,6 +4,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -63,6 +64,13 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 		runCheck(ctx, "Docker reachability", checkDockerReachable),
 		runCheck(ctx, "container network", func(ctx context.Context) CheckResult { return checkNetwork(ctx, cfg) }),
 	)
+	// 只有真有 Runner 用 dind 时才查网络成员：别的后端下网络上没有那个免认证的 daemon，
+	// 多出来的容器也就只是多出来的容器，报了反而是噪音
+	if anyDindBackend(cfg) {
+		results = append(results, runCheck(ctx, "container network members", func(ctx context.Context) CheckResult {
+			return checkNetworkMembers(ctx, cfg)
+		}))
+	}
 	results = append(results, checkRunnerImages(ctx, cfg)...)
 	return append(results, runCheck(ctx, "Docker in jobs", func(ctx context.Context) CheckResult {
 		return checkJobDockerBackend(ctx, cfg)
@@ -209,6 +217,137 @@ func checkNetwork(ctx context.Context, cfg *config.Config) CheckResult {
 			"docker network create "+network)
 	}
 	return ok(name, "the network "+network+" exists")
+}
+
+// networkMembersFormat 只取 docker network inspect 的 .Containers 一段：它的结构是
+// map[容器ID]{Name,…}，其余字段（IPAM、Options、Labels）与这项检查无关。
+const networkMembersFormat = "{{json .Containers}}"
+
+// maxListedNetworkMembers 消息里最多点名几个容器。网络上挂着几十个容器时逐个列出
+// 会把这一行撑成不可读，而这项检查要说的是「有不该在这里的东西」——
+// 前十个足够让人接着去 docker network inspect 看全。
+const maxListedNetworkMembers = 10
+
+// anyDindBackend 是否有 Runner 实际用 dind。items[].job_docker_backend 可以逐个覆盖，
+// 所以全局值两个方向都不能直接当结论：全局 none 不代表没有 Runner 单独开了 dind，
+// 全局 dind 也不代表真有 Runner 在用它。
+func anyDindBackend(cfg *config.Config) bool {
+	// 还没配 items：界面上后续新增的 Runner 会拿全局值，所以按全局值算
+	if len(cfg.Runners.Items) == 0 {
+		return cfg.JobDockerBackendFor("") == "dind"
+	}
+	for _, item := range cfg.Runners.Items {
+		if cfg.JobDockerBackendFor(item.Name) == "dind" {
+			return true
+		}
+	}
+	return false
+}
+
+// checkNetworkMembers 列出 runner-net 上不属于本部署的容器。
+//
+// 仓库自带的 DinD 以 privileged 运行且关闭了 TLS（compose 里的 --tls=false），2375
+// 端口对这张网上的任何容器免认证开放——接上来就是那个 daemon 的完全控制权，而从
+// privileged 容器逃到宿主机的门槛并不高。所以这张网是一条信任边界，网上多出来的东西
+// 值得让人知道。
+//
+// 只 warn 不 fail：多一个容器不一定是配置错误（监控 sidecar 接到同一张网上是常见做法），
+// 需要的是知情，不是拦住启动。
+func checkNetworkMembers(ctx context.Context, cfg *config.Config) CheckResult {
+	const name = "container network members"
+	network := cfg.Runners.ContainerNetwork
+	if network == "" {
+		network = "runner-net"
+	}
+	out, err := dockerCmd(ctx, "network", "inspect", network, "--format", networkMembersFormat)
+	if err != nil {
+		// 「网络不存在」这类情形 checkNetwork 已经报过 fail，这里再报一遍
+		// 只是把同一件事说两次，而且是用一句更绕的话说
+		return ok(name, fmt.Sprintf("could not read the members of %s (skipped): %s", network, firstLine(out, err)))
+	}
+	// 只声明用得上的 Name，其余字段（EndpointID、IPv4Address…）由 json 忽略
+	var raw map[string]struct{ Name string }
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return ok(name, fmt.Sprintf("could not parse the members of %s (skipped): %v", network, err))
+	}
+	members := make(map[string]string, len(raw))
+	for id, m := range raw {
+		members[id] = m.Name
+	}
+	// hostname 取不到时传空串，unexpectedNetworkMembers 会因此跳过「自身」判断：
+	// 宁可把 Manager 自己也列出来，也不能让空前缀把整张网络都算成自己
+	selfHostname, _ := os.Hostname()
+	unexpected := unexpectedNetworkMembers(members, selfHostname, expectedNetworkMembers(cfg))
+	if len(unexpected) == 0 {
+		return ok(name, "the network "+network+" has no unexpected members")
+	}
+	return warn(name,
+		fmt.Sprintf("%d containers on %s are not part of this deployment and can reach the unauthenticated "+
+			"DinD daemon: %s", len(unexpected), network, listNetworkMembers(unexpected)),
+		fmt.Sprintf("disconnect them (docker network disconnect %s <name>) or move this deployment to its own network", network))
+}
+
+// expectedNetworkMembers 本部署自己会接到这张网上的容器名：DinD 与各 Runner 容器。
+// Manager 不在其中——配置里没有它的容器名，它由 hostname 认出来。
+func expectedNetworkMembers(cfg *config.Config) map[string]bool {
+	dindHost := cfg.Runners.DindHost
+	if dindHost == "" {
+		dindHost = "runner-dind"
+	}
+	expected := map[string]bool{dindHost: true}
+	for _, item := range cfg.Runners.Items {
+		expected[ContainerName(item.Name)] = true
+	}
+	return expected
+}
+
+// unexpectedNetworkMembers 从网络成员里挑出不属于本部署的，按名字排序返回。
+// members 是 容器ID -> 容器名，即 docker network inspect 的 .Containers。
+// 提成纯函数是为了能直接喂成员表做用例，不必先有一个 Docker。
+//
+// Manager 自己靠 hostname 认：未指定 hostname 时 Docker 把它设成 12 位短 ID
+// （moby 的 daemon/container.go：default hostname is the container's short-ID），
+// 而 compose 只在写了 hostname: 时才传这个字段（pkg/compose/create.go 里
+// Hostname 直接取 service.Hostname），container_name 不参与——本仓库的 compose
+// 只设 container_name，所以走的正是短 ID 这条路。写了 hostname: 的部署按名字再兜
+// 一次，免得把 Manager 自己报成入侵者。
+//
+// selfHostname 为空时不做这个判断：HasPrefix(id, "") 恒为真，会把整张网络算成自己，
+// 也就是把这项检查静默地变成永远绿的。
+func unexpectedNetworkMembers(members map[string]string, selfHostname string, expected map[string]bool) []string {
+	var unexpected []string
+	for id, member := range members {
+		if selfHostname != "" && (strings.HasPrefix(id, selfHostname) || member == selfHostname) {
+			continue
+		}
+		if expected[member] {
+			continue
+		}
+		if member == "" {
+			// 没有名字的端点用短 ID 点名，否则消息里会出现一个空位，读的人无从下手
+			member = shortContainerID(id)
+		}
+		unexpected = append(unexpected, member)
+	}
+	sort.Strings(unexpected)
+	return unexpected
+}
+
+// shortContainerID 取容器 ID 的前 12 位，与 docker ps 显示的一致
+func shortContainerID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
+// listNetworkMembers 把名字拼成消息里的那一段，超出 maxListedNetworkMembers 的收成一句计数
+func listNetworkMembers(names []string) string {
+	if len(names) <= maxListedNetworkMembers {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s, …and %d more",
+		strings.Join(names[:maxListedNetworkMembers], ", "), len(names)-maxListedNetworkMembers)
 }
 
 // requiredRunnerTools Job 普遍依赖的命令。缺任何一个都会以难以定位的方式失败：
