@@ -13,6 +13,9 @@
 #   BASIC_AUTH_USER       默认 admin
 #   BASIC_AUTH_PASSWORD   留空则不鉴权（GET /health 始终免鉴权）
 #   WITH_DOCKER           1（默认）挂载宿主机 docker.sock 供 Job 使用，0 则不挂
+#
+# 下面的 --stop-timeout 30 不是可选项：默认模式下 Runner 进程就在 Manager 容器里，
+# Manager 收到 SIGTERM 会先停它们再退出，而 docker stop 默认只给 10 秒。
 
 set -e
 
@@ -41,7 +44,8 @@ set -- run -d --name "$NAME" \
     -e RUNNERS_BASE_PATH=/app/runners \
     -e BASIC_AUTH_USER="$BASIC_AUTH_USER" \
     -e BASIC_AUTH_PASSWORD="$BASIC_AUTH_PASSWORD" \
-    --restart unless-stopped
+    --restart unless-stopped \
+    --stop-timeout 30
 
 if [ "$WITH_DOCKER" = "1" ]; then
     # 容器内是 UID 1001，必须在 socket 所属组里，否则 Job 中 docker 报 permission denied

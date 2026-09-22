@@ -21,9 +21,24 @@ package runnerproc
 import (
 	"path/filepath"
 	"runtime"
+	"time"
 
 	procfind "github.com/soulteary/procfind-kit"
 )
+
+// StopGracePeriod 是 docker stop 给容器的宽限期：Manager 停 Runner 容器时的 -t 参数，
+// 也是 docker-compose.yml 里 runner-manager 的 stop_grace_period。
+//
+// 收到 SIGTERM 的那个 PID 1（容器模式下是 Agent，默认模式下是 Manager）最多等
+// StopGracePeriod - ShutdownReserve 让 Runner 退出，余下的留给自己收尾。
+// 这几处必须一起改，所以宽限期只在这里定义一次：两边一旦不一致，短的那边说话——
+// -t 比 Agent 等的时间短，Agent 还在等 Runner，容器就整个被 SIGKILL 了。
+const StopGracePeriod = 30 * time.Second
+
+// ShutdownReserve 是 PID 1 在宽限期里留给自己的余量：关 HTTP 服务、写完最后一行日志。
+// 不留这一段，它会一直等到 docker stop 的计时器走完，然后连自己都是被 SIGKILL 的，
+// 「runner 还没退出」这行日志也就永远打不出来——而那正是排查时唯一的线索。
+const ShutdownReserve = 5 * time.Second
 
 // procRoot 是 procfs 挂载点，做成变量仅为测试可替换
 var procRoot = "/proc"

@@ -73,6 +73,9 @@ services:
     networks:
       - runner-net
     restart: unless-stopped
+    # 默认模式下 Runner 进程就在本容器里，Manager 收到 SIGTERM 会先停它们再退出。
+    # Docker 默认只给 10 秒，不够 Job 收尾；这里与 runnerproc.StopGracePeriod 对齐。
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${SERVER_PORT:-8080}/health"]
       interval: 30s

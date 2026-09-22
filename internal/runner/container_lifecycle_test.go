@@ -4,9 +4,23 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
+
+// wantStopArgs 是 docker stop 该带的参数前缀。
+//
+// 从 runnerproc.StopGracePeriod 推出来而不是写「stop -t 30」：宽限期只该在那一个
+// 常量里定义。写死 30 的话，把常量调大之后这里依然绿着——而 Agent 已经在按新的
+// 宽限期等 Runner 退出，docker 却还是 30 秒就 SIGKILL，Job 照样被拦腰砍断。
+func wantStopArgs(runnerName string) string {
+	secs := strconv.Itoa(int(runnerproc.StopGracePeriod / time.Second))
+	return "stop -t " + secs + " " + ContainerName(runnerName)
+}
 
 // fakeDockerProgram 在 PATH 前面放一个假 docker，行为完全由 body 决定。
 //
@@ -45,8 +59,8 @@ func TestStopRunnerContainerSucceeds(t *testing.T) {
 		t.Fatalf("停止失败: %v", err)
 	}
 	calls := readCalls(t, logPath)
-	if !strings.Contains(calls, "stop -t 30 "+ContainerName("demo")) {
-		t.Fatalf("没有按预期调用 docker stop，实际调用:\n%s", calls)
+	if !strings.Contains(calls, wantStopArgs("demo")) {
+		t.Fatalf("没有按预期调用 %q，实际调用:\n%s", wantStopArgs("demo"), calls)
 	}
 }
 
@@ -112,7 +126,7 @@ func TestRemoveRunnerContainerStopsThenRemoves(t *testing.T) {
 	}
 	calls := readCalls(t, logPath)
 	cn := ContainerName("demo")
-	stopAt := strings.Index(calls, "stop -t 30 "+cn)
+	stopAt := strings.Index(calls, wantStopArgs("demo"))
 	rmAt := strings.Index(calls, "rm -f "+cn)
 	if stopAt < 0 || rmAt < 0 {
 		t.Fatalf("stop 与 rm 都应被调用，实际调用:\n%s", calls)

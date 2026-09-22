@@ -20,6 +20,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 	"github.com/soulteary/runner-fleet/internal/secrets"
 	secure "github.com/soulteary/secure-kit/v2"
 )
@@ -651,7 +652,11 @@ func StopRunner(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"message": tr(c, "api.not_running")})
 	}
 	if cfg.Runners.ContainerMode {
-		ctx, cancel := lifecycleContext(c.Request().Context(), 35*time.Second)
+		// 必须比宽限期长：StopRunnerContainer 执行的是 docker stop -t <宽限期>，
+		// 而容器里的 Agent 会用掉其中的大部分等 Runner 退出。上下文先到期，docker
+		// 子进程就在宽限期走完之前被 SIGKILL，界面上报「停止失败」，容器其实还在停。
+		// 这里按常量推出而不是写死 35：宽限期调大时这个上限跟着走，不必记得回来改。
+		ctx, cancel := lifecycleContext(c.Request().Context(), runnerproc.StopGracePeriod+5*time.Second)
 		defer cancel()
 		if err := runner.StopRunnerContainer(ctx, name); err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.stop_container_failed", err))

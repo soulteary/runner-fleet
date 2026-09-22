@@ -42,7 +42,10 @@ flowchart LR
 **Manager는 오케스트레이션만 하고 Runner를 품지 않습니다.** 컨테이너 모드에서는 각 Runner가 자신의
 컨테이너가 되며, Manager가 호스트의 Docker socket을 통해 만듭니다 — Manager에게 그 socket이 필요하고
 DinD를 가리켜서는 안 되는 이유가 이것입니다. 기본 모드에서는 Agent도 Runner 컨테이너도 없습니다.
-Runner 프로세스는 Manager 자신의 컨테이너 안에서 돌고, Manager가 `/proc`을 직접 읽습니다.
+Runner 프로세스는 Manager 자신의 컨테이너 안에서 돌고, Manager가 `/proc`을 직접 읽습니다. 두 모드 모두
+PID 1을 쥔 프로세스가 종료 전에 Runner를 멈춥니다: Agent는 SIGTERM을 받으면 Runner를 멈추고 종료를
+기다리며, 기본 모드에서는 Manager가 자기 컨테이너 안의 Runner에 같은 일을 합니다. 둘 앞에는 `tini`가
+서서 Job이 남긴 고아 프로세스를 회수합니다.
 
 **상태는 프로세스 경계를 넘으므로 HTTP를 탑니다.** Manager와 Runner 컨테이너는 PID namespace가 달라
 Manager가 Runner의 프로세스를 볼 수 없습니다. 그래서 Agent에게 묻고, Agent가 자기 `/proc`을 읽습니다.

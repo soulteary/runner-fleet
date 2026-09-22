@@ -287,6 +287,12 @@ docker compose pull && docker compose up -d
   旧镜像。先自己拉一次——`docker pull <Runner 镜像>`。漂移比对的是镜像 **ID** 而不只是引用，所以拉完
   重建照常发生。
 
+两个镜像现在都以 `tini` 作为 PID 1，镜像 ID 因此变了，容器模式把它当作任何一次镜像变更来处理——
+已停止的 Runner 容器在下次启动时重建，正在运行的标上「配置已变更」，等你在它空闲时点「重建容器」。
+换掉 PID 1 正是为了让「停止」真的传到 Job：Agent 会把 SIGTERM 转发给 Runner 并等它退出；同时 Job
+留下的孤儿进程也有人回收，不再作为僵尸累积。如果你用裸的 `docker run` 而不是 compose 部署 Manager，
+请加上 `--stop-timeout 30`——Docker 自己的默认值是 10 秒，不够 Manager 先把 Runner 停下来。
+
 `runners.resources` 是唯一一个不重建也能作用到已有容器的配置项：Manager 在启动时用 `docker update`
 施加它，所以升级到支持资源上限的版本不需要把所有容器推倒重来。
 

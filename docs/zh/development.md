@@ -41,7 +41,9 @@ flowchart LR
 
 **Manager 只做编排，不承载 Runner。** 容器模式下每个 Runner 是一个独立容器，由 Manager 通过宿主机的
 Docker socket 创建——这也是 Manager 必须拿到那个 socket、且不能把它指向 DinD 的原因。默认模式下
-根本没有 Agent、也没有 Runner 容器：Runner 进程就跑在 Manager 自己的容器里，Manager 直接读 `/proc`。
+根本没有 Agent、也没有 Runner 容器：Runner 进程就跑在 Manager 自己的容器里，Manager 直接读 `/proc`。两种模式下，握着 PID 1 的那个进程都
+负责在退出前把 Runner 停掉：Agent 收到 SIGTERM 会先停止 Runner 再退出，默认模式下 Manager 对自己容器里的
+Runner 做同样的事。两者前面都站着 `tini`，负责回收 Job 留下的孤儿进程。
 
 **状态要跨进程边界，所以走 HTTP。** Manager 与 Runner 容器不在同一个 PID namespace，看不见对方的进程，
 于是它去问 Agent，由 Agent 读自己的 `/proc`。这次调用带一个按 Runner 生成的 bearer 令牌——同一个 Docker

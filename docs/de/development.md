@@ -43,7 +43,10 @@ und Endpunkte, und einen Bezeichner zu übersetzen macht ihn schwerer greppbar, 
 eigener Container, den der Manager über den Docker-Socket des Hosts anlegt — deshalb braucht der
 Manager diesen Socket und darf nicht auf DinD zeigen. Im Standardmodus gibt es weder Agent noch
 Runner-Container: die Runner-Prozesse laufen im Container des Managers selbst, und der Manager
-liest `/proc` direkt.
+liest `/proc` direkt. In beiden Modi stoppt derjenige die Runner vor dem eigenen Ende, der PID 1
+hält: bei SIGTERM stoppt der Agent seinen Runner und wartet auf ihn, im Standardmodus tut der
+Manager dasselbe für die Runner in seinem eigenen Container. Vor beiden steht `tini` und sammelt
+ein, was ein Job als Waisen hinterlässt.
 
 **Der Status überquert eine Prozessgrenze, also läuft er über HTTP.** Manager und Runner-Container
 liegen in verschiedenen PID-Namespaces; der Manager sieht die Prozesse des Runners nicht und fragt

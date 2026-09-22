@@ -26,6 +26,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/handler"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 	"github.com/soulteary/runner-fleet/internal/secrets"
 	secure "github.com/soulteary/secure-kit/v2"
 )
@@ -146,7 +147,7 @@ func main() {
 	e := newEchoServer()
 
 	addr := listenAddr(cfg)
-	srv := &http.Server{Addr: addr, Handler: e}
+	srv := newHTTPServer(addr, e)
 	// 把可能留在 Runner 目录里的 PAT 搬到凭据目录，并从 Runner 目录删掉。
 	// 必须赶在拉起 Runner 之前：容器模式下那个目录会被整个挂进 Runner 容器，
 	// 容器一起来，Job 就能读到一个对组织目标而言等于 admin:org 的令牌。
@@ -166,10 +167,115 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("shutdown failed:", err)
+		// 这里曾经是 log.Fatal：HTTP 没关干净就直接退出，下面停 Runner 的那一步
+		// 根本不会执行——正在跑的 Job 照旧被 SIGKILL。关不干净只是几个在途连接的事，
+		// 不该连带放弃 Runner 的优雅停止。
+		log.Printf("shutting down the HTTP server failed: %v", err)
+	}
+	// 重新读一次配置：进程活着的这段时间里界面可能改过它（含 container_mode）。
+	// 读不出来就按手上这份走——总比什么都不停好。
+	if reloaded, err := config.Load(*configPath); err == nil {
+		cfg = reloaded
+	} else {
+		log.Printf("cannot reload the configuration while shutting down, using the one loaded at startup: %v", err)
+	}
+	// 容器模式下 Runner 容器有自己的生命周期，与 Manager 无关：Manager 重启或升级
+	// 不该顺手把别人的 Job 停掉。默认模式下则相反——Runner 进程就在本容器里，
+	// Manager 一走，内核就会 SIGKILL 它们。
+	if !cfg.Runners.ContainerMode {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), runnerproc.StopGracePeriod)
+		stopDefaultModeRunners(stopCtx, cfg, runnerproc.StopGracePeriod-runnerproc.ShutdownReserve)
+		stopCancel()
 	}
 	log.Println("stopped")
 }
+
+// newHTTPServer 构造 Manager 的 HTTP 服务。
+//
+// 不设超时的 http.Server 会无限期地等一个不再说话的对端，一个半开连接就能占住
+// 一个 goroutine 和一个 fd 到进程结束。Manager 常年挂在内网甚至反代后面，值得一层兜底。
+//
+// **刻意不设 WriteTimeout**：它从「响应头开始写」起算，而写响应之前 handler 得先跑完。
+// RecreateRunner 的 lifecycleContext 最长 90 秒（停容器 + 删 + 建 + 起 + 等 Agent 就绪），
+// 任何小于这个值的 WriteTimeout 都会在操作**已经成功**之后掐断连接：容器重建好了，
+// 界面上却是一个网络错误，人会再点一次。ReadTimeout 与 IdleTimeout 已经能挡住
+// 慢速读与闲置连接这两类占用，写侧交给 lifecycleContext 自己的超时。
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+// stopDefaultModeRunners 在默认模式下停掉本进程里跑着的 Runner，并等它们退出。
+//
+// 默认模式下 run.sh 是 Manager 的子进程，同在一个 PID namespace 里。Manager 一退出，
+// 内核对 namespace 里剩下的进程一律 SIGKILL：Job 不会被优雅取消，GitHub 那边要等
+// 「失去通信」超时才判失败。docker compose restart 或升级镜像都会走到这条路上。
+//
+// grace 到了还没退干净就照样返回：再等下去，docker stop 的计时器一到，
+// 连 Manager 自己都是被 SIGKILL 的，日志里连一句「还没停下来」都留不下。
+func stopDefaultModeRunners(ctx context.Context, cfg *config.Config, grace time.Duration) {
+	var running []runner.RunnerInfo
+	for _, info := range runner.List(cfg) {
+		if info.Running {
+			running = append(running, info)
+		}
+	}
+	if len(running) == 0 {
+		return
+	}
+	log.Printf("stopping %d runner(s) before exiting (up to %s)", len(running), grace)
+	var pending []runner.RunnerInfo
+	for _, info := range running {
+		// runner.Stop 按「监护脚本先于监听器」的顺序发 SIGTERM，顺序必须保留：
+		// 反过来先停监听器，run.sh 的 while 循环会立刻再拉起一个新的。
+		if err := runner.Stop(info.InstallDir); err != nil {
+			log.Printf("stopping runner %s failed: %v", info.Name, err)
+			continue
+		}
+		pending = append(pending, info)
+	}
+	if len(pending) == 0 {
+		return
+	}
+	deadline := time.Now().Add(grace)
+	for {
+		left := pending[:0]
+		for _, info := range pending {
+			if runnerproc.Running(info.InstallDir) {
+				left = append(left, info)
+			}
+		}
+		pending = left
+		if len(pending) == 0 {
+			log.Print("runners stopped")
+			return
+		}
+		if !time.Now().Before(deadline) {
+			names := make([]string, 0, len(pending))
+			for _, info := range pending {
+				names = append(names, info.Name)
+			}
+			log.Printf("runner(s) still running after %s, exiting anyway: %s", grace, strings.Join(names, ", "))
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(runnerPollInterval):
+		}
+	}
+}
+
+// runnerPollInterval 是等 Runner 退出时的轮询间隔。
+// 每次轮询都要扫一遍 procfs，200ms 已经足够快（相对几十秒的宽限期），
+// 又不至于在一个正忙着收尾的容器里跟 Job 抢 CPU。
+const runnerPollInterval = 200 * time.Millisecond
 
 // runAutoStartRunners 启动后延迟执行一次：将已注册但未在运行的 runner 全部拉起（便于 DinD/管理器重启后恢复）
 func runAutoStartRunners(configPath string) {
@@ -373,6 +479,9 @@ func newEchoServer() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover(), requestLogger(), middleware.Secure())
+	// 所有写接口收的都是很小的 JSON（一个 Runner 的名字、目标、标签）。没有上限时，
+	// 一个持续发送的请求体会被一路读进内存，而 Basic Auth 是在这之后才校验的。
+	e.Use(middleware.BodyLimit("1M"))
 	e.Use(metricsMiddleware())
 	e.HTTPErrorHandler = httpErrorHandler
 	// 放在鉴权之前：跨站请求无论带不带凭据，都该在这里就结束
