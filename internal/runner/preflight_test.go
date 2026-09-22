@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -443,14 +444,294 @@ func TestPreflight_EveryCheckGoesThroughRunCheck(t *testing.T) {
 	// checkRunnerImages 是例外：它自己内部逐项调 runCheck（每个镜像两项）。
 	for _, name := range []string{
 		"checkBasePath", "checkRunnerDirPermissions", "checkDefaultModeDocker",
-		"checkDockerReachable", "checkNetwork", "checkJobDockerBackend",
+		"checkDockerReachable", "checkNetwork", "checkNetworkMembers", "checkJobDockerBackend",
 	} {
 		if !strings.Contains(fn, name) {
 			t.Errorf("Preflight 里没有 %s，用例该更新了", name)
 		}
 	}
-	if strings.Count(fn, "runCheck(") < 6 {
+	if strings.Count(fn, "runCheck(") < 7 {
 		t.Errorf("Preflight 里 runCheck 的调用数 %d 少于检查项数，可能有路径绕开了 panic 兜底:\n%s",
 			strings.Count(fn, "runCheck("), fn)
 	}
+}
+
+// ---- container network members ----
+
+// TestUnexpectedNetworkMembers 纯函数部分：谁算本部署的，谁不算。
+//
+// self 每个用例单独给，因为「取不到 hostname」是其中一条要钉的行为，
+// 而它恰好是最容易写错成「永远绿」的那条。
+func TestUnexpectedNetworkMembers(t *testing.T) {
+	const self = "1a2b3c4d5e6f" // Manager 容器的 hostname：Docker 未指定时取 12 位短 ID
+	selfID := self + strings.Repeat("0", 52)
+	expected := map[string]bool{"runner-dind": true, "runner-a": true}
+
+	tests := []struct {
+		name    string
+		self    string
+		members map[string]string
+		want    []string
+	}{
+		{
+			name: "自身、DinD 与 Runner 都在预期内",
+			self: self,
+			members: map[string]string{
+				selfID:     "runner-manager",
+				"c0ffee11": "runner-dind",
+				"c0ffee22": "runner-a",
+			},
+		},
+		{
+			name: "多出一个无关容器",
+			self: self,
+			members: map[string]string{
+				selfID:     "runner-manager",
+				"c0ffee11": "runner-dind",
+				"c0ffee22": "runner-a",
+				"c0ffee33": "grafana",
+			},
+			want: []string{"grafana"},
+		},
+		{
+			name:    "hostname 只是容器 ID 的前缀，仍算自身",
+			self:    self,
+			members: map[string]string{selfID: "runner-manager"},
+		},
+		{
+			name: "结果按名字排序",
+			self: self,
+			members: map[string]string{
+				"c0ffee44": "zoo",
+				"c0ffee55": "alpha",
+				"c0ffee66": "mid",
+			},
+			want: []string{"alpha", "mid", "zoo"},
+		},
+		{
+			// 空前缀会让 HasPrefix 恒为真，把整张网络算成自己——
+			// 那样这项检查会静默地变成永远不报
+			name:    "取不到 hostname 时不把整张网络算成自身",
+			self:    "",
+			members: map[string]string{selfID: "runner-manager", "c0ffee77": "grafana"},
+			want:    []string{"grafana", "runner-manager"},
+		},
+		{
+			name:    "没有名字的端点用短 ID 点名",
+			self:    self,
+			members: map[string]string{"abcdef0123456789": ""},
+			want:    []string{"abcdef012345"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// map 的遍历顺序每次都不同，跑多遍才能说明结果真的稳定
+			for i := 0; i < 20; i++ {
+				got := unexpectedNetworkMembers(tc.members, tc.self, expected)
+				if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+					t.Fatalf("第 %d 次得到 %v，期望 %v", i+1, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// TestListNetworkMembers 超过十个就收成计数，否则一行日志会被一张网络的成员表撑满
+func TestListNetworkMembers(t *testing.T) {
+	var many []string
+	for i := 0; i < maxListedNetworkMembers+3; i++ {
+		many = append(many, fmt.Sprintf("c%d", i))
+	}
+
+	if got, want := listNetworkMembers([]string{"a", "b"}), "a, b"; got != want {
+		t.Errorf("没超出上限时应原样列出：got %q, want %q", got, want)
+	}
+	got := listNetworkMembers(many)
+	if !strings.HasSuffix(got, "…and 3 more") {
+		t.Errorf("超出的部分应收成计数，实得 %q", got)
+	}
+	if strings.Count(got, ", ") != maxListedNetworkMembers {
+		t.Errorf("应只点名 %d 个，实得 %q", maxListedNetworkMembers, got)
+	}
+}
+
+// TestAnyDindBackend items[].job_docker_backend 能逐个覆盖，所以全局值两个方向都不是结论
+func TestAnyDindBackend(t *testing.T) {
+	tests := []struct {
+		name   string
+		global string
+		items  []config.RunnerItem
+		want   bool
+	}{
+		{name: "还没配 Runner 时按全局值算", global: "dind", want: true},
+		{name: "还没配 Runner 且全局是 none", global: "none", want: false},
+		{name: "还没配 Runner 且全局留空，按默认的 dind 算", global: "", want: true},
+		{
+			name:   "全局 none，但某个 Runner 单独开了 dind",
+			global: "none",
+			items:  []config.RunnerItem{{Name: "a"}, {Name: "b", JobDockerBackend: "dind"}},
+			want:   true,
+		},
+		{
+			name:   "全局 dind，但每个 Runner 都覆盖成了别的",
+			global: "dind",
+			items:  []config.RunnerItem{{Name: "a", JobDockerBackend: "none"}, {Name: "b", JobDockerBackend: "host-socket"}},
+			want:   false,
+		},
+		{
+			name:   "Runner 没覆盖时回落全局",
+			global: "dind",
+			items:  []config.RunnerItem{{Name: "a"}},
+			want:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			cfg.Runners.JobDockerBackend = tc.global
+			cfg.Runners.Items = tc.items
+			if got := anyDindBackend(cfg); got != tc.want {
+				t.Fatalf("anyDindBackend = %v，期望 %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// networkMembersConfig 一份容器模式、dind 后端、注册了 runner-a 的配置
+func networkMembersConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return &config.Config{Runners: config.RunnersConfig{
+		BasePath:         t.TempDir(),
+		ContainerMode:    true,
+		ContainerImage:   "img:tag",
+		ContainerNetwork: "runner-net",
+		JobDockerBackend: "dind",
+		DindHost:         "runner-dind",
+		AgentPort:        8081,
+		// 容器名不等于 Runner 名：ContainerName("a") 是 github-runner-a，
+		// 预期成员表必须按容器名比，否则本部署自己的 Runner 会被报成意外成员
+		Items: []config.RunnerItem{{Name: "a", TargetType: "repo", Target: "o/r"}},
+	}}
+}
+
+// fakeNetworkInspect 让假 docker 对 network inspect 返回给定的 .Containers
+func fakeNetworkInspect(t *testing.T, containersJSON string) string {
+	t.Helper()
+	return fakeDockerProgram(t, "case \"$1\" in\n"+
+		"  network)\n"+
+		"    cat <<'JSON'\n"+containersJSON+"\nJSON\n"+
+		"    ;;\n"+
+		"esac\n"+
+		"exit 0\n")
+}
+
+// TestCheckNetworkMembers_WarnsAboutContainersOutsideTheDeployment
+// 网上多出来的容器要被点名：它们拿到的是一个免认证的 privileged daemon。
+func TestCheckNetworkMembers_WarnsAboutContainersOutsideTheDeployment(t *testing.T) {
+	host, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Manager 自己的那一项：容器 ID 全长 64 位，hostname 是它的前缀
+	logPath := fakeNetworkInspect(t, fmt.Sprintf(`{
+  %q: {"Name": "runner-manager"},
+  "c0ffee11deadbeef": {"Name": "runner-dind"},
+  "c0ffee22deadbeef": {"Name": "github-runner-a"},
+  "c0ffee33deadbeef": {"Name": "grafana"},
+  "c0ffee44deadbeef": {"Name": "prometheus"}
+}`, host+strings.Repeat("0", 52)))
+
+	got := checkNetworkMembers(context.Background(), networkMembersConfig(t))
+	if got.Level != CheckWarn {
+		t.Fatalf("网上有无关容器时应 warn: %+v", got)
+	}
+	if got.Name != "container network members" {
+		t.Errorf("Name = %q", got.Name)
+	}
+	for _, want := range []string{"2 containers on runner-net", "grafana", "prometheus"} {
+		if !strings.Contains(got.Message, want) {
+			t.Errorf("消息里应含 %q，实得 %q", want, got.Message)
+		}
+	}
+	// 本部署自己的三个容器被报成「不属于本部署」，这项检查就没人会再看第二眼
+	for _, unwanted := range []string{"runner-manager", "runner-dind", "github-runner-a"} {
+		if strings.Contains(got.Message, unwanted) {
+			t.Errorf("消息里不该含 %q（那是本部署自己的容器），实得 %q", unwanted, got.Message)
+		}
+	}
+	if !strings.Contains(got.Hint, "docker network disconnect runner-net") {
+		t.Errorf("hint 应给出可照做的命令，实得 %q", got.Hint)
+	}
+	if calls := readCalls(t, logPath); !strings.Contains(calls, "network inspect runner-net --format {{json .Containers}}") {
+		t.Errorf("应只取 .Containers 一段，实际执行了: %s", calls)
+	}
+}
+
+// TestCheckNetworkMembers_OnlyTheDeploymentsOwnContainers 只有本部署的容器时报 ok
+func TestCheckNetworkMembers_OnlyTheDeploymentsOwnContainers(t *testing.T) {
+	host, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeNetworkInspect(t, fmt.Sprintf(`{
+  %q: {"Name": "runner-manager"},
+  "c0ffee11deadbeef": {"Name": "runner-dind"},
+  "c0ffee22deadbeef": {"Name": "github-runner-a"}
+}`, host+strings.Repeat("0", 52)))
+
+	got := checkNetworkMembers(context.Background(), networkMembersConfig(t))
+	if got.Level != CheckOK {
+		t.Fatalf("网上只有本部署的容器时应 ok: %+v", got)
+	}
+	if want := "the network runner-net has no unexpected members"; got.Message != want {
+		t.Errorf("Message = %q，期望 %q", got.Message, want)
+	}
+}
+
+// TestCheckNetworkMembers_UnreadableInspectIsSkippedNotReported
+// 读不到成员表时报 ok：「网络不存在」这类情形 checkNetwork 已经报过 fail，
+// 这里再报一遍等于同一件事说两次，而且是用一句更绕的话说。
+func TestCheckNetworkMembers_UnreadableInspectIsSkippedNotReported(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "inspect 失败", body: "echo 'Error: No such network: runner-net' >&2\nexit 1\n"},
+		{name: "输出不是 JSON", body: "echo 'not json at all'\nexit 0\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDockerProgram(t, tc.body)
+			got := checkNetworkMembers(context.Background(), networkMembersConfig(t))
+			if got.Level != CheckOK {
+				t.Fatalf("读不到成员表应跳过而不是报错: %+v", got)
+			}
+			if !strings.Contains(got.Message, "skipped") {
+				t.Errorf("消息应说明这一项被跳过了，实得 %q", got.Message)
+			}
+		})
+	}
+}
+
+// TestPreflight_NetworkMembersOnlyWhenADindBackendIsInUse
+// 没有 Runner 用 dind 时网上没有那个免认证的 daemon，这一项不该出现在结果里。
+func TestPreflight_NetworkMembersOnlyWhenADindBackendIsInUse(t *testing.T) {
+	const checkName = "container network members"
+
+	t.Run("dind 时有这一项", func(t *testing.T) {
+		fakeNetworkInspect(t, `{}`)
+		findCheck(t, Preflight(context.Background(), networkMembersConfig(t)), checkName)
+	})
+
+	t.Run("后端是 none 时没有这一项", func(t *testing.T) {
+		fakeNetworkInspect(t, `{"c0ffee33deadbeef": {"Name": "grafana"}}`)
+		cfg := networkMembersConfig(t)
+		cfg.Runners.JobDockerBackend = "none"
+		for _, r := range Preflight(context.Background(), cfg) {
+			if r.Name == checkName {
+				t.Fatalf("没有 Runner 用 dind，不该执行这一项: %+v", r)
+			}
+		}
+	})
 }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- In container mode with a DinD backend, the startup self-check lists containers on `runner-net` that are not part of the deployment, since the stock DinD service accepts unauthenticated connections from anything on that network.
+
+### Changed
+
+- `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
+
 ### Security
 
 - Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.

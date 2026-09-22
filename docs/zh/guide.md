@@ -89,6 +89,8 @@ runners:
 
 Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.8.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
 
+**`runner-net` 是信任边界**：`job_docker_backend: dind` 时，DinD 服务在 2375 端口对 `runner-net` 上的任何容器免认证开放，且它是所有 Runner 共用的 privileged 容器——一个 Job 能看到并进入其他 Job 在其中启动的容器。`runner-net` 只留给 Manager、DinD 与 Runner 容器；若各 Runner 服务的仓库彼此不可信，请给它们 `job_docker_backend: none`，或拆成不同的部署。
+
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
 **改了配置与容器重建**：镜像、网络、挂载目录、Job 内 Docker 后端都只在 `docker create` 时定下来，已存在的容器沿用创建时的参数，光改配置碰不到它。Manager 会把每个容器的实际创建参数与当前配置对一遍：**已停止**的容器若对不上，在下一次启动它时（手动点「启动」或 Manager 自动拉起）会删掉重建；列表里该 Runner 会标出「配置已变更」，鼠标悬停可看到具体差异（如 `job_docker_backend: → dind`）。**正在运行**的容器不会被自动重建——上面可能正跑着 Job——需要立刻生效就点该行的「重建容器」（`POST /api/runners/:name/recreate`，会中断正在跑的 Job），或等它空闲后停止再启动。同名 tag 重新构建镜像同样算：比对的是镜像 ID，不只是引用。
