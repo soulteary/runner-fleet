@@ -89,6 +89,8 @@ runners:
 
 Runner 이미지: Manager와 동일한 이름에 `-runner` 태그(운영: 버전 예 v1.8.0-runner, 개발: main-runner), 또는 로컬 빌드: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .`. Manager는 호스트 Docker(`docker.sock` 마운트)를 사용해야 하며, `DOCKER_HOST`로 DinD를 사용하면 안 됩니다. Compose에서는 호스트 docker GID용 `group_add` 또는 `user: "0:0"`을 사용하세요. `job_docker_backend: host-socket`일 때 Manager는 Runner 컨테이너에 `--group-add <호스트 docker GID>`를 전달합니다(`docker.sock`에서 자동 감지, `runners.docker_gid` / `DOCKER_GID`로 재정의 가능). 이미지에도 `docker` 그룹이 포함되어 있습니다(빌드 인자 `DOCKER_GID`, 기본 999). Runner 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 충돌합니다.
 
+**`runner-net`은 신뢰 경계입니다**: `job_docker_backend: dind`일 때 DinD 서비스는 2375 포트에서 `runner-net`에 붙은 모든 컨테이너의 연결을 인증 없이 받아들이며, 게다가 모든 Runner가 공유하는 privileged 컨테이너입니다. 한 Job이 다른 Job이 거기서 띄운 컨테이너를 보고 들어갈 수도 있습니다. `runner-net`은 Manager, DinD, Runner 컨테이너만 쓰도록 남겨 두세요. 서로 신뢰할 수 없는 저장소를 담당하는 Runner가 있다면 `job_docker_backend: none`을 주거나 배포를 분리하세요.
+
 **Runner 이미지 확장**: GitHub 호스팅 runner에는 Android SDK, Node, Python 등 툴체인이 포함되어 있지만 셀프 호스팅에는 없습니다. `ubuntu-24.04`용으로 작성된 workflow는 이를 암묵적으로 전제하는 경우가 많아 이전 후 `SDK location not found` 등으로 실패합니다. 이 저장소의 Runner 이미지 위에 필요한 툴체인을 얹으세요. 바로 쓸 수 있는 예제와 핵심 규칙 네 가지(/opt 아래는 UID 1001로 chown, 환경 변수는 이미지에 포함, 비밀번호 없는 sudo 상속, 워밍업은 `USER app` 이후)는 [`examples/runner-images/`](../../examples/runner-images/)에 있습니다. `items[].container_image`로 특정 Runner에만 적용하고 workflow에서는 label로 선택합니다.
 
 **설정 변경과 컨테이너 재생성**: 이미지, 네트워크, 마운트 경로, Job 내 Docker 백엔드는 모두 `docker create` 시점에 정해지며 기존 컨테이너는 생성 당시 값을 그대로 유지합니다. 설정만 바꿔서는 닿지 않습니다. Manager는 각 컨테이너의 실제 생성 파라미터를 현재 설정과 비교합니다. **정지된** 컨테이너가 맞지 않으면 다음에 시작할 때(직접 "시작"을 누르든 Manager가 자동으로 기동하든) 삭제 후 다시 만들고, 목록에는 해당 Runner에 "설정 변경됨"이 표시되며 툴팁에 차이(예: `job_docker_backend: → dind`)가 나옵니다. **실행 중인** 컨테이너는 자동으로 재생성하지 않습니다 — Job이 돌고 있을 수 있기 때문입니다. 바로 적용하려면 행의 "컨테이너 재생성"(`POST /api/runners/:name/recreate`, 실행 중인 Job이 중단됨)을 쓰거나, 한가할 때 정지 후 다시 시작하세요. 같은 tag로 이미지를 다시 빌드한 경우도 감지합니다(이미지 ID로 비교).
@@ -238,6 +240,8 @@ runners:
 **민감한 파일**: config/config.yaml, .env와 `config/tokens/`는 `.gitignore`에 있음. 각 Runner의 선택 PAT는 `config/tokens/<Runner 이름>`에 두며, Manager가 디렉터리는 0700, 파일은 0600으로 만듭니다. Runner 디렉터리에는 두지 마세요 — 컨테이너 모드에서 그 디렉터리는 Runner 컨테이너에 마운트되어 작업이 읽을 수 있습니다.
 
 **Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
+
+**기본 모드는 하나의 신뢰 도메인입니다**: 위의 디렉터리 권한은 호스트의 다른 사용자로부터 Runner의 자격 증명을 보호하지만, 다른 Runner로부터는 보호하지 못합니다. 기본 모드에서는 모든 Runner와 Manager가 하나의 컨테이너에서 같은 사용자로 실행되므로, 어느 Runner의 Job이든 다른 모든 Runner의 자격 증명과 PAT를 읽고 Manager의 설정을 바꿀 수 있습니다. 저장소에 포함된 compose 파일을 쓰면 호스트의 Docker socket에도 접근할 수 있습니다. Runner가 서로 다른 저장소나 다른 owner를 담당하거나 그중 하나라도 PAT를 가지고 있다면 Runner마다 전용 컨테이너를 주세요(`runners.container_mode: true`). 기본 모드를 계속 쓰면서 Job이 Docker를 필요로 하지 않는다면 `docker-compose.yml`에서 `docker.sock` 볼륨과 `group_add`를 제거하고 `--build-arg ALLOW_SUDO=false`로 이미지를 빌드하세요. [SECURITY.md](../../SECURITY.md) 참고.
 
 ---
 

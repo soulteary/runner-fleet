@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The startup self-check warns when the default mode runs more than one runner, since a job on any of them can read the others' credentials.
+- In container mode with a DinD backend, the startup self-check lists containers on `runner-net` that are not part of the deployment, since the stock DinD service accepts unauthenticated connections from anything on that network.
 - **A runner pointed at a public repository now says so in the UI**: a warn-coloured "Public repo" badge in the list, with a tooltip explaining why that matters, and a "Repository visibility" row in the detail dialog. The warning in `SECURITY.md` and the guide only reaches someone who reads them; this one reaches the person looking at the runner they just added.
 - The visibility comes from the existing 5-minute GitHub check, which now also calls `GET /repos/{owner}/{repo}` — with the runner's PAT when it has one, anonymously when it does not, because most deployments configure no PAT and those are exactly the ones this is for. It is asked **at most once a day per repository**: visibility almost never changes, while the anonymous quota is 60 requests an hour, and checking every pass would let a dozen runners exhaust it and drag the PAT-authenticated half into rate limiting with them.
 - A 404 is recorded as "unknown", never as "not public". Anonymously, a private repository and one that does not exist both answer 404; with a PAT, so does one the token cannot see. Writing that down as `false` would state "private" with confidence about a target whose name was simply mistyped — the one case where the user most needs to look. Organization targets are out of scope for now: the question there is whether the runner group allows public repositories, which needs `admin:org` and a mapping from runner to group.
@@ -25,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `SECURITY.md` and the guide now state that the default mode is one trust domain — all runners share the Manager's container and user, and the stock compose file mounts the host Docker socket into it — and when to use container mode instead.
+- `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
 - `SECURITY.md`, the README and the guide now warn against registering runners for public repositories, and state that runners are persistent, so one job's leftovers reach the next. Nothing in the repository mentioned public repositories or fork pull requests before this, and the two facts compound: GitHub's own guidance is to use self-hosted runners with private repositories only — anyone can open a pull request against a public repository and, depending on that repository's fork-workflow approval setting, have its workflow run on your machine — while runners here are registered without `--ephemeral`, so `_work`, the tool caches under it, `$HOME` and any process a job leaves behind carry over to the next job. The warning sits where a runner's target is chosen: the README's quick start, section 3 of the guide in all six languages, and the first entry in `SECURITY.md`'s exposure list. `examples/deploy/README.md` gained the same note next to the cache comparison, which until now discussed cross-job caching only as a performance property.
 
 ### Upgrading

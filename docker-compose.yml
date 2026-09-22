@@ -20,6 +20,8 @@
 #
 # 两种形态的完整可复制配置（单容器 / 多容器并行 + 共享缓存）见 examples/deploy/
 services:
+  # 注意：此 DinD 关闭了 TLS，2375 端口对 runner-net 上的任何容器免认证开放，且以 privileged 运行。
+  # 不要把无关容器接入 runner-net；各 Runner 共用这一个 daemon，Job 之间彼此可见。
   runner-dind:
     profiles:
       - dind
@@ -66,6 +68,9 @@ services:
     volumes:
       - ./config:/app/config
       - ./runners:/app/runners
+      # 挂载宿主机 docker.sock 等同于把宿主机 root 交给能访问它的进程。
+      # 容器模式必须挂（Manager 要创建 Runner 容器）；默认模式下它只用于让 Job 能用 Docker，
+      # 而默认模式的 Job 与 Manager 同容器同用户——不需要 Job 内 Docker 时请删掉这一行与 group_add。
       - /var/run/docker.sock:/var/run/docker.sock
     # 容器模式需 Manager 访问宿主机 Docker：加入宿主机 docker 组（GID 用 getent group docker 查看，常见为 999）
     group_add:

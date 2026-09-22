@@ -7,11 +7,13 @@
 | 形态 | 一个 Manager 容器，Runner 进程跑在它内部 | Manager 容器 + 每个 Runner 一个独立容器 |
 | 对应配置 | `container_mode: false`（默认） | `container_mode: true` |
 | 起步成本 | `docker run` 一条命令 | 需要 `runner-net` 网络、`volume_host_path`、一个自建镜像 |
-| Runner 之间的隔离 | 弱：同一个容器、同一个用户、同一个 `$HOME` | 强：各自的容器、文件系统与资源上限 |
+| Runner 之间的隔离 | 弱：同一个容器、同一个用户、同一个 `$HOME`——任何 Job 都能读到其他 Runner 的凭据 | 强：各自的容器、文件系统与资源上限 |
 | 构建缓存（`~/.gradle`、`~/.m2`、`~/.npm`） | **共享**，并发 Job 可能互相踩；且在容器可写层里，容器重建即丢 | **各自独立**，落在 `runners/<名称>/` 下，跨 Job 保留 |
 | 工作目录 `_work` | 每个 Runner 独立 | 每个 Runner 独立 |
 | 资源上限 | 无（整个容器一份） | 每个 Runner 可单独限制（`runners.resources`） |
 | 适合 | 1~2 个 Runner、工具链单一、自己人用 | 多个 Job 并行、不同项目工具链不同、需要限制单个 Job 的资源 |
+
+多个 Runner 服务不同仓库、或配置了 PAT 时，用多容器形态。
 
 两种形态下**镜像缓存都是共享的**——镜像层、BuildKit 缓存属于 Docker daemon，只要所有 Job 指向同一个
 daemon（挂宿主机 `docker.sock`，或共用同一个 DinD）就已经共享，不需要额外配置。
