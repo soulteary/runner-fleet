@@ -16,6 +16,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
 	secure "github.com/soulteary/secure-kit/v2"
 )
@@ -64,7 +65,8 @@ func startRunner(installDir string) error {
 	}
 	cmd := exec.Command(script)
 	cmd.Dir = installDir
-	cmd.Env = os.Environ()
+	// run.sh 跑的是用户的 Job：不能把注入给 Agent 的 AGENT_TOKEN 传下去，见 internal/childenv
+	cmd.Env = childenv.Environ()
 	if runtime.GOOS != "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}

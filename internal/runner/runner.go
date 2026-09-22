@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
@@ -353,7 +354,8 @@ func Start(installDir string) error {
 	}
 	cmd := execCommand(script)
 	cmd.Dir = installDir
-	cmd.Env = os.Environ()
+	// run.sh 跑的是用户的 Job：不能把 Manager 自己的凭据传下去，见 internal/childenv
+	cmd.Env = childenv.Environ()
 	if runtime.GOOS != "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
