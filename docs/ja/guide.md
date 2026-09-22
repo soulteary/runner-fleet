@@ -205,6 +205,8 @@ runners:
 
 ## 3. Runner の追加
 
+**プライベートリポジトリ限定**: パブリックリポジトリに登録した Runner、あるいは **Allow public repositories** を有効にした組織の Runner グループに登録した Runner は、プルリクエストを開ける人なら誰のワークフローでもこのマシンで実行します。ここでの Runner は永続的です——作業ディレクトリ、その下のツールキャッシュ、`$HOME` は次の Job まで残るため、信頼できない Job が 1 つあるだけで以降のすべての Job に影響します。信頼できるプライベートリポジトリにのみ Runner を登録し、信頼できないコードは GitHub ホストの Runner に任せてください。[SECURITY.md](../../SECURITY.md) を参照。
+
 **トークン取得**: リポジトリ/組織 → Settings → Actions → Runners → New self-hosted runner でトークンをコピー（約 1 時間有効）。Runner ごとに新しいトークンが必要です。
 
 **サービスに追加**: UI の「Quick Add Runner」で名前（一意）、ターゲットタイプ（org/repo）、ターゲット、トークン（任意。指定すると送信時に自動登録・起動可能）を入力。GitHub の `./config.sh --url ... --token ...` を「Parse from GitHub command」に貼り付けて「Parse & fill」をクリックできます。自動登録は GitHub.com のみ。GitHub Enterprise は Runner ディレクトリで手動で `config.sh` を実行する必要があります。

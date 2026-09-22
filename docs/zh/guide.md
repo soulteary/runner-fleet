@@ -204,6 +204,8 @@ runners:
 
 ## 三、添加 Runner
 
+**仅用于私有仓库**：注册到公开仓库、或注册到开启了 **Allow public repositories** 的组织 Runner 组时，任何能提 PR 的人的 workflow 都会在这台机器上运行。这里的 Runner 是持久化的——工作目录、其下的工具缓存与 `$HOME` 会从一个 Job 保留到下一个 Job——一个不可信的 Job 可以影响之后所有的 Job。只为你信任的私有仓库注册 Runner，不可信的代码交给 GitHub 托管 Runner。见 [SECURITY.md](../../SECURITY.md)。
+
 **获取 Token**：目标仓库/组织 → Settings → Actions → Runners → New self-hosted runner，复制 Token（约 1 小时有效）。每个 Runner 需新 Token。
 
 **在服务中添加**：管理界面「快速添加 Runner」填写名称（唯一）、目标类型（org/repo）、目标、Token（可选，填则提交时可自动注册并启动）。可从 GitHub 页面复制 `./config.sh --url ... --token ...` 到「从 GitHub 复制命令解析」框，点「解析并填充」。自动注册仅面向 GitHub.com；GitHub Enterprise 需在 runner 目录下手动执行 `config.sh`。

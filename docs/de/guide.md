@@ -206,6 +206,8 @@ runners:
 
 ## 3. Runner hinzufügen
 
+**Nur private Repositories**: Ein Runner, der für ein öffentliches Repository registriert ist — oder für eine Organisations-Runner-Gruppe mit aktiviertem **Allow public repositories** —, führt Workflows von jedem aus, der einen Pull Request öffnen kann. Die Runner hier sind persistent: Arbeitsverzeichnis, die darin liegenden Tool-Caches und `$HOME` überdauern von einem Job zum nächsten, sodass ein einziger nicht vertrauenswürdiger Job alle späteren beeinflussen kann. Registrieren Sie Runner nur für private Repositories, denen Sie vertrauen, und überlassen Sie nicht vertrauenswürdigen Code den von GitHub gehosteten Runnern. Siehe [SECURITY.md](../../SECURITY.md).
+
 **Token besorgen**: Repo/Org → Settings → Actions → Runners → New self-hosted runner, Token kopieren (ca. 1 Stunde gültig). Jeder Runner braucht einen neuen Token.
 
 **Im Service hinzufügen**: In der UI „Quick Add Runner“ Name (eindeutig), Zieltyp (org/repo), Ziel, Token (optional; wenn gesetzt, kann Absenden automatisch registrieren und starten) eingeben. Sie können `./config.sh --url ... --token ...` von GitHub in „Parse from GitHub command“ einfügen und „Parse & fill“ klicken. Auto-Registrierung nur für GitHub.com; GitHub Enterprise erfordert manuelles `config.sh` im Runner-Verzeichnis.

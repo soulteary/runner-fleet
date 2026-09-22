@@ -205,6 +205,8 @@ runners:
 
 ## 3. Runner 추가
 
+**비공개 저장소 전용**: 공개 저장소에 등록한 Runner, 또는 **Allow public repositories**를 켠 조직 Runner 그룹에 등록한 Runner는 풀 리퀘스트를 열 수 있는 누구의 워크플로든 이 머신에서 실행합니다. 여기의 Runner는 영속적입니다——작업 디렉터리, 그 아래 도구 캐시, `$HOME`이 한 Job에서 다음 Job으로 남으므로, 신뢰할 수 없는 Job 하나가 이후 모든 Job에 영향을 줍니다. 신뢰하는 비공개 저장소에만 Runner를 등록하고, 신뢰할 수 없는 코드는 GitHub 호스팅 Runner에 맡기세요. [SECURITY.md](../../SECURITY.md) 참고.
+
 **토큰 얻기**: Repo/조직 → Settings → Actions → Runners → New self-hosted runner, 토큰 복사(약 1시간 유효). Runner마다 새 토큰 필요.
 
 **서비스에 추가**: UI "Quick Add Runner"에서 이름(고유), 대상 유형(org/repo), 대상, 토큰(선택, 설정 시 제출 시 자동 등록 및 시작 가능) 입력. GitHub에서 `./config.sh --url ... --token ...`을 "Parse from GitHub command"에 붙여넣고 "Parse & fill" 클릭 가능. 자동 등록은 GitHub.com 전용. GitHub Enterprise는 Runner 디렉터리에서 수동 `config.sh` 필요.

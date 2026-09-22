@@ -31,6 +31,8 @@ docker network create runner-net 2>/dev/null || true
 docker compose up -d
 ```
 
+> Self-hosted runners should serve **private repositories only** — a pull request to a public repository can run code on this machine. See [SECURITY.md](SECURITY.md).
+
 Open http://localhost:8080. The default image tag is the stable release (e.g. v1.8.0). For more options (docker run, DinD, container mode, using `main` or other tags) see the [User Guide](docs/guide.md). Probes, Prometheus metrics and logging: [Operations](docs/guide.md#5-operations) — `GET /health` (liveness), `GET /ready` (readiness), `GET /metrics`, `GET /version`.
 
 Two copy-and-go deployments live in [`examples/deploy/`](examples/deploy/): `standalone/` (single container, runner processes inside the Manager — `docker run` or Compose) and `fleet/` (one container per runner, image and toolchain caches shared, build caches isolated).

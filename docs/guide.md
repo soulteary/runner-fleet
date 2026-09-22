@@ -204,6 +204,8 @@ runners:
 
 ## 3. Adding Runners
 
+**Private repositories only**: a runner registered to a public repository — or to an organization runner group with **Allow public repositories** turned on — runs workflows from anyone who can open a pull request. Runners here are persistent: the work directory, the tool caches under it and `$HOME` survive from one job to the next, so a single untrusted job can affect every later one. Register runners only for private repositories you trust, and leave untrusted code to GitHub-hosted runners. See [SECURITY.md](../SECURITY.md).
+
 **Get token**: Repo/org → Settings → Actions → Runners → New self-hosted runner, copy token (~1 hour valid). Each runner needs a new token.
 
 **Add in service**: In the UI "Quick Add Runner" enter name (unique), target type (org/repo), target, token (optional; if set, submit can auto-register and start). You can paste `./config.sh --url ... --token ...` from GitHub into "Parse from GitHub command" and click "Parse & fill". Auto-register is for GitHub.com only; GitHub Enterprise requires manual `config.sh` in the runner dir.
