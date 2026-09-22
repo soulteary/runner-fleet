@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runner"
@@ -210,15 +211,29 @@ func TestRun_FailureIsUnknownNotUnregistered(t *testing.T) {
 	}
 }
 
-// 没有 PAT 的 runner 直接跳过，不写状态文件——保持「从未检查」
-func TestRun_NoTokenWritesNothing(t *testing.T) {
+// 没有 PAT 就不查「是否已登记」，界面上仍是「从未检查」。
+//
+// 可见性那一半是匿名也能查的，所以这时状态文件会被写出来——但 last_check 必须留空：
+// 界面正是靠它区分「从未检查」与「查过但失败」，盖上时间就等于对着一个从没查过的
+// Runner 说「查过了，失败」。
+func TestRun_NoTokenSkipsTheRegistrationCheck(t *testing.T) {
 	dir, store := withToken(t, "")
-	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
-		t.Error("没有令牌时不应发起请求")
+	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("没有 PAT 时不该带 Authorization，得到 %q", r.Header.Get("Authorization"))
+		}
+		_, _ = fmt.Fprint(w, `{"private":true}`)
 	})
 	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
-	if _, err := os.Stat(filepath.Join(dir, runner.GitHubStatusFile)); !os.IsNotExist(err) {
-		t.Fatal("没有令牌时不应写状态文件")
+
+	for _, req := range *seen {
+		if strings.Contains(req, "actions/runners") {
+			t.Fatalf("没有令牌时不应查登记状态，实际请求: %v", *seen)
+		}
+	}
+	reg, at, errMsg := statusOf(t, dir)
+	if reg != nil || at != "" || errMsg != "" {
+		t.Fatalf("没有令牌时登记状态应一概为空，得到 %v/%q/%q", reg, at, errMsg)
 	}
 }
 
@@ -255,8 +270,179 @@ func TestRun_StopsAfterShortPage(t *testing.T) {
 		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
 	})
 	Run(runCfgIn(dir, "alpha", "repo", "o/r"), store)
-	if len(*seen) != 1 {
+	// 只数列 Runner 的请求：同一轮里还有一次可见性查询，它打的是另一个端点
+	pages := 0
+	for _, req := range *seen {
+		if strings.Contains(req, "actions/runners") {
+			pages++
+		}
+	}
+	if pages != 1 {
 		t.Fatalf("单页即可取完，不应继续翻页，实际请求: %v", *seen)
+	}
+}
+
+// 可见性是三态，而且 404 这一格是最容易写错、代价也最大的一格：
+// 匿名请求下私有仓库与压根不存在的仓库都是 404，带 PAT 时权限不够也是 404。
+// 记成 false 就等于对着一个打错了名字的目标肯定地说「私有」——而「公开」正是
+// 这个检查唯一要喊出来的结论，说错方向比不说更糟。
+func TestRepoVisibility_ThreeStates(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		want    *bool
+		wantErr string
+	}{
+		{name: "公开", status: 200, body: `{"private":false}`, want: ptrBool(true)},
+		{name: "私有", status: 200, body: `{"private":true}`, want: ptrBool(false)},
+		{name: "看不到（404）", status: 404, body: `{}`},
+		{name: "GitHub 出错（500）", status: 500, body: `{}`, wantErr: "500"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			})
+			got, err := repoVisibility(context.Background(), &http.Client{}, tokenRef{value: "pat"}, "o/r")
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("不该报错，得到 %v", err)
+			case tc.wantErr != "" && err == nil:
+				t.Fatal("应带回原因，得到 nil")
+			case tc.wantErr != "" && !strings.Contains(err.Error(), tc.wantErr):
+				t.Fatalf("原因 %q 里应含 %q", err, tc.wantErr)
+			}
+			switch {
+			case tc.want == nil && got != nil:
+				t.Fatalf("应记为不知道，却记成了 %v", *got)
+			case tc.want != nil && got == nil:
+				t.Fatalf("应记为 %v，却记成了不知道", *tc.want)
+			case tc.want != nil && *got != *tc.want:
+				t.Fatalf("应记为 %v，得到 %v", *tc.want, *got)
+			}
+		})
+	}
+}
+
+// 没有 PAT 时匿名发：绝大多数部署不配 PAT，而它们正是最需要这个提示的一批。
+// 带一个空的 Bearer 比不带更糟——GitHub 会当成坏令牌返回 401。
+func TestRepoVisibility_AnonymousWhenNoToken(t *testing.T) {
+	var auth string
+	var sawHeader bool
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		auth, sawHeader = r.Header.Get("Authorization"), true
+		_, _ = fmt.Fprint(w, `{"private":false}`)
+	})
+	got, err := repoVisibility(context.Background(), &http.Client{}, tokenRef{}, "o/r")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawHeader {
+		t.Fatal("没发出请求")
+	}
+	if auth != "" {
+		t.Fatalf("没有 PAT 时不该带 Authorization，得到 %q", auth)
+	}
+	if got == nil || !*got {
+		t.Fatalf("private:false 应记为公开，得到 %v", got)
+	}
+}
+
+// 每个仓库一天最多问一次。这个检查每五分钟跑一轮，匿名配额每小时只有 60 次，
+// 照每轮都问的话十来个 Runner 就能把配额烧干，连带把带 PAT 的那半边拖进限流。
+func TestRun_VisibilityIsCheckedAtMostOncePerDay(t *testing.T) {
+	dir, store := withToken(t, "pat")
+	visits := 0
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/o/r" {
+			visits++
+			_, _ = fmt.Fprint(w, `{"private":false}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
+	})
+	cfg := runCfgIn(dir, "alpha", "repo", "o/r")
+
+	Run(cfg, store)
+	if visits != 1 {
+		t.Fatalf("第一轮应查一次可见性，实际 %d 次", visits)
+	}
+	if p := publicOf(t, dir); p == nil || !*p {
+		t.Fatalf("private:false 应记为公开，得到 %v", p)
+	}
+
+	Run(cfg, store)
+	if visits != 1 {
+		t.Fatalf("24 小时内不该再查，实际共 %d 次", visits)
+	}
+	// 结论不能被第二轮的登记检查顺手抹掉：状态文件是一次写完的
+	if p := publicOf(t, dir); p == nil || !*p {
+		t.Fatalf("第二轮之后可见性结论应还在，得到 %v", p)
+	}
+
+	// 把时间戳拨回 25 小时前，过期了就该再查一次
+	agePriorVisibilityCheck(t, dir, 25*time.Hour)
+	Run(cfg, store)
+	if visits != 2 {
+		t.Fatalf("超过 24 小时应重新查一次，实际共 %d 次", visits)
+	}
+}
+
+// 组织目标本轮不处理：要判断的是「Runner 组允不允许公开仓库」，那要 admin:org
+// 还得把 Runner 映射到组，和查一个仓库不是一回事。查错端点会拿 404 当答案。
+func TestRun_OrgTargetIsNotCheckedForVisibility(t *testing.T) {
+	dir, store := withToken(t, "pat")
+	seen := fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, runnersJSON(1, "alpha"))
+	})
+	Run(runCfgIn(dir, "alpha", "org", "acme"), store)
+	for _, req := range *seen {
+		if !strings.Contains(req, "actions/runners") {
+			t.Fatalf("组织目标不应查仓库可见性，实际请求: %v", *seen)
+		}
+	}
+	if p := publicOf(t, dir); p != nil {
+		t.Fatalf("组织目标的可见性应留空，得到 %v", *p)
+	}
+}
+
+// 两件事都没做（组织目标 + 没有 PAT）就不写文件：写了的话界面会从「从未检查」
+// 变成「查过但失败」，对一个压根没查过的 Runner 说了一句确定的话。
+func TestRun_OrgTargetWithoutTokenWritesNothing(t *testing.T) {
+	dir, store := withToken(t, "")
+	fakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("既没有 PAT 又不查可见性时不应发起请求")
+	})
+	Run(runCfgIn(dir, "alpha", "org", "acme"), store)
+	if _, err := os.Stat(filepath.Join(dir, runner.GitHubStatusFile)); !os.IsNotExist(err) {
+		t.Fatal("什么都没查时不应写状态文件")
+	}
+}
+
+// publicOf 单独读 public，理由同 busyOf
+func publicOf(t *testing.T, dir string) *bool {
+	t.Helper()
+	return runner.ReadGitHubStatus(dir).Public
+}
+
+func ptrBool(b bool) *bool { return &b }
+
+// agePriorVisibilityCheck 把状态文件里的可见性查询时间往前拨，用来跨过 24 小时这道闸。
+func agePriorVisibilityCheck(t *testing.T, dir string, d time.Duration) {
+	t.Helper()
+	st := runner.ReadGitHubStatus(dir)
+	if st.VisibilityCheckedAt == "" {
+		t.Fatal("状态文件里没有可见性查询时间，这个用例没有意义")
+	}
+	at, err := time.Parse(time.RFC3339, st.VisibilityCheckedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.VisibilityCheckedAt = at.Add(-d).Format(time.RFC3339)
+	if err := runner.WriteGitHubStatus(dir, st); err != nil {
+		t.Fatal(err)
 	}
 }
 

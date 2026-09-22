@@ -11,6 +11,7 @@ package githubcheck
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,7 +30,14 @@ const (
 	apiPerPage = 100 // 单页数量，GitHub 允许的上限
 	// maxPages 兜底，防止 API 行为异常时无限翻页；100*50 = 5000 个 Runner，远超实际
 	maxPages = 50
+	// visibilityTTL 同一个仓库两次可见性查询之间的最小间隔，见 visibilityDue
+	visibilityTTL = 24 * time.Hour
 )
+
+// errNotFound 是 GitHub 的 404。包成哨兵值而不是只看消息文本，是因为两个调用方
+// 对它的判断完全相反：列 Runner 时 404 是查询失败（目标不存在或看不到），
+// 查可见性时 404 是一个正常答案——「看不到」，也就是「不知道是不是公开的」。
+var errNotFound = errors.New("GitHub returned 404: the target does not exist, or the token cannot see it")
 
 // tokenRef 一个 PAT 连同它的来源路径。
 //
@@ -58,7 +66,11 @@ type ghRunnersResponse struct {
 	Runners    []ghRunner `json:"runners"`
 }
 
-// Run 对每个配置了 PAT 的 runner 查询它是否已在 GitHub 登记，结果写入 .github_status.json。
+// Run 查询每个 runner 在 GitHub 上的状态，结果写入 .github_status.json。
+//
+// 两件事，两种前提：「是否已登记」要 PAT，没有就不查；「目标仓库是否公开」
+// 匿名也能查，因为绝大多数部署不配 PAT，而它们正是最需要那个提示的一批。
+// 两件都没做的 runner 不写文件——界面上它仍是「从未检查」。
 //
 // 查不到答案（令牌过期、限流、网络不通）与「确实没登记」是两回事，分别写入：
 // 前者记为未知并附上原因，后者才记为 false。把前者当成后者会在界面上给出
@@ -68,15 +80,91 @@ func Run(cfg *config.Config, store *secrets.Store) {
 		return
 	}
 	client := &http.Client{Timeout: apiTimeout}
+	now := time.Now()
 	for _, item := range cfg.Runners.Items {
 		installDir := item.InstallPath(cfg.Runners.BasePath)
 		tok := tokenFor(store, item.Name, installDir)
-		if tok.value == "" {
+
+		// 从上一次的结论出发，只改这一轮真的重查过的字段。整个文件是一次写完的，
+		// 不带上旧值的话，每五分钟一次的登记检查会把一天只查一次的可见性抹掉。
+		prev := runner.ReadGitHubStatus(installDir)
+		st := prev
+
+		if tok.value != "" {
+			st.Registered, st.Busy, st.Error = checkOne(client, tok, item.TargetType, item.Target, item.Name)
+			st.LastCheck = now.Format(time.RFC3339)
+		}
+		if visibilityDue(item.TargetType, prev.VisibilityCheckedAt, now) {
+			public, err := repoVisibility(context.Background(), client, tok, item.Target)
+			if err != nil {
+				// 说出来而不是静静地留着「不知道」：没有 PAT 时这是唯一的线索。
+				log.Printf("warning: could not read the visibility of %s for runner %s: %v", item.Target, item.Name, err)
+			}
+			st.Public = public
+			// 成不成都记时间：可见性不是急事，而匿名请求每小时只有 60 次，
+			// 失败就立刻重试会让一个持续出错的目标每五分钟烧掉一次配额。
+			st.VisibilityCheckedAt = now.Format(time.RFC3339)
+		}
+		if st == prev {
 			continue
 		}
-		registered, busy, reason := checkOne(client, tok, item.TargetType, item.Target, item.Name)
-		_ = runner.WriteGitHubStatus(installDir, registered, busy, reason)
+		_ = runner.WriteGitHubStatus(installDir, st)
 	}
+}
+
+// visibilityDue 判断这一轮要不要再去问一次仓库可见性。
+//
+// 只问 repo 目标：组织目标要判断的是「Runner 组允不允许公开仓库」，那需要 admin:org
+// 并且还得把 Runner 映射到组，和这里查一个仓库不是一回事，留待以后。
+//
+// 每个仓库一天最多一次。可见性几乎不变，而这个检查每五分钟跑一轮、没有 PAT 时走匿名
+// 配额（每小时 60 次），照每轮都查的话十来个 Runner 就能把配额烧干，
+// 连带把带 PAT 的那半边也拖进限流。
+func visibilityDue(targetType, lastCheckedAt string, now time.Time) bool {
+	if strings.ToLower(strings.TrimSpace(targetType)) != "repo" {
+		return false
+	}
+	if lastCheckedAt == "" {
+		return true
+	}
+	// 解析不了当成没查过：与其信一个读不懂的时间戳而永远不再查，不如多查一次。
+	t, err := time.Parse(time.RFC3339, lastCheckedAt)
+	if err != nil {
+		return true
+	}
+	return now.Sub(t) >= visibilityTTL
+}
+
+// repoVisibility 查这个仓库是不是公开的。nil 表示不知道。
+//
+// 有 PAT 就带上，没有就匿名发——可见性是公开信息，而绝大多数部署并不配 PAT，
+// 那正是最需要这个提示的一批。
+//
+// 404 一定要记成「不知道」，不能记成「不是公开的」：匿名请求下私有仓库和压根不存在的
+// 仓库都是 404，带 PAT 时权限不够也是 404。把它写成 false，界面就会对着一个拼错了名字的
+// 目标肯定地说「私有」，而那恰恰是用户最该被提醒去看一眼的情况。
+func repoVisibility(ctx context.Context, client *http.Client, tok tokenRef, target string) (*bool, error) {
+	if err := config.ValidateTarget("repo", target); err != nil {
+		return nil, fmt.Errorf("invalid target: %w", err)
+	}
+	owner, repo, ok := strings.Cut(strings.TrimSpace(target), "/")
+	if !ok {
+		return nil, fmt.Errorf("target must be in owner/repo form")
+	}
+	u := apiBase + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo)
+
+	var data struct {
+		Private bool `json:"private"`
+	}
+	err := doJSON(ctx, client, http.MethodGet, u, tok, &data)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	public := !data.Private
+	return &public, nil
 }
 
 // TokenForRunner 读取该 Runner 的 PAT，不存在或为空则返回空串。
@@ -180,7 +268,12 @@ func doJSON(ctx context.Context, client *http.Client, method, u string, tok toke
 		return fmt.Errorf("could not build the request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+tok.value)
+	// 没有 PAT 就匿名发。登记查询压根到不了这里（没凭据就不查），
+	// 可见性查询则是故意允许匿名的——公开仓库的可见性本来就是公开信息。
+	// 带一个空的 Bearer 比不带更糟：GitHub 会当成一个坏令牌返回 401。
+	if tok.value != "" {
+		req.Header.Set("Authorization", "Bearer "+tok.value)
+	}
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -218,7 +311,7 @@ func httpError(resp *http.Response, tok tokenRef) error {
 		}
 		return fmt.Errorf("GitHub returned 403: the token lacks scope (admin:org for an organization, repo for a repository)")
 	case http.StatusNotFound:
-		return fmt.Errorf("GitHub returned 404: the target does not exist, or the token cannot see it")
+		return errNotFound
 	default:
 		return fmt.Errorf("GitHub returned %d", resp.StatusCode)
 	}

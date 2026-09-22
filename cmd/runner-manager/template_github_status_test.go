@@ -107,6 +107,49 @@ func TestIndexTemplate_GitHubStatusThreeStates(t *testing.T) {
 	}
 }
 
+// 「公开仓库」徽标只在确知公开时出现。
+//
+// 和上面那条同源：GitHubPublic 也是 *bool，模板里写 {{if .GitHubPublic}} 会让指向
+// false 的指针同样为真，于是每个私有仓库都挂上「公开仓库」。这个徽标的全部意义
+// 就是把公开仓库挑出来，见谁都喊一遍等于没喊。nil 也不能喊：没查出来不是公开。
+func TestIndexTemplate_PublicRepoBadgeOnlyWhenKnownPublic(t *testing.T) {
+	T := map[string]string{}
+	b, _ := i18nFS.ReadFile("i18n/zh.json")
+	_ = json.Unmarshal(b, &T)
+	label := T["badge.public_repo"]
+	if label == "" {
+		t.Fatal("zh.json 里没有 badge.public_repo")
+	}
+
+	for _, tc := range []struct {
+		name string
+		v    *bool
+		want bool
+	}{
+		{"公开仓库", boolPtr(true), true},
+		{"私有仓库", boolPtr(false), false},
+		{"还没查出来", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			html := renderIndex(t, runner.RunnerInfo{
+				Name: "a", Status: runner.StatusInstalled, RegistrationMessage: "ok",
+				TargetType: "repo", Target: "acme/app", GitHubPublic: tc.v,
+			})
+			got := strings.Contains(html, `class="badge public-repo`)
+			if got != tc.want {
+				t.Fatalf("渲染出徽标 = %v，期望 %v", got, tc.want)
+			}
+			// 提示文案跟着徽标走：只有徽标没有 .tip，用户看不到「为什么这是个问题」
+			if tc.want && !strings.Contains(html, T["badge.public_repo_title"]) {
+				t.Fatal("徽标应带上说明为什么公开仓库有风险的 .tip")
+			}
+			if !tc.want && strings.Contains(html, label) {
+				t.Fatalf("页面里不应出现 %q", label)
+			}
+		})
+	}
+}
+
 // 查询失败的原因要能在界面上看到，否则「查询失败」四个字没法照着做
 func TestIndexTemplate_ShowsCheckErrorAsTooltip(t *testing.T) {
 	html := renderIndex(t, runner.RunnerInfo{
