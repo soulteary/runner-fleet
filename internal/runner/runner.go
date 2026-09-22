@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/soulteary/runner-fleet/internal/atomicfile"
 	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
@@ -287,7 +288,9 @@ func WriteGitHubStatus(installDir string, st GitHubStatus) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(installDir, GitHubStatusFile), b, 0644)
+	// 原子替换：列表渲染随时可能在读这个文件，就地截断重写会让它读到半截 JSON，
+	// 那会被当成「这个 Runner 没有 GitHub 状态」显示出来。
+	return atomicfile.WriteFile(filepath.Join(installDir, GitHubStatusFile), b, 0644)
 }
 
 // applyGitHubStatus 把磁盘上那份结论填进 info。
