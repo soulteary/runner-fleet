@@ -42,7 +42,10 @@ flowchart LR
 **Manager はオーケストレーションだけを行い、Runner を抱えません。** コンテナモードでは各 Runner が
 それぞれのコンテナになり、Manager がホストの Docker socket 越しに作成します——Manager にその socket が
 必要で、かつ DinD を指してはいけない理由がこれです。デフォルトモードでは Agent も Runner コンテナも
-存在しません。Runner プロセスは Manager 自身のコンテナ内で動き、Manager が直接 `/proc` を読みます。
+存在しません。Runner プロセスは Manager 自身のコンテナ内で動き、Manager が直接 `/proc` を読みます。どちらのモードでも、
+PID 1 を握っているプロセスが終了前に Runner を停止します: Agent は SIGTERM を受けると Runner を停止して
+その終了を待ち、デフォルトモードでは Manager が自分のコンテナ内の Runner に同じことをします。どちらの
+前にも `tini` が立ち、Job が残した孤児プロセスを回収します。
 
 **状態はプロセス境界をまたぐので、HTTP を通ります。** Manager と Runner コンテナは PID namespace が
 異なり、Manager からは Runner のプロセスが見えません。そこで Agent に尋ね、Agent が自分の `/proc` を

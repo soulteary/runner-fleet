@@ -43,7 +43,10 @@ endpoints, and translating an identifier makes it harder to grep, not easier to 
 container, created by the Manager through the host's Docker socket — which is why the Manager
 needs that socket and must not be pointed at DinD. In the default mode there is no Agent and no
 runner container at all: the runner processes run inside the Manager's own container, and the
-Manager reads `/proc` directly.
+Manager reads `/proc` directly. Either way, whoever holds PID 1 stops the runners before it exits:
+on SIGTERM the Agent stops its runner and waits for it, and in the default mode the Manager does the
+same for the runners in its own container. `tini` sits in front of both and reaps whatever a job
+orphans.
 
 **Status crosses a process boundary, so it crosses HTTP.** The Manager and a runner container are
 in different PID namespaces, so the Manager cannot see the runner's processes — it asks the Agent,

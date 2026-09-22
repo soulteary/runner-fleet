@@ -11,12 +11,23 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	docker "github.com/soulteary/docker-kit"
 	"github.com/soulteary/runner-fleet/internal/config"
+	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
+
+// stopTimeoutArg 是 docker stop 的 -t 取值（秒）。
+//
+// 取自 runnerproc.StopGracePeriod 而不是写死 30：容器里的 Agent 收到 SIGTERM 后要等
+// Runner 退出，等多久由同一个常量决定。两处一旦不一致，短的那边说话——把 -t 改小，
+// Agent 还在等 Runner，容器就整个被 SIGKILL 了，Job 照样是被拦腰砍断。
+func stopTimeoutArg() string {
+	return strconv.Itoa(int(runnerproc.StopGracePeriod / time.Second))
+}
 
 // ContainerName 将 runner 名称转为合法容器名，与 config 包规则一致
 func ContainerName(name string) string {
@@ -345,7 +356,7 @@ func driftSuffix(drift string) string {
 func StopRunnerContainer(ctx context.Context, runnerName string) error {
 	cn := ContainerName(runnerName)
 	defer lockRunnerOps(cn)()
-	out, err := dockerCmd(ctx, "stop", "-t", "30", cn)
+	out, err := dockerCmd(ctx, "stop", "-t", stopTimeoutArg(), cn)
 	if err != nil {
 		inspectOut, _ := dockerCmd(ctx, "inspect", "-f", "{{.State.Running}}", cn)
 		if containerNotFound(inspectOut) {
@@ -360,7 +371,7 @@ func StopRunnerContainer(ctx context.Context, runnerName string) error {
 func RemoveRunnerContainer(ctx context.Context, runnerName string) error {
 	cn := ContainerName(runnerName)
 	defer lockRunnerOps(cn)()
-	_, _ = dockerCmd(ctx, "stop", "-t", "30", cn)
+	_, _ = dockerCmd(ctx, "stop", "-t", stopTimeoutArg(), cn)
 	out, err := dockerCmd(ctx, "rm", "-f", cn)
 	if err != nil {
 		if containerNotFound(out) {

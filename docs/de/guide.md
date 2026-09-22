@@ -300,6 +300,16 @@ neue Image überhaupt da ist, um daraus zu bauen:
   `docker pull <Runner-Image>`. Drift wird über die Image-**ID** und nicht nur über die Referenz
   verglichen, nach dem Pull läuft der Neubau also wie gewohnt.
 
+Beide Images laufen jetzt mit `tini` als PID 1, wodurch sich ihre Image-IDs ändern; der
+Containermodus behandelt das wie jede andere Image-Änderung: ein gestoppter Runner-Container wird
+beim nächsten Start neu gebaut, ein laufender als „Konfiguration geändert" markiert, bis Sie im
+Leerlauf auf Neu erstellen klicken. Diese neue PID 1 ist es, die ein Stoppen bis zum Job
+durchreicht: der Agent leitet SIGTERM an den Runner weiter und wartet auf ihn, und die Prozesse, die
+ein Job als Waisen hinterlässt, werden eingesammelt statt sich als Zombies anzuhäufen. Wenn Sie den
+Manager mit einfachem `docker run` statt mit Compose betreiben, fügen Sie `--stop-timeout 30` hinzu
+— Dockers eigener Standard sind 10 Sekunden, was dem Manager keinen Raum lässt, zuerst seine Runner
+zu stoppen.
+
 `runners.resources` ist die einzige Einstellung, die einen bestehenden Container ohne Neubau
 erreicht: der Manager wendet sie beim Start mit `docker update` an, ein Upgrade auf eine Version
 mit Limits erzwingt also kein Neuanlegen aller Container.

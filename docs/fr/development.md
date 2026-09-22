@@ -44,7 +44,10 @@ grep sans le rendre plus lisible.
 propre conteneur, créé par le Manager via la socket Docker de l'hôte — d'où le fait que le Manager
 ait besoin de cette socket et ne doive pas être pointé vers DinD. En mode par défaut il n'y a ni
 Agent ni conteneur runner : les processus runner tournent dans le conteneur du Manager lui-même,
-qui lit `/proc` directement.
+qui lit `/proc` directement. Dans les deux modes, celui qui détient le PID 1 arrête les runners
+avant de se terminer : sur SIGTERM l'Agent arrête son runner et l'attend, et en mode par défaut le
+Manager fait de même pour les runners de son propre conteneur. Devant les deux se tient `tini`, qui
+récupère ce qu'un job laisse orphelin.
 
 **L'état traverse une frontière de processus, donc il passe par HTTP.** Le Manager et un conteneur
 runner sont dans des namespaces PID différents : le Manager ne voit pas les processus du runner, il

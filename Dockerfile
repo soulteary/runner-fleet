@@ -51,6 +51,18 @@ RUN if [ "${ALLOW_SUDO}" = "true" ]; then \
         && visudo -c -f /etc/sudoers.d/runner-fleet-app; \
     fi
 
+# tini 作为 PID 1：容器里的 init 要做两件本进程做不到的事。
+# 一是回收孤儿——Job 里 `cmd &`、守护进程化的工具、Gradle daemon 这些进程，
+# 父进程退出后会被托付给 PID 1，而 Go 程序只 Wait 自己起的那一个子进程，
+# 其余一律变僵尸；Runner 是长期存活的，僵尸会跨 Job 累积，还占着
+# runners.resources.pids_limit 的名额，到顶之后 fork 失败，表现为 Job 随机报
+# Resource temporarily unavailable。二是把 SIGTERM 转发给直接子进程。
+# 不写进 scripts/apt-packages.txt：那份清单对齐的是 actions/runner-images 的
+# toolset（给 Job 用的工具），tini 是运行时的一部分，含义不同。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=builder /app/runner-manager .
 COPY config.yaml.example ./config/config.yaml
@@ -63,5 +75,5 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health || exit 1
-ENTRYPOINT ["./runner-manager"]
+ENTRYPOINT ["/usr/bin/tini", "--", "./runner-manager"]
 CMD ["-config", "/app/config/config.yaml"]

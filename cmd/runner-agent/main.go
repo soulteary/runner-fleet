@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
@@ -228,25 +231,113 @@ func requireToken(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// newAgentMux 挂载 Agent 的全部路由。
+//
+// 用独立的 mux 而不是 http.DefaultServeMux：DefaultServeMux 是包级全局变量，
+// 同一进程里注册两次同一路径会 panic，测试因此只能起一个 server；换成独立 mux
+// 之后 newAgentServer 可以被反复构造，超时字段也才测得出来。
+func newAgentMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	// 控制类接口需要令牌；/health 保持开放，供容器 HEALTHCHECK 使用
+	mux.HandleFunc("/status", requireToken(handleStatus))
+	mux.HandleFunc("/start", requireToken(handleStart))
+	mux.HandleFunc("/stop", requireToken(handleStop))
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	return mux
+}
+
+// newAgentServer 构造带超时的 HTTP 服务。
+//
+// 不设超时的 http.Server 会无限期地等一个不再说话的对端：一个半开的 TCP 连接
+// 就能占住一个 goroutine 和一个 fd 直到进程结束，而 Runner 容器是长期存活的。
+// Agent 的处理函数全部即时返回（查进程表、发信号），所以这里可以给得很紧。
+func newAgentServer(port string, mux *http.ServeMux) *http.Server {
+	return &http.Server{
+		Addr:    ":" + port,
+		Handler: mux,
+		// 只有 Manager 会连过来，请求体最大也就是个空 POST
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+	}
+}
+
+// shutdown 让正在跑的 Job 有机会收尾，然后关掉 HTTP 服务。
+//
+// 这是 docker stop -t <宽限期> 真正落到 Runner 身上的那一环。Agent 是容器里的
+// PID 1（经 tini 转发），SIGTERM 先到它这里；它要是像以前那样直接退出，内核就会
+// 对 PID namespace 里剩下的进程一律 SIGKILL——run.sh 与 Runner.Listener 连
+// SIGTERM 都收不到，Job 不会被优雅取消，GitHub 那边只能等「失去通信」超时。
+//
+// 返回 true 表示 Runner 在 grace 内退干净了。
+func shutdown(ctx context.Context, dir string, grace time.Duration) bool {
+	if !runnerproc.Running(dir) {
+		return true
+	}
+	// stopRunner 按「监护脚本先于监听器」的顺序发 SIGTERM，这个顺序必须保留：
+	// 反过来先停监听器，run.sh 的 while 循环会立刻再拉起一个新的。
+	if err := stopRunner(dir); err != nil {
+		log.Printf("sending SIGTERM to the runner failed: %v", err)
+	}
+	deadline := time.Now().Add(grace)
+	for time.Now().Before(deadline) {
+		if !runnerproc.Running(dir) {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return !runnerproc.Running(dir)
+		case <-time.After(runnerPollInterval):
+		}
+	}
+	return !runnerproc.Running(dir)
+}
+
+// runnerPollInterval 是等 Runner 退出时的轮询间隔。
+// 每次轮询都要扫一遍 procfs，200ms 已经足够快（相对几十秒的宽限期），
+// 又不至于在一个正忙着收尾的容器里跟 Job 抢 CPU。
+const runnerPollInterval = 200 * time.Millisecond
+
 func main() {
 	port := os.Getenv("AGENT_PORT")
 	if port == "" {
 		port = defaultPort
 	}
-	// 控制类接口需要令牌；/health 保持开放，供容器 HEALTHCHECK 使用
-	http.HandleFunc("/status", requireToken(handleStatus))
-	http.HandleFunc("/start", requireToken(handleStart))
-	http.HandleFunc("/stop", requireToken(handleStop))
-	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	srv := newAgentServer(port, newAgentMux())
 	authState := "enabled"
 	if expectedToken() == "" {
 		authState = "disabled (no token file; kept for containers created by older versions)"
 	}
 	log.Printf("Runner Agent listening on :%s, RUNNER_INSTALL_DIR=%s, endpoint auth %s", port, installDir(), authState)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
+
+	// 先订阅再监听：容器刚起就被 docker stop 时，信号也不会落到「未订阅 = 直接退出」
+	// 的默认行为上。Go 运行时对未 Notify 的 SIGTERM 就是立刻终止进程。
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, os.Interrupt)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	<-quit
+	grace := runnerproc.StopGracePeriod - runnerproc.ShutdownReserve
+	log.Printf("received SIGTERM, stopping the runner (up to %s)", grace)
+	if shutdown(context.Background(), installDir(), grace) {
+		log.Print("runner stopped")
+	} else {
+		log.Printf("runner still running after %s, exiting anyway", grace)
 	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), runnerproc.ShutdownReserve)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("shutting down the HTTP server failed: %v", err)
+	}
+	os.Exit(0)
 }

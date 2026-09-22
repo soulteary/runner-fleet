@@ -300,6 +300,15 @@ image est bien là pour servir de base :
   `docker pull <image runner>`. La dérive se compare sur l'**ID** d'image autant que sur la
   référence : une fois le pull effectué, la reconstruction a lieu comme d'habitude.
 
+Les deux images exécutent désormais `tini` comme PID 1, ce qui change leurs ID d'image ; le mode
+conteneur traite cela comme n'importe quel autre changement d'image : un conteneur runner arrêté est
+reconstruit à son prochain démarrage, un conteneur en cours est signalé « config modifiée » jusqu'à
+ce que vous cliquiez sur Recréer à vide. C'est ce nouveau PID 1 qui permet à un arrêt d'atteindre le
+job : l'Agent transmet SIGTERM au runner et l'attend, et les processus qu'un job laisse orphelins
+sont récupérés au lieu de s'accumuler en zombies. Si vous déployez le Manager avec un simple
+`docker run` plutôt qu'avec Compose, ajoutez `--stop-timeout 30` — la valeur par défaut de Docker
+est de 10 secondes, ce qui ne laisse pas au Manager le temps d'arrêter d'abord ses runners.
+
 `runners.resources` est le seul réglage qui atteigne un conteneur existant sans reconstruction : le
 Manager l'applique avec `docker update` au démarrage, donc passer à une version qui gère les
 limites n'oblige pas à tout recréer.

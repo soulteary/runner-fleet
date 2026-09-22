@@ -298,6 +298,14 @@ details decide whether the new image is actually there to build from:
   Drift is compared on image **ID** as well as reference, so once the pull lands the rebuild
   happens as usual.
 
+Both images now run `tini` as PID 1, so their image IDs change and container mode treats that like
+any other image change — a stopped runner container is rebuilt on its next start, a running one is
+flagged "config changed" until you hit Recreate while it is idle. That new PID 1 is what lets a stop
+reach the job: the Agent forwards SIGTERM to the runner and waits for it, and orphans a job leaves
+behind get reaped instead of piling up as zombies. If you run the Manager with plain `docker run`
+rather than compose, add `--stop-timeout 30` — Docker's own default is 10 seconds, which leaves the
+Manager no room to stop its runners first.
+
 `runners.resources` is the one setting that reaches an existing container without a rebuild: the
 Manager applies it with `docker update` on start, so upgrading into a version that supports limits
 does not require recreating everything.

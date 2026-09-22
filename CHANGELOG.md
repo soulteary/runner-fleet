@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `config.yaml`, `.github_status.json` and `.registration_result.json` are now replaced atomically, so a request that reads them during a save no longer sees an empty or half-written file, and a crash mid-save no longer truncates the config. A config directory the Manager cannot write, or a config file bind-mounted on its own, falls back to the previous in-place write with a one-time warning.
+- Stopping a runner container now lets the job wind down: the Agent forwards SIGTERM to the runner and waits up to 25 seconds, where it used to exit at once and take the job down with SIGKILL, so the 30-second `docker stop` grace period never reached it. The Agent is PID 1 in its container and never called `signal.Notify`, and Go terminates the process on an unsubscribed SIGTERM; the kernel then SIGKILLs the rest of the PID namespace. Measured before the fix: `docker stop -t 30` returned in 0.054s and `run.sh`'s TERM trap never ran.
+- Both images run under `tini`, which reaps processes that jobs orphan; they used to accumulate as zombies across jobs and count against `runners.resources.pids_limit`, so a long-lived runner eventually failed to `fork` and jobs reported `Resource temporarily unavailable` at random. Five orphans produced five permanent zombies before the fix, all reparented to PID 1.
+- In the default mode, stopping the Manager now stops its runners gracefully first; the compose file sets `stop_grace_period: 30s` to leave room for it. The Manager's SIGTERM handler used to shut down the HTTP server and exit, which left the runner processes in its own container to be SIGKILLed by the kernel. A failed HTTP shutdown no longer aborts the exit path either — it used to be `log.Fatal`, which skipped stopping the runners entirely.
+- The grace period lives in exactly one place, `runnerproc.StopGracePeriod`: the `-t` of `docker stop`, how long the Agent waits for the runner, and the lifecycle timeout of `POST /api/runners/:name/stop` are all derived from it. The two halves drifting apart is what makes the grace period useless — whichever side is shorter wins.
+- The Manager and the Agent set read and idle timeouts on their HTTP servers, and the Manager limits request bodies to 1 MB. The Agent also stops using `http.DefaultServeMux`, a package-level global that panics on a duplicate route.
 
 ### Changed
 
@@ -35,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A workflow that read `BASIC_AUTH_*` or `AGENT_TOKEN` from its environment now gets nothing; every other variable in the job environment is unchanged.
 - Nothing to do for the PAT: tokens are migrated automatically. Scripts or runbooks that write the PAT into the runner directory still work — it is moved on the next check — but should write to `config/tokens/<name>` instead. Rotate any PAT that was in a runner directory while untrusted workflows could run there.
+- In container mode, existing runner containers were created from the previous image, so each is rebuilt on its next start; a running one shows "config changed" until it is recreated. If you run the Manager with plain `docker run`, add `--stop-timeout 30` — Docker's default of 10 seconds does not leave the Manager room to stop its runners first.
 
 ## [1.8.0] - 2026-09-21
 
