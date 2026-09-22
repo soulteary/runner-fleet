@@ -25,7 +25,7 @@ Worth knowing when judging a deployment or a report. Each is documented in the
 | Runner registration credentials | `runners/<name>/.credentials_rsaparams`, written by `config.sh` | The RSA private key the runner authenticates to GitHub with. actions/runner sets no Unix permissions on it, so the **directory** mode is what protects it. New directories are created `0700`; ones created by older versions stay `0755` and are named by the startup self-check with the `chmod` to run |
 | Optional PAT | `config/tokens/<name>`, mode `0600` | Used for the GitHub visibility check and to deregister a runner on delete. Org needs `admin:org`, repo needs `repo`. Kept outside the runner directory, which container mode mounts into the runner container |
 | Agent token | `runners/<name>/.agent_token`, mode `0600` | Generated per runner by the Manager and injected as `AGENT_TOKEN`. Without it, any container on the same Docker network could call the Agent's `/start` and `/stop` |
-| Basic Auth password | `BASIC_AUTH_PASSWORD` | Optional and **off by default** |
+| Basic Auth password | `BASIC_AUTH_PASSWORD` | Optional and **off by default**. Never passed to runner processes or jobs |
 
 ## Exposure worth understanding before deploying
 

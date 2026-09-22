@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/runner"
@@ -217,7 +218,7 @@ func runInstallRunnerScript(basePath, runnerName string, timeout time.Duration) 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, installRunnerScriptPath, runnerName)
-	cmd.Env = append(os.Environ(), "RUNNERS_BASE_PATH="+basePath)
+	cmd.Env = append(childenv.Environ(), "RUNNERS_BASE_PATH="+basePath)
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, context.DeadlineExceeded
@@ -254,7 +255,7 @@ func runConfigScript(installDir, url, token, name string, labels []string, timeo
 	defer cancel()
 	cmd := exec.CommandContext(ctx, configScript, args...)
 	cmd.Dir = installDir
-	cmd.Env = os.Environ()
+	cmd.Env = childenv.Environ()
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, context.DeadlineExceeded

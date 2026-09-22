@@ -231,6 +231,8 @@ runners:
 
 **Agent 인증**(컨테이너 모드): Manager가 Runner마다 무작위 토큰을 `<runner 디렉터리>/.agent_token`(0600)에 기록하고, 컨테이너 생성 시 `AGENT_TOKEN`으로 주입하며, Agent 호출 시 `Authorization: Bearer`로 전송합니다. Agent는 환경 변수를 읽으므로 Manager와 Agent의 UID 일치에 의존하지 않습니다. 파일은 Manager 측 영구 사본입니다. Agent는 토큰 없는 `/status`, `/start`, `/stop`을 거부하며 `/health`는 HEALTHCHECK용으로 열려 있습니다. 이 기능 이전에 생성된 컨테이너는 토큰이 주입되지 않아 인증 없이 동작합니다. 이제 이런 컨테이너는 "설정 변경됨"으로 판정되어 다음 시작 때 자동으로 재생성되며 토큰이 채워집니다(실행 중이면 "컨테이너 재생성" 사용).
 
+**Runner에 전달되는 환경 변수**: Manager와 Agent는 자신이 시작하는 모든 프로세스(`run.sh`와 그것이 실행하는 Job, `config.sh`, `install-runner.sh`)의 환경에서 `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER`, `AGENT_TOKEN`을 제거합니다. 나머지는 `DOCKER_HOST`와 프록시 설정을 포함해 그대로 전달됩니다. 이렇게 하면 관리용 자격 증명이 Job 로그에 남지 않지만, 격리 경계는 아닙니다. 기본 모드에서 Job은 Manager와 같은 사용자로 실행됩니다([SECURITY.md](../../SECURITY.md) 참고).
+
 **민감한 파일**: config/config.yaml, .env와 `config/tokens/`는 `.gitignore`에 있음. 각 Runner의 선택 PAT는 `config/tokens/<Runner 이름>`에 두며, Manager가 디렉터리는 0700, 파일은 0600으로 만듭니다. Runner 디렉터리에는 두지 마세요 — 컨테이너 모드에서 그 디렉터리는 Runner 컨테이너에 마운트되어 작업이 읽을 수 있습니다.
 
 **Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
