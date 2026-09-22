@@ -238,6 +238,8 @@ Multiple runners per machine: use separate subdirs.
 
 **Runner directory permissions**: each runner's install directory is created 0700. `config.sh` writes `.credentials_rsaparams` there — the RSA private key the runner authenticates to GitHub with — and actions/runner sets no Unix permissions on it, so the directory mode is what keeps other local users on the host from reading it and impersonating that runner. Directories created by earlier versions are still 0755; the startup self-test names them (`docker compose logs runner-manager | grep '\[preflight'`) with the exact `chmod 700` to run. It does not change them for you: under a UID mismatch (Manager as root, container as app(1001)) tightening a directory breaks a deployment that currently works, so look before you run it.
 
+**Default mode is one trust domain**: the directory mode above protects a runner's credentials from other users on the host, not from other runners. In the default mode all runners and the Manager run as one user in one container, so a job on any runner can read every other runner's credentials and PAT and change the Manager's config; with the stock compose file it can also reach the host Docker socket. Give each runner its own container (`runners.container_mode: true`) when runners serve different repositories or owners, or when any of them holds a PAT. If you stay on the default mode and jobs do not need Docker, remove the `docker.sock` volume and `group_add` from `docker-compose.yml`, and build with `--build-arg ALLOW_SUDO=false`. See [SECURITY.md](../SECURITY.md).
+
 ---
 
 ## 5. Operations

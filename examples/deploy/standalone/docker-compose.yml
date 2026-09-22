@@ -39,7 +39,9 @@ services:
     volumes:
       - ./config:/app/config
       - ./runners:/app/runners
-      # Job 里不需要 docker 时可以删掉这一行与下面的 group_add
+      # 挂载宿主机 docker.sock 等同于把宿主机 root 交给能访问它的进程，而这套模式下
+      # Job 与 Manager 同容器同用户：任何 Job 都能用它操作宿主机 Docker。
+      # Job 里不需要 docker 时请删掉这一行与下面的 group_add。
       - /var/run/docker.sock:/var/run/docker.sock
     group_add:
       - "${DOCKER_GID:-999}"

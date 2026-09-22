@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The startup self-check warns when the default mode runs more than one runner, since a job on any of them can read the others' credentials.
 - In container mode with a DinD backend, the startup self-check lists containers on `runner-net` that are not part of the deployment, since the stock DinD service accepts unauthenticated connections from anything on that network.
 
 ### Changed
 
+- `SECURITY.md` and the guide now state that the default mode is one trust domain — all runners share the Manager's container and user, and the stock compose file mounts the host Docker socket into it — and when to use container mode instead.
 - `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
 
 ### Fixed

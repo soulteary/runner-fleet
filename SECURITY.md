@@ -35,6 +35,15 @@ not account for them is the more likely problem.
 - **No authentication by default.** Without `BASIC_AUTH_PASSWORD` the UI and the whole API are
   open to anyone who can reach the port. Bind to localhost or an internal network, or set a
   password. See [4. Security and validation](docs/guide.md#4-security-and-validation).
+- **The default mode is one trust domain.** Without `container_mode`, every runner is a process
+  inside the Manager's container, running as the same user (UID 1001) with the same filesystem.
+  A job on any runner can read every other runner's `.credentials_rsaparams` and `.agent_token`,
+  read the PATs under `config/tokens/` — whose `0600` mode protects nothing when the job is the
+  owner of the file — edit `config/config.yaml`, and signal the Manager. The stock
+  `docker-compose.yml` also mounts the host Docker socket into that container and the image grants
+  passwordless `sudo`, so a job there is as trusted as root on the host — the same exposure as
+  `host-socket`, without the per-runner containers. Use container mode when runners serve different
+  repositories or owners, or when any runner holds a PAT.
 - **`job_docker_backend: host-socket` gives jobs the host.** A job can bind-mount any host path
   through the shared Docker socket. That is the point of the backend, and it means a workflow you
   run is as trusted as root on that machine. `dind` keeps jobs off the host's filesystem, but it is
@@ -43,8 +52,10 @@ not account for them is the more likely problem.
 - **`runner-net` is a trust boundary.** The stock DinD service listens on port 2375 without TLS or
   authentication, so any container attached to `runner-net` controls that privileged daemon. Attach
   nothing else to it; the startup self-check lists unexpected members in container mode.
-- **The Manager needs the host Docker socket in container mode.** Access to it is equivalent to
-  root on the host.
+- **The stock `docker-compose.yml` mounts the host Docker socket into the Manager in both modes.**
+  Container mode needs it to create runner containers; the default mode only uses it to give jobs
+  Docker. Access to it is equivalent to root on the host. In the default mode, if jobs do not need
+  Docker, remove the mount and the `group_add` entry.
 - **Anyone who can add a runner can run code.** Adding a runner and pointing it at a repository
   you control is a normal use of the UI, so the UI's access boundary is the real boundary.
 - **`/metrics` requires auth when Basic Auth is on; `/health` and `/ready` never do.** Probes
