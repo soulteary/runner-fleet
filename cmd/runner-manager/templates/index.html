@@ -132,6 +132,7 @@
           <div class="row"><label>{{index .T "modal.label_reg_checked_at"}}</label><div class="val" id="vRegistrationCheckedAt"></div></div>
           <div class="row"><label>{{index .T "modal.label_github_display"}}</label><div class="val"><a id="vGitHubLink" class="github-yes github-link" target="_blank" rel="noopener noreferrer" title="{{index .T "github.open_title"}}" style="display:none"></a><span id="vRegisteredOnGitHub"></span></div></div>
           <div class="row"><label>{{index .T "modal.label_github_busy"}}</label><div class="val" id="vGitHubBusy"></div></div>
+          <div class="row"><label>{{index .T "modal.label_repo_visibility"}}</label><div class="val" id="vRepoVisibility"></div></div>
           <div class="row"><label>{{index .T "modal.label_github_check_at"}}</label><div class="val" id="vGitHubCheckAt"></div></div>
         </div>
         <form id="modalEditForm" style="display:none">
@@ -196,6 +197,8 @@
             {{/* 用 GitHubBusyYes 而不是 {{if .GitHubBusy}}：它同样是 *bool，
                  指向 false 的指针在模板里也为真，「空闲」会显示成「忙碌中」 */}}
             {{if .GitHubBusyYes}}<span class="badge busy has-tip" tabindex="0" role="note">{{index $.T "badge.busy"}}<span class="tip">{{index $.T "badge.busy_title"}}</span></span>{{end}}
+            {{/* 同理用 GitHubPublicYes：{{if .GitHubPublic}} 会给每个私有仓库都挂上这个徽标 */}}
+            {{if .GitHubPublicYes}}<span class="badge public-repo has-tip" tabindex="0" role="note">{{index $.T "badge.public_repo"}}<span class="tip">{{index $.T "badge.public_repo_title"}}</span></span>{{end}}
             {{if .ContainerDrift}}<span class="badge drift has-tip" tabindex="0" role="note">{{index $.T "badge.drift"}}<span class="tip">{{.ContainerDrift}}</span></span>{{end}}
             {{if .Probe}}<br><span class="probe-err has-tip" tabindex="0" role="note">{{index $.T "probe.failed"}}{{if .Probe.Type}} ({{.Probe.Type}}){{end}}<span class="tip">{{.Probe.Error}}</span></span>{{end}}
           </td>

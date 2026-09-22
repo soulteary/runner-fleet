@@ -18,6 +18,9 @@
 两种形态下**镜像缓存都是共享的**——镜像层、BuildKit 缓存属于 Docker daemon，只要所有 Job 指向同一个
 daemon（挂宿主机 `docker.sock`，或共用同一个 DinD）就已经共享，不需要额外配置。
 
+缓存跨 Job 保留同样意味着前一个 Job 能改写后一个 Job 读到的内容，只对可信仓库成立——
+自托管 Runner 只该用于私有仓库，见 [SECURITY.md](../../SECURITY.md)。
+
 ## 快速开始
 
 ### 单容器

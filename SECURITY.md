@@ -32,6 +32,15 @@ Worth knowing when judging a deployment or a report. Each is documented in the
 None of these are bugs; they are what the tool is. They are listed because a deployment that does
 not account for them is the more likely problem.
 
+- **Do not point runners at public repositories.** Anyone can open a pull request against a public
+  repository, and that pull request's workflow runs on your machine unless the repository's
+  **Approval for running fork pull request workflows from contributors** setting (Settings → Actions
+  → General) holds it back — and its default only holds back first-time contributors, so one merged
+  typo clears the bar. GitHub's own guidance is to use self-hosted runners with private repositories
+  only: [Hardening for self-hosted runners](https://docs.github.com/en/actions/reference/security/secure-use#hardening-for-self-hosted-runners).
+  Runners here are also **persistent** — registered without `--ephemeral`, not JIT — so `_work`, the
+  tool caches under it, `$HOME` caches and any process a job leaves behind carry over to the next job;
+  one malicious job can tamper with every job after it.
 - **No authentication by default.** Without `BASIC_AUTH_PASSWORD` the UI and the whole API are
   open to anyone who can reach the port. Bind to localhost or an internal network, or set a
   password. See [4. Security and validation](docs/guide.md#4-security-and-validation).
