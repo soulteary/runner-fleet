@@ -212,7 +212,7 @@ runners:
 
 **未安装 runner 时**：可从 [GitHub Actions Runner](https://github.com/actions/runner/releases) 下载解压到 `runners/<名称>/`，再在界面填 Token 或该目录下手动 `./config.sh`。容器部署下界面提交 Token 时会先自动安装再注册；容器模式需先配置 Runner 镜像与 `volume_host_path`（见上文容器模式）。
 
-**注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：把 PAT 放在 `config/tokens/<Runner 名称>`（权限 0600，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。旧版本留在 Runner 目录里的 PAT 会被自动搬到那里并从 Runner 目录删除——那个目录会被挂载进该 Runner 的容器，Job 读得到它。 同一次检查还会记录 GitHub 侧该 Runner 是否**正在跑 Job**，列表里显示为「忙碌中」徽标，配置弹窗中单列一行。它与上面同为约 5 分钟一次，因此最多可能滞后 5 分钟；没有 PAT 时保持「未知」，不会说成「空闲」。列表中的「已注册」与「GitHub ✓」均可点击，跳转到该目标在 GitHub 的 Runners 设置页。
+**注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：把 PAT 放在 `config/tokens/<Runner 名称>`（权限 0600，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。旧版本留在 Runner 目录里的 PAT 会被自动搬到那里并从 Runner 目录删除——那个目录会被挂载进该 Runner 的容器，Job 读得到它。 同一次检查还会记录 GitHub 侧该 Runner 是否**正在跑 Job**，列表里显示为「忙碌中」徽标，配置弹窗中单列一行。它与上面同为约 5 分钟一次，因此最多可能滞后 5 分钟；没有 PAT 时保持「未知」，不会说成「空闲」。列表中的「已注册」与「GitHub ✓」均可点击，跳转到该目标在 GitHub 的 Runners 设置页。同一个文件还记录目标仓库是否**公开**：公开的会在列表里挂一个警示色的「公开仓库」徽标，详情对话框多一行「仓库可见性」——公开仓库意味着任何能提 PR 的人都能在这里运行代码。这一项每个仓库每天最多问一次（可见性几乎不变，而匿名 API 每小时只有 60 次），没有 PAT 也能查，有就带上。组织目标不在此列：那边要判断的是 Runner 组允不允许公开仓库，需要 `admin:org`。
 
 **名称冲突检查**：在名称输入框里打字时，表单会调用 `/api/runner-precheck`，把可能出问题的地方提前摆出来——配置里已有同名 Runner、名称规范化后与别人撞容器名、安装目录被别的 Runner 占了、磁盘上留着一个已注册过的目录（存在 `.runner`）、宿主机上还挂着同名容器。阻塞性的问题标红并给出一键可用的建议名；仅提示性的（目录非空会被复用）不挡提交。强行提交会被服务端以 **409** 拒绝并返回同样的冲突信息——此前「静默加随机后缀」的行为已取消（需要的话传 `auto_rename: true`）。
 

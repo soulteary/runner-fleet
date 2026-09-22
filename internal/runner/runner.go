@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
@@ -53,6 +52,7 @@ type RunnerInfo struct {
 	GitHubCheckAt         string     `json:"github_check_at"`              // 最近一次 GitHub 检查时间
 	GitHubCheckError      string     `json:"github_check_error,omitempty"` // 查不到答案时的原因（令牌过期、限流、网络不通等）
 	GitHubBusy            *bool      `json:"github_busy,omitempty"`        // GitHub 侧该 Runner 是否正在跑 Job，nil 表示不知道（没查、没查到、或没配 PAT）
+	GitHubPublic          *bool      `json:"github_public,omitempty"`      // 目标仓库是否公开，nil 表示不知道（组织目标、查不到、或还没查过）
 	GitHubURL             string     `json:"github_url,omitempty"`         // 该目标在 GitHub 上的 Actions Runners 设置页，target 非法时为空
 }
 
@@ -72,6 +72,11 @@ func (r RunnerInfo) GitHubUnknown() bool { return r.RegisteredOnGitHub == nil }
 // 和上面三个同理：GitHubBusy 是 *bool，模板里写 {{if .GitHubBusy}} 会把
 // 指向 false 的指针也当成真，于是「空闲」显示成「忙碌中」。
 func (r RunnerInfo) GitHubBusyYes() bool { return r.GitHubBusy != nil && *r.GitHubBusy }
+
+// GitHubPublicYes 表示上次查询时 GitHub 说这个目标仓库是公开的。
+// 同样不能在模板里写 {{if .GitHubPublic}}：指向 false 的指针也为真，
+// 于是每个私有仓库都会挂上「公开仓库」徽标——恰好是最不该误报的那一个。
+func (r RunnerInfo) GitHubPublicYes() bool { return r.GitHubPublic != nil && *r.GitHubPublic }
 
 // ProbeInfo 为容器探测失败的结构化信息。
 type ProbeInfo struct {
@@ -108,7 +113,7 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 		}
 		info.Status, info.Running = getStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubBusy, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.applyGitHubStatus(installDir)
 		info.GitHubURL = GitHubSettingsURL(item.TargetType, item.Target)
 		return info
 	}
@@ -144,7 +149,7 @@ func List(cfg *config.Config) []RunnerInfo {
 		}
 		info.Status = diskStatus(installDir)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
-		info.RegisteredOnGitHub, info.GitHubBusy, info.GitHubCheckAt, info.GitHubCheckError = readGitHubStatus(installDir)
+		info.applyGitHubStatus(installDir)
 		info.GitHubURL = GitHubSettingsURL(item.TargetType, item.Target)
 		list = append(list, info)
 		dirs = append(dirs, installDir)
@@ -229,45 +234,67 @@ func readRegistrationResult(installDir string) (message, at string) {
 	return v.Message, v.At
 }
 
-// readGitHubStatus 读取 cron 写入的 GitHub 检查结果
-// readGitHubStatus 读取上一次 GitHub 查询的结论。
-// registered 为 nil 表示没有结论——要么从未查过（checkAt 也为空），
-// 要么查过但没查出来（checkAt 非空，checkErr 说明原因）。
-// 老版本写下的文件里 registered 是普通 bool，反序列化成非 nil 指针，语义不变。
-func readGitHubStatus(installDir string) (registered, busy *bool, checkAt, checkErr string) {
-	b, err := os.ReadFile(filepath.Join(installDir, GitHubStatusFile))
-	if err != nil {
-		return nil, nil, "", ""
-	}
-	var v struct {
-		Registered *bool  `json:"registered"`
-		Busy       *bool  `json:"busy"`
-		LastCheck  string `json:"last_check"`
-		Error      string `json:"error"`
-	}
-	if json.Unmarshal(b, &v) != nil {
-		return nil, nil, "", ""
-	}
-	return v.Registered, v.Busy, v.LastCheck, v.Error
+// GitHubStatus 是 .github_status.json 的内容：上一次 GitHub 查询留下的结论。
+//
+// 三个 *bool 都是三态，nil 一律是「不知道」而不是 false。把「没查出来」写成 false，
+// 界面上就会对一个根本没查到的东西打包票——这正是本文件里那几条注释反复在说的事。
+type GitHubStatus struct {
+	// Registered 该 Runner 是否已在 GitHub 上登记
+	Registered *bool `json:"registered"`
+	// Busy GitHub 是否说它正在跑 Job
+	Busy *bool `json:"busy,omitempty"`
+	// Public 目标仓库是否公开。组织目标、查不到、从未查过都是 nil。
+	Public *bool `json:"public,omitempty"`
+	// LastCheck 最近一次「是否已登记」查询的时间（RFC3339）。
+	//
+	// 由调用方填，不在写入时顺手盖上当前时间：界面靠它是否为空把「从未检查」
+	// 与「查过但失败」分开说，而没有 PAT 时这个查询根本不会发生——
+	// 可见性那一半却仍然会写文件（匿名也能查）。盖上时间就等于对着一个
+	// 从未查过的 Runner 说「查过了，失败」。
+	LastCheck string `json:"last_check,omitempty"`
+	// Error 查不到答案时的原因（令牌过期、限流、网络不通等）
+	Error string `json:"error,omitempty"`
+	// VisibilityCheckedAt 最近一次问过仓库可见性的时间（RFC3339），空表示从未问过。
+	//
+	// 可见性几乎不变，而匿名请求每小时只有 60 次，靠它把查询压到每个仓库一天一次。
+	VisibilityCheckedAt string `json:"visibility_checked_at,omitempty"`
 }
 
-// WriteGitHubStatus 由 cron 调用，写入 GitHub 检查结果到 runner 目录
+// ReadGitHubStatus 读取上一次 GitHub 查询的结论。
+//
+// 文件不存在、或解析不了，一律读成零值——那是「从未查过」，所有字段都为空。
+// 老版本写下的文件里 registered 是普通 bool，反序列化成非 nil 指针，语义不变；
+// 没有 public / visibility_checked_at 的老文件读出 nil 与空串，也就是「还没查过可见性」。
+func ReadGitHubStatus(installDir string) GitHubStatus {
+	var v GitHubStatus
+	b, err := os.ReadFile(filepath.Join(installDir, GitHubStatusFile))
+	if err != nil {
+		return GitHubStatus{}
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return GitHubStatus{}
+	}
+	return v
+}
+
 // WriteGitHubStatus 记录一次 GitHub 查询的结论。
-// registered 为 nil 表示这次没查出答案，checkErr 说明原因；
-// 「查不出来」不可以写成 false——那会在界面上变成一句确定的「未显示」。
-func WriteGitHubStatus(installDir string, registered, busy *bool, checkErr string) error {
-	p := filepath.Join(installDir, GitHubStatusFile)
-	body := struct {
-		Registered *bool  `json:"registered"`
-		Busy       *bool  `json:"busy,omitempty"`
-		LastCheck  string `json:"last_check"`
-		Error      string `json:"error,omitempty"`
-	}{Registered: registered, Busy: busy, LastCheck: time.Now().Format(time.RFC3339), Error: checkErr}
-	b, err := json.Marshal(body)
+//
+// 整个文件一次写完，所以调用方要把这次没重查的字段原样带上——
+// 典型做法是先 ReadGitHubStatus 拿到上一次的结论再改其中几项，
+// 否则每五分钟一次的登记检查会把一天只查一次的可见性结论抹掉。
+func WriteGitHubStatus(installDir string, st GitHubStatus) error {
+	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, b, 0644)
+	return os.WriteFile(filepath.Join(installDir, GitHubStatusFile), b, 0644)
+}
+
+// applyGitHubStatus 把磁盘上那份结论填进 info。
+func (r *RunnerInfo) applyGitHubStatus(installDir string) {
+	gh := ReadGitHubStatus(installDir)
+	r.RegisteredOnGitHub, r.GitHubBusy, r.GitHubPublic = gh.Registered, gh.Busy, gh.Public
+	r.GitHubCheckAt, r.GitHubCheckError = gh.LastCheck, gh.Error
 }
 
 // isProcessRunning 检测本机是否有属于该安装目录的 Runner 进程存活。

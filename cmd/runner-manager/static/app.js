@@ -591,6 +591,12 @@ function openModal(mode, name) {
         if (data.github_busy === true) busyEl.textContent = t('modal.gh_busy');
         else if (data.github_busy === false) busyEl.textContent = t('modal.gh_idle');
         else busyEl.textContent = t('modal.gh_busy_unknown');
+        // 可见性同样三态。不知道就说不知道：把「没查出来」说成「私有」，
+        // 正好在最该提醒的那一种情况下（目标名写错、令牌看不到）给出安心的假答案。
+        var visEl = document.getElementById('vRepoVisibility');
+        if (data.github_public === true) visEl.textContent = t('modal.vis_public');
+        else if (data.github_public === false) visEl.textContent = t('modal.vis_private');
+        else visEl.textContent = t('modal.vis_unknown');
         renderTimestamp(document.getElementById('vGitHubCheckAt'), data.github_check_at);
         const startStopSpan = document.getElementById('modalStartStopSpan');
         const startBtn = document.getElementById('modalStartBtnFooter');

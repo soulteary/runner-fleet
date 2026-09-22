@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A runner pointed at a public repository now says so in the UI**: a warn-coloured "Public repo" badge in the list, with a tooltip explaining why that matters, and a "Repository visibility" row in the detail dialog. The warning in `SECURITY.md` and the guide only reaches someone who reads them; this one reaches the person looking at the runner they just added.
+- The visibility comes from the existing 5-minute GitHub check, which now also calls `GET /repos/{owner}/{repo}` — with the runner's PAT when it has one, anonymously when it does not, because most deployments configure no PAT and those are exactly the ones this is for. It is asked **at most once a day per repository**: visibility almost never changes, while the anonymous quota is 60 requests an hour, and checking every pass would let a dozen runners exhaust it and drag the PAT-authenticated half into rate limiting with them.
+- A 404 is recorded as "unknown", never as "not public". Anonymously, a private repository and one that does not exist both answer 404; with a PAT, so does one the token cannot see. Writing that down as `false` would state "private" with confidence about a target whose name was simply mistyped — the one case where the user most needs to look. Organization targets are out of scope for now: the question there is whether the runner group allows public repositories, which needs `admin:org` and a mapping from runner to group.
+- `.github_status.json` gained `public` and `visibility_checked_at`. Files written by older versions have neither and read as "not checked yet". `WriteGitHubStatus` now takes the whole `runner.GitHubStatus` and no longer stamps `last_check` itself: the file is written in one shot, so the caller carries forward what it did not re-check, and a runner with no PAT gets its visibility recorded while `last_check` stays empty — which is what keeps the UI saying "never checked" instead of "checked, failed".
+
 ### Security
 
 - Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.

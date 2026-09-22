@@ -58,6 +58,7 @@ th { color: var(--muted); font-weight: 600; }
 .badge.drift { background: rgba(210, 153, 34, 0.2); color: var(--warn); margin-left: 4px; cursor: help; }
 /* 忙碌来自 GitHub，与 running（本机/容器进程）不是一回事，用另一种颜色区分 */
 .badge.busy { background: rgba(47, 129, 247, 0.25); color: var(--accent); margin-left: 4px; cursor: help; }
+.badge.public-repo { background: rgba(210, 153, 34, 0.2); color: var(--warn); margin-left: 4px; cursor: help; }
 form label { display: block; margin-top: 12px; color: var(--muted); font-size: 13px; }
 form input, form select { width: 100%; max-width: 400px; padding: 8px 12px; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 form button {
