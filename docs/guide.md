@@ -319,6 +319,12 @@ Ownership matters on restore: everything must end up owned by UID 1001, the same
 `sudo chown -R 1001:1001 config runners` as the first install. `GET /ready` write-probes the
 runners directory, so it is the fastest way to confirm a restore is actually usable.
 
+The directory's mode matters too, not just the file's: the Manager replaces `config.yaml`
+atomically when its directory is writable by UID 1001, so a save can neither be read half-written
+nor be truncated by a crash. With only the file writable, or the file bind-mounted on its own
+(`-v ./config.yaml:/app/config/config.yaml`), it falls back to writing in place and logs a warning
+once.
+
 ### Behind a reverse proxy
 
 The Manager speaks plain HTTP and has no TLS of its own, so the proxy terminates TLS. This matters

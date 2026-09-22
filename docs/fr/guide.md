@@ -321,6 +321,13 @@ Le propriétaire compte à la restauration : tout doit finir possédé par l'UID
 réellement un fichier de test dans le répertoire runners : c'est donc le moyen le plus rapide de
 confirmer qu'une restauration est réellement exploitable.
 
+Les droits du répertoire comptent autant que ceux du fichier : tant que son répertoire est
+accessible en écriture à l'UID 1001, le Manager remplace `config.yaml` de façon atomique — une
+sauvegarde ne peut donc être lue à moitié écrite, ni être tronquée par un crash. Si seul le fichier
+est accessible en écriture, ou s'il est monté seul en bind mount
+(`-v ./config.yaml:/app/config/config.yaml`), le Manager revient à l'écriture sur place et émet un
+avertissement une seule fois.
+
 ### Derrière un reverse proxy
 
 Le Manager parle HTTP en clair et n'a pas de TLS propre : c'est le proxy qui termine TLS. Cela

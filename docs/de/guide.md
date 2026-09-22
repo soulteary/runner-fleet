@@ -321,6 +321,13 @@ Beim Wiederherstellen zählt der Eigentümer: alles muss am Ende UID 1001 gehör
 tatsächlich eine Testdatei in das runners-Verzeichnis und ist damit der schnellste Weg zu
 bestätigen, dass eine Wiederherstellung wirklich brauchbar ist.
 
+Nicht nur die Rechte der Datei zählen, sondern auch die des Verzeichnisses: solange das Verzeichnis
+für UID 1001 schreibbar ist, ersetzt der Manager `config.yaml` atomar — ein Speichervorgang kann
+also weder halb geschrieben gelesen noch von einem Absturz abgeschnitten werden. Ist nur die Datei
+schreibbar oder ist sie einzeln als Bind Mount eingehängt
+(`-v ./config.yaml:/app/config/config.yaml`), fällt er auf das Schreiben an Ort und Stelle zurück
+und warnt einmalig.
+
 ### Hinter einem Reverse Proxy
 
 Der Manager spricht einfaches HTTP und bringt kein eigenes TLS mit; der Proxy terminiert TLS. Das
