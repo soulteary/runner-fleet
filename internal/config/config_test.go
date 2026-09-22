@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -1277,4 +1278,85 @@ func TestValidate_JobDockerBackendCaseInsensitive(t *testing.T) {
 	if cfg.Runners.JobDockerBackend != "dind" {
 		t.Errorf("期望归一化为 dind，got %q", cfg.Runners.JobDockerBackend)
 	}
+}
+
+// TestSaveAndLoad_ConcurrentReadersNeverSeePartialConfig 保存进行中的并发读不该看到半截配置。
+//
+// 这是线上那个现象的复现：os.WriteFile 先 O_TRUNC 再写，前端 15 秒一次的轮询、
+// 每个 API 请求的 getConfig 和后台的自启动与 GitHub 检查循环恰好落在这中间时，
+// 读到的要么是半截 YAML（一次 500），要么是空文件——而空输入 yaml.Unmarshal 并不报错，
+// 返回的是零值配置，界面上就成了「一个 Runner 都没有」。mu 只串行化写者，
+// Load 不持锁，挡不住这个；换成 rename 发布之后，读者只可能看到 A 或 B。
+//
+// 这条测试在旧实现上是概率性变红的（取决于读者是否恰好落在截断与写完之间）；
+// 确定性的证明在 internal/atomicfile 的 TestWriteFile_TargetUntouchedUntilRename。
+func TestSaveAndLoad_ConcurrentReadersNeverSeePartialConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	// 两份配置的 items 条数不同，读到空文件（零值配置）时也认不成其中任何一份
+	a := &Config{
+		Server:  ServerConfig{Port: 9000, Addr: "127.0.0.1"},
+		Runners: RunnersConfig{BasePath: "/tmp/runners", Items: []RunnerItem{{Name: "a1", TargetType: "org", Target: "myorg"}}},
+	}
+	b := &Config{
+		Server: ServerConfig{Port: 9000, Addr: "127.0.0.1"},
+		Runners: RunnersConfig{BasePath: "/tmp/runners", Items: []RunnerItem{
+			{Name: "b1", TargetType: "repo", Target: "owner/repo"},
+			{Name: "b2", TargetType: "repo", Target: "owner/other"},
+		}},
+	}
+	names := func(c *Config) string {
+		out := make([]string, 0, len(c.Runners.Items))
+		for _, it := range c.Runners.Items {
+			out = append(out, it.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	wantA, wantB := "a1", "b1,b2"
+
+	if err := a.Save(path); err != nil {
+		t.Fatal(err)
+	}
+
+	const rounds = 500
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(done)
+		for i := 0; i < rounds; i++ {
+			for _, c := range []*Config{a, b} {
+				if err := c.Save(path); err != nil {
+					t.Errorf("Save: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				cfg, err := Load(path)
+				if err != nil {
+					t.Errorf("Load 撞上了保存中的文件：%v", err)
+					return
+				}
+				if got := names(cfg); got != wantA && got != wantB {
+					t.Errorf("Load 读到的既不是 A 也不是 B：items=[%s]（空的那次就是界面上「一个 Runner 都没有」）", got)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
