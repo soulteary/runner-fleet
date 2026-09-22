@@ -231,6 +231,8 @@ runners:
 
 **Agent 認証**（コンテナモード）: Manager は Runner ごとにランダムなトークンを `<runner ディレクトリ>/.agent_token`（0600）へ書き込み、コンテナ作成時に `AGENT_TOKEN` として注入し、Agent 呼び出し時に `Authorization: Bearer` で送ります。Agent は環境変数を読むため、Manager と Agent の UID 一致に依存しません。ファイルは Manager 側の永続コピーです。Agent は `/status`、`/start`、`/stop` をトークンなしでは拒否します。`/health` は HEALTHCHECK 用に開放したままです。本機能より前に作成したコンテナはトークンが注入されておらず、認証なしのまま動作します。現在はこれを「設定変更あり」と判定し、次回起動時に自動で作り直して補います（実行中なら「コンテナ再作成」で）。
 
+**Runner に渡される環境変数**: Manager と Agent は、自分が起動するすべてのプロセス——`run.sh` とそれが実行する Job、`config.sh`、`install-runner.sh`——の環境から `BASIC_AUTH_PASSWORD`、`BASIC_AUTH_USER`、`AGENT_TOKEN` を取り除きます。それ以外は `DOCKER_HOST` やプロキシ設定も含めてそのまま渡します。これにより管理用の認証情報が Job のログに出なくなりますが、分離の境界ではありません。デフォルトモードでは Job は Manager と同じユーザーで動作します（[SECURITY.md](../../SECURITY.md) を参照）。
+
 **機密ファイル**: config/config.yaml と .env は `.gitignore` に含まれています。各 Runner の `.github_check_token` は `chmod 600` を推奨。バージョン管理下にある場合は `.gitignore` に `**/.github_check_token` を追加。
 
 **Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。

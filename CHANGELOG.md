@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.
+
+### Upgrading
+
+- A workflow that read `BASIC_AUTH_*` or `AGENT_TOKEN` from its environment now gets nothing; every other variable in the job environment is unchanged.
+
 ## [1.8.0] - 2026-09-21
 
 ### Dependencies
