@@ -313,6 +313,11 @@ README 说配置就是你的备份。这话对**配置**成立，对**身份**�
 `sudo chown -R 1001:1001 config runners` 一样。`GET /ready` 会往 runners 目录真写一个探测文件，
 所以它是确认「恢复出来的东西真能用」最快的办法。
 
+目录的权限同样重要，不只是文件的：只要 config 目录对 UID 1001 可写，Manager 就以原子替换写入
+`config.yaml`，保存过程中的读取不会读到半截内容，中途崩溃也不会把它截断。如果只有文件可写，
+或者这个文件是单独 bind mount 进去的（`-v ./config.yaml:/app/config/config.yaml`），
+Manager 会回退为就地写入，并告警一次。
+
 ### 放在反向代理后面
 
 Manager 只说 HTTP，自己不带 TLS，所以由代理终结 TLS。这一点在这里比平常更要紧：Basic Auth 每个请求

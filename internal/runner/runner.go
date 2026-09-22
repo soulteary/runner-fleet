@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/soulteary/runner-fleet/internal/atomicfile"
 	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
@@ -267,7 +268,9 @@ func WriteGitHubStatus(installDir string, registered, busy *bool, checkErr strin
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, b, 0644)
+	// 原子替换：列表渲染随时可能在读这个文件，就地截断重写会让它读到半截 JSON，
+	// 那会被当成「这个 Runner 没有 GitHub 状态」显示出来。
+	return atomicfile.WriteFile(p, b, 0644)
 }
 
 // isProcessRunning 检测本机是否有属于该安装目录的 Runner 进程存活。

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
 
+### Fixed
+
+- `config.yaml`, `.github_status.json` and `.registration_result.json` are now replaced atomically, so a request that reads them during a save no longer sees an empty or half-written file, and a crash mid-save no longer truncates the config. A config directory the Manager cannot write, or a config file bind-mounted on its own, falls back to the previous in-place write with a one-time warning.
+
 ### Security
 
 - Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.
