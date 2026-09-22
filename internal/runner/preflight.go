@@ -54,6 +54,9 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 		runCheck(ctx, "runner directory permissions", func(context.Context) CheckResult { return checkRunnerDirPermissions(cfg) }),
 	}
 	if !cfg.Runners.ContainerMode {
+		results = append(results, runCheck(ctx, "runner isolation", func(context.Context) CheckResult {
+			return checkDefaultModeIsolation(cfg)
+		}))
 		return append(results, runCheck(ctx, "Docker in jobs", checkDefaultModeDocker))
 	}
 	results = append(results,
@@ -132,6 +135,25 @@ func checkRunnerDirPermissions(cfg *config.Config) CheckResult {
 		"chmod 700 "+strings.Join(loose, " "))
 }
 
+// checkDefaultModeIsolation 默认模式下多个 Runner 共用一个容器与用户：
+// 任一 Job 都能读到其他 Runner 的 .credentials_rsaparams 与 PAT。只提示，不阻止启动。
+//
+// 按条目数分档而不是无条件警告：只有一个 Runner 时没有「其他 Runner」可言，
+// 而单人单仓库开多个 Runner 只为并发是合法场景，需要的是知情，不是拦路。
+//
+// PAT 已经移出 Runner 目录（internal/secrets），但那只关掉了容器模式的暴露：
+// 默认模式下 config/tokens/ 就在同一个容器里，文件属主正是 Job 自己，0600 挡不住。
+func checkDefaultModeIsolation(cfg *config.Config) CheckResult {
+	const name = "runner isolation"
+	if n := len(cfg.Runners.Items); n >= 2 {
+		return warn(name,
+			fmt.Sprintf("default mode: %d runners share one container and one user, so a job on "+
+				"any of them can read the others' credentials", n),
+			"set runners.container_mode: true to give each runner its own container (see SECURITY.md)")
+	}
+	return ok(name, "default mode with at most one runner")
+}
+
 // checkDefaultModeDocker 默认模式下 Job 在 Manager 容器内执行，这里说明 Job 内 docker 会连到哪
 func checkDefaultModeDocker(ctx context.Context) CheckResult {
 	const name = "Docker in jobs"
@@ -157,7 +179,7 @@ func checkDefaultModeDocker(ctx context.Context) CheckResult {
 		return warn(name, fmt.Sprintf("%s belongs to GID %d and this process is not in that group, so docker in jobs will report permission denied", sock, gid),
 			fmt.Sprintf("set group_add: [\"%d\"] in docker-compose, or DOCKER_GID=%d in .env", gid, gid))
 	}
-	return ok(name, fmt.Sprintf("default mode, docker in jobs will use %s", h))
+	return ok(name, fmt.Sprintf("default mode, docker in jobs will use %s (jobs can control the host Docker daemon)", h))
 }
 
 // checkDockerReachable 容器模式下 Manager 必须能操作宿主机 Docker

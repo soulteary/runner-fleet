@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The startup self-check warns when the default mode runs more than one runner, since a job on any of them can read the others' credentials.
+
 ### Changed
 
 - `SECURITY.md` and the guide now state that the default mode is one trust domain — all runners share the Manager's container and user, and the stock compose file mounts the host Docker socket into it — and when to use container mode instead.

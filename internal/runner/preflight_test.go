@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -171,11 +172,92 @@ func TestPreflight_DefaultModeSkipsContainerChecks(t *testing.T) {
 			t.Errorf("默认模式不应执行容器相关检查: %+v", r)
 		}
 	}
-	for _, want := range []string{"runners directory", "runner directory permissions", "Docker in jobs"} {
-		findCheck(t, results, want)
+	want := []string{"runners directory", "runner directory permissions", "runner isolation", "Docker in jobs"}
+	for _, w := range want {
+		findCheck(t, results, w)
 	}
-	if len(results) != 3 {
-		t.Fatalf("默认模式的检查项应为 %v，实际 %v", []string{"runners directory", "runner directory permissions", "Docker in jobs"}, names)
+	if len(results) != len(want) {
+		t.Fatalf("默认模式的检查项应为 %v，实际 %v", want, names)
+	}
+}
+
+// TestCheckDefaultModeIsolation_WarnsOnlyWithMoreThanOneRunner 钉住这项检查的阈值。
+//
+// 分档点是「有没有别的 Runner 可以被读」：0 个和 1 个时没有，2 个起才有。
+// 把条件写成 n < 2 或干脆删掉这项检查，下面三个子用例会一起变红——
+// 前者让 0/1 报 warn 而 2 报 ok，后者让 findCheck 找不到这一项。
+func TestCheckDefaultModeIsolation_WarnsOnlyWithMoreThanOneRunner(t *testing.T) {
+	item := func(n int) []config.RunnerItem {
+		items := make([]config.RunnerItem, 0, n)
+		for i := 0; i < n; i++ {
+			items = append(items, config.RunnerItem{Name: fmt.Sprintf("r%d", i)})
+		}
+		return items
+	}
+	for _, tc := range []struct {
+		n    int
+		want CheckLevel
+	}{
+		{0, CheckOK},
+		{1, CheckOK},
+		{2, CheckWarn},
+		{3, CheckWarn},
+	} {
+		cfg := &config.Config{}
+		cfg.Runners.Items = item(tc.n)
+		got := checkDefaultModeIsolation(cfg)
+		if got.Level != tc.want {
+			t.Errorf("%d 个 Runner 的级别为 %v，应为 %v（%+v）", tc.n, got.Level, tc.want, got)
+		}
+		if got.Name != "runner isolation" {
+			t.Errorf("%d 个 Runner 的检查项名为 %q", tc.n, got.Name)
+		}
+	}
+}
+
+// TestCheckDefaultModeIsolation_WarningNamesTheCount 警告里必须带上实际条目数：
+// 「有几个 Runner 在共用这一个容器」是读者判断严重程度的唯一依据，
+// 少了它这条消息就退化成一句无从判断的通告。
+func TestCheckDefaultModeIsolation_WarningNamesTheCount(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Runners.Items = []config.RunnerItem{{Name: "a"}, {Name: "b"}}
+	got := checkDefaultModeIsolation(cfg)
+	if got.Level != CheckWarn {
+		t.Fatalf("2 个 Runner 应报 warn: %+v", got)
+	}
+	if !strings.Contains(got.Message, "2") {
+		t.Errorf("消息里没有条目数 2: %q", got.Message)
+	}
+	// hint 要能直接照着改配置，否则读者知道有问题却不知道下一步做什么
+	if !strings.Contains(got.Hint, "container_mode") {
+		t.Errorf("hint 没有给出 container_mode: %q", got.Hint)
+	}
+}
+
+// TestPreflight_DefaultModeWithTwoRunnersWarnsAboutIsolation 端到端确认这一项
+// 真的挂在默认模式的分支上：单元测试直接调函数，看不出它有没有被接进 Preflight。
+func TestPreflight_DefaultModeWithTwoRunnersWarnsAboutIsolation(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Runners.BasePath = t.TempDir()
+	cfg.Runners.ContainerMode = false
+	cfg.Runners.Items = []config.RunnerItem{{Name: "a"}, {Name: "b"}}
+	got := findCheck(t, Preflight(context.Background(), cfg), "runner isolation")
+	if got.Level != CheckWarn {
+		t.Fatalf("默认模式 2 个 Runner 应报 warn: %+v", got)
+	}
+}
+
+// TestPreflight_ContainerModeHasNoIsolationCheck 容器模式下每个 Runner 独占容器，
+// 这一项无从谈起，报出来只会让人以为容器模式也有同一个问题。
+func TestPreflight_ContainerModeSkipsTheIsolationCheck(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Runners.BasePath = t.TempDir()
+	cfg.Runners.ContainerMode = true
+	cfg.Runners.Items = []config.RunnerItem{{Name: "a"}, {Name: "b"}}
+	for _, r := range Preflight(context.Background(), cfg) {
+		if r.Name == "runner isolation" {
+			t.Errorf("容器模式不应有 runner isolation 这一项: %+v", r)
+		}
 	}
 }
 
@@ -442,14 +524,14 @@ func TestPreflight_EveryCheckGoesThroughRunCheck(t *testing.T) {
 	// 函数体里出现的 check* 调用都必须包在 runCheck 里。
 	// checkRunnerImages 是例外：它自己内部逐项调 runCheck（每个镜像两项）。
 	for _, name := range []string{
-		"checkBasePath", "checkRunnerDirPermissions", "checkDefaultModeDocker",
-		"checkDockerReachable", "checkNetwork", "checkJobDockerBackend",
+		"checkBasePath", "checkRunnerDirPermissions", "checkDefaultModeIsolation",
+		"checkDefaultModeDocker", "checkDockerReachable", "checkNetwork", "checkJobDockerBackend",
 	} {
 		if !strings.Contains(fn, name) {
 			t.Errorf("Preflight 里没有 %s，用例该更新了", name)
 		}
 	}
-	if strings.Count(fn, "runCheck(") < 6 {
+	if strings.Count(fn, "runCheck(") < 7 {
 		t.Errorf("Preflight 里 runCheck 的调用数 %d 少于检查项数，可能有路径绕开了 panic 兜底:\n%s",
 			strings.Count(fn, "runCheck("), fn)
 	}
