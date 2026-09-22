@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `SECURITY.md` and the guide now state that the default mode is one trust domain — all runners share the Manager's container and user, and the stock compose file mounts the host Docker socket into it — and when to use container mode instead.
+
 ### Security
 
 - Runner processes no longer inherit the Manager's or the Agent's credentials: `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER` and `AGENT_TOKEN` are removed from the environment of `run.sh`, `config.sh` and `install-runner.sh`, so a job's `env` step can no longer print the Basic Auth password into its log.

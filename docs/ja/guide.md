@@ -237,6 +237,8 @@ runners:
 
 **Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。
 
+**デフォルトモードは単一の信頼ドメインです**: 上のディレクトリ権限が守るのは、ホスト上の他のユーザーからの保護であって、他の Runner からの保護ではありません。デフォルトモードではすべての Runner と Manager が 1 つのコンテナ内で同じユーザーとして動くため、どの Runner のジョブでも他のすべての Runner の認証情報と PAT を読み、Manager の設定を書き換えられます。リポジトリ同梱の compose ファイルを使っている場合は、ホストの Docker socket にも到達できます。Runner が異なるリポジトリや異なる owner を担当するとき、またはいずれかが PAT を持つときは、Runner ごとに専用のコンテナを与えてください（`runners.container_mode: true`）。デフォルトモードのままでジョブが Docker を必要としない場合は、`docker-compose.yml` から `docker.sock` のマウントと `group_add` を削除し、`--build-arg ALLOW_SUDO=false` でイメージをビルドしてください。[SECURITY.md](../../SECURITY.md) を参照。
+
 ---
 
 ## 5. 運用

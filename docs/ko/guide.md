@@ -237,6 +237,8 @@ runners:
 
 **Runner 디렉터리 권한**: 각 Runner의 설치 디렉터리는 0700으로 생성됩니다. `config.sh`가 그 안에 `.credentials_rsaparams`(Runner가 GitHub에 신원을 증명하는 RSA 개인 키)를 쓰는데, actions/runner는 이 파일들에 Unix 권한을 설정하지 않으므로 디렉터리 권한 비트가 호스트의 다른 로컬 사용자가 이를 읽고 해당 Runner를 사칭하는 것을 막는 마지막 방어선입니다. **이전 버전이 만든 디렉터리는 여전히 0755입니다.** 시작 시 자가 점검(`docker compose logs runner-manager | grep '\[preflight'`)이 해당 디렉터리를 지목하고 바로 실행 가능한 `chmod 700`을 알려줍니다. 자동으로 바꾸지는 않습니다: UID가 어긋난 배포(Manager는 root, 컨테이너는 app(1001))에서 권한을 조이면 잘 돌던 배포가 깨지므로 확인 후 실행하세요.
 
+**기본 모드는 하나의 신뢰 도메인입니다**: 위의 디렉터리 권한은 호스트의 다른 사용자로부터 Runner의 자격 증명을 보호하지만, 다른 Runner로부터는 보호하지 못합니다. 기본 모드에서는 모든 Runner와 Manager가 하나의 컨테이너에서 같은 사용자로 실행되므로, 어느 Runner의 Job이든 다른 모든 Runner의 자격 증명과 PAT를 읽고 Manager의 설정을 바꿀 수 있습니다. 저장소에 포함된 compose 파일을 쓰면 호스트의 Docker socket에도 접근할 수 있습니다. Runner가 서로 다른 저장소나 다른 owner를 담당하거나 그중 하나라도 PAT를 가지고 있다면 Runner마다 전용 컨테이너를 주세요(`runners.container_mode: true`). 기본 모드를 계속 쓰면서 Job이 Docker를 필요로 하지 않는다면 `docker-compose.yml`에서 `docker.sock` 볼륨과 `group_add`를 제거하고 `--build-arg ALLOW_SUDO=false`로 이미지를 빌드하세요. [SECURITY.md](../../SECURITY.md) 참고.
+
 ---
 
 ## 5. 운영

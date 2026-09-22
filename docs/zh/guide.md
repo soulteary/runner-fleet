@@ -236,6 +236,8 @@ runners:
 
 **Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep '\[preflight'`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
 
+**默认模式是一个信任域**：上面的目录权限挡的是宿主机上的其他用户，挡不住其他 Runner。默认模式下所有 Runner 与 Manager 以同一用户跑在同一个容器里，任何一个 Runner 上的 Job 都能读到其他 Runner 的凭据与 PAT、改 Manager 的配置；用仓库自带的 compose 文件时，还能访问宿主机的 Docker socket。Runner 服务于不同仓库或不同 owner、或其中任何一个配了 PAT 时，请让每个 Runner 独占一个容器（`runners.container_mode: true`）。若继续用默认模式且 Job 不需要 Docker，请从 `docker-compose.yml` 删掉 `docker.sock` 挂载与 `group_add`，并以 `--build-arg ALLOW_SUDO=false` 构建镜像。见 [SECURITY.md](../../SECURITY.md)。
+
 ---
 
 ## 五、运维
