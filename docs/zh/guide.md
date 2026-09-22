@@ -89,6 +89,8 @@ runners:
 
 Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版本号如 v1.8.0-runner，开发可用 main-runner），或本地 `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .`。Manager 必须用宿主机 Docker（挂载 `docker.sock`），不可把 `DOCKER_HOST` 设为 DinD；Compose 中需 `group_add` 宿主机 docker GID 或 `user: "0:0"`。`job_docker_backend: host-socket` 时，Manager 会给 Runner 容器追加 `--group-add <宿主机 docker GID>`（自动探测 `docker.sock`，可用 `runners.docker_gid` / `DOCKER_GID` 覆盖）；镜像内也预置了 `docker` 组（构建参数 `DOCKER_GID`，默认 999）。Runner 名称会规范为容器名，映射后重名会冲突。
 
+**`runner-net` 是信任边界**：`job_docker_backend: dind` 时，DinD 服务在 2375 端口对 `runner-net` 上的任何容器免认证开放，且它是所有 Runner 共用的 privileged 容器——一个 Job 能看到并进入其他 Job 在其中启动的容器。`runner-net` 只留给 Manager、DinD 与 Runner 容器；若各 Runner 服务的仓库彼此不可信，请给它们 `job_docker_backend: none`，或拆成不同的部署。
+
 **扩展 Runner 镜像**：GitHub 托管 runner 预装了 Android SDK、Node、Python 等工具链，自托管不会。为托管 runner 写的 workflow 常隐式依赖这些，迁过来后会报 `SDK location not found`、`node: command not found` 之类。做法是在本仓库 Runner 镜像之上叠加自己的工具链——可直接使用的示例，以及四条关键规则（装到 /opt 的工具要 chown 给 UID 1001、环境变量写进镜像、免密 sudo 会继承、预热放在 `USER app` 之后）见 [`examples/runner-images/`](../../examples/runner-images/)。用 `items[].container_image` 只让某个 Runner 使用它，workflow 里靠 label 精确选中。
 
 **改了配置与容器重建**：镜像、网络、挂载目录、Job 内 Docker 后端都只在 `docker create` 时定下来，已存在的容器沿用创建时的参数，光改配置碰不到它。Manager 会把每个容器的实际创建参数与当前配置对一遍：**已停止**的容器若对不上，在下一次启动它时（手动点「启动」或 Manager 自动拉起）会删掉重建；列表里该 Runner 会标出「配置已变更」，鼠标悬停可看到具体差异（如 `job_docker_backend: → dind`）。**正在运行**的容器不会被自动重建——上面可能正跑着 Job——需要立刻生效就点该行的「重建容器」（`POST /api/runners/:name/recreate`，会中断正在跑的 Job），或等它空闲后停止再启动。同名 tag 重新构建镜像同样算：比对的是镜像 ID，不只是引用。
@@ -236,6 +238,8 @@ runners:
 
 **Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep '\[preflight'`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
 
+**默认模式是一个信任域**：上面的目录权限挡的是宿主机上的其他用户，挡不住其他 Runner。默认模式下所有 Runner 与 Manager 以同一用户跑在同一个容器里，任何一个 Runner 上的 Job 都能读到其他 Runner 的凭据与 PAT、改 Manager 的配置；用仓库自带的 compose 文件时，还能访问宿主机的 Docker socket。Runner 服务于不同仓库或不同 owner、或其中任何一个配了 PAT 时，请让每个 Runner 独占一个容器（`runners.container_mode: true`）。若继续用默认模式且 Job 不需要 Docker，请从 `docker-compose.yml` 删掉 `docker.sock` 挂载与 `group_add`，并以 `--build-arg ALLOW_SUDO=false` 构建镜像。见 [SECURITY.md](../../SECURITY.md)。
+
 ---
 
 ## 五、运维
@@ -316,6 +320,11 @@ README 说配置就是你的备份。这话对**配置**成立，对**身份**�
 恢复时属主很关键：所有东西最终都要属于 UID 1001，和第一次安装时那条
 `sudo chown -R 1001:1001 config runners` 一样。`GET /ready` 会往 runners 目录真写一个探测文件，
 所以它是确认「恢复出来的东西真能用」最快的办法。
+
+目录的权限同样重要，不只是文件的：只要 config 目录对 UID 1001 可写，Manager 就以原子替换写入
+`config.yaml`，保存过程中的读取不会读到半截内容，中途崩溃也不会把它截断。如果只有文件可写，
+或者这个文件是单独 bind mount 进去的（`-v ./config.yaml:/app/config/config.yaml`），
+Manager 会回退为就地写入，并告警一次。
 
 ### 放在反向代理后面
 

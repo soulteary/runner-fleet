@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The startup self-check warns when the default mode runs more than one runner, since a job on any of them can read the others' credentials.
+- In container mode with a DinD backend, the startup self-check lists containers on `runner-net` that are not part of the deployment, since the stock DinD service accepts unauthenticated connections from anything on that network.
+
+### Changed
+
+- `SECURITY.md` and the guide now state that the default mode is one trust domain — all runners share the Manager's container and user, and the stock compose file mounts the host Docker socket into it — and when to use container mode instead.
+- `SECURITY.md` and the guide no longer describe `dind` as isolating jobs: it keeps them off the host, but every runner shares one privileged daemon, and `runner-net` is the trust boundary around it.
+
 ### Fixed
 
+- `config.yaml`, `.github_status.json` and `.registration_result.json` are now replaced atomically, so a request that reads them during a save no longer sees an empty or half-written file, and a crash mid-save no longer truncates the config. A config directory the Manager cannot write, or a config file bind-mounted on its own, falls back to the previous in-place write with a one-time warning.
 - Stopping a runner container now lets the job wind down: the Agent forwards SIGTERM to the runner and waits up to 25 seconds, where it used to exit at once and take the job down with SIGKILL, so the 30-second `docker stop` grace period never reached it. The Agent is PID 1 in its container and never called `signal.Notify`, and Go terminates the process on an unsubscribed SIGTERM; the kernel then SIGKILLs the rest of the PID namespace. Measured before the fix: `docker stop -t 30` returned in 0.054s and `run.sh`'s TERM trap never ran.
 - Both images run under `tini`, which reaps processes that jobs orphan; they used to accumulate as zombies across jobs and count against `runners.resources.pids_limit`, so a long-lived runner eventually failed to `fork` and jobs reported `Resource temporarily unavailable` at random. Five orphans produced five permanent zombies before the fix, all reparented to PID 1.
 - In the default mode, stopping the Manager now stops its runners gracefully first; the compose file sets `stop_grace_period: 30s` to leave room for it. The Manager's SIGTERM handler used to shut down the HTTP server and exit, which left the runner processes in its own container to be SIGKILLed by the kernel. A failed HTTP shutdown no longer aborts the exit path either — it used to be `log.Fatal`, which skipped stopping the runners entirely.

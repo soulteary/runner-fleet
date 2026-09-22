@@ -89,6 +89,8 @@ runners:
 
 Runner イメージ: Manager と同じ名前で `-runner` タグ（本番はバージョン例 v1.8.0-runner、開発は main-runner）、またはローカルビルド: `docker build -f Dockerfile.runner -t ghcr.io/soulteary/runner-fleet:v1.8.0-runner .`。Manager はホストの Docker（`docker.sock` のマウント）を使う必要があり、`DOCKER_HOST` で DinD にはしないでください。Compose ではホストの docker GID 用に `group_add` または `user: "0:0"` を使用。`job_docker_backend: host-socket` の場合、Manager は Runner コンテナに `--group-add <ホストの docker GID>` を渡します（`docker.sock` から自動検出、`runners.docker_gid` / `DOCKER_GID` で上書き可）。イメージ側にも `docker` グループを用意しています（ビルド引数 `DOCKER_GID`、既定 999）。Runner 名はコンテナ名に正規化され、マッピング後の重複は衝突します。
 
+**`runner-net` は信頼境界です**: `job_docker_backend: dind` では、DinD サービスは 2375 番ポートで `runner-net` 上のあらゆるコンテナからの接続を認証なしで受け付け、しかもそれは全 Runner が共用する privileged コンテナです。ある Job は他の Job がそこで起動したコンテナを見ることも、中に入ることもできます。`runner-net` は Manager・DinD・Runner コンテナだけのために空けておいてください。互いに信頼できないリポジトリを担当する Runner がいる場合は、`job_docker_backend: none` にするか、デプロイ自体を分けてください。
+
 **Runner イメージの拡張**: GitHub ホストの runner には Android SDK・Node・Python などのツールチェーンが同梱されていますが、セルフホストにはありません。`ubuntu-24.04` 向けに書かれた workflow はこれを暗黙に前提としていることが多く、移行後に `SDK location not found` などで失敗します。本リポジトリの Runner イメージの上に自分のツールチェーンを重ねてください。すぐ使える例と重要な四つの規則（/opt 配下は UID 1001 に chown、環境変数はイメージに埋め込む、パスワードなし sudo は継承、ウォームアップは `USER app` の後）は [`examples/runner-images/`](../../examples/runner-images/) にあります。`items[].container_image` で特定の Runner だけに適用し、workflow からは label で選択します。
 
 **設定変更とコンテナの再作成**: イメージ・ネットワーク・マウント先・Job 内 Docker バックエンドは `docker create` の時点で確定し、既存のコンテナは作成時のまま動き続けます。設定を変えただけでは届きません。Manager は各コンテナの実際の作成パラメータを現在の設定と突き合わせます。**停止中**のコンテナが一致しない場合は次に起動するとき（「開始」をクリックした場合も Manager の自動起動の場合も）削除して作り直し、一覧にはその Runner に「設定変更あり」が付き、ツールチップに差分（例: `job_docker_backend: → dind`）が出ます。**実行中**のコンテナは自動では作り直しません（Job の最中かもしれないため）。すぐ反映したいときは行の「コンテナ再作成」（`POST /api/runners/:name/recreate`、実行中の Job は中断されます）を使うか、空いたときに停止して開始してください。同じ tag でイメージを作り直した場合も対象です（比較はイメージ ID）。
@@ -237,6 +239,8 @@ runners:
 
 **Runner ディレクトリの権限**: 各 Runner のインストールディレクトリは 0700 で作成されます。`config.sh` はそこに `.credentials_rsaparams`（Runner が GitHub に対して身元を示す RSA 秘密鍵）を書き込みますが、actions/runner はこれらのファイルに Unix パーミッションを設定しないため、ディレクトリの権限ビットが、ホスト上の他のローカルユーザーによる読み取りと Runner のなりすましを防ぐ最後の砦になります。**旧バージョンで作成されたディレクトリは 0755 のままです**。起動時セルフチェック（`docker compose logs runner-manager | grep 自検`）が該当ディレクトリを列挙し、そのまま実行できる `chmod 700` を提示します。自動では変更しません: UID が食い違う構成（Manager が root、コンテナ内が app(1001)）で権限を絞ると動いている構成が壊れるため、確認してから実行してください。
 
+**デフォルトモードは単一の信頼ドメインです**: 上のディレクトリ権限が守るのは、ホスト上の他のユーザーからの保護であって、他の Runner からの保護ではありません。デフォルトモードではすべての Runner と Manager が 1 つのコンテナ内で同じユーザーとして動くため、どの Runner のジョブでも他のすべての Runner の認証情報と PAT を読み、Manager の設定を書き換えられます。リポジトリ同梱の compose ファイルを使っている場合は、ホストの Docker socket にも到達できます。Runner が異なるリポジトリや異なる owner を担当するとき、またはいずれかが PAT を持つときは、Runner ごとに専用のコンテナを与えてください（`runners.container_mode: true`）。デフォルトモードのままでジョブが Docker を必要としない場合は、`docker-compose.yml` から `docker.sock` のマウントと `group_add` を削除し、`--build-arg ALLOW_SUDO=false` でイメージをビルドしてください。[SECURITY.md](../../SECURITY.md) を参照。
+
 ---
 
 ## 5. 運用
@@ -327,6 +331,12 @@ README には「設定がバックアップだ」とあります。これは*設
 復元では所有者が重要です。最終的にすべてが UID 1001 の所有でなければならず、初回導入時と同じ
 `sudo chown -R 1001:1001 config runners` を実行します。`GET /ready` は runners ディレクトリへ
 実際に書き込みプローブを行うので、復元したものが本当に使えるかを確かめる一番早い方法です。
+
+重要なのはファイルの権限だけではなく、ディレクトリの権限も同じです。ディレクトリが UID 1001 から
+書き込み可能であれば、Manager は `config.yaml` を原子的に置き換えるので、保存中の読み取りが
+書きかけの内容を読むことも、途中のクラッシュで切り詰められることもありません。ファイルだけが
+書き込み可能な場合、またはそのファイルだけを bind mount している場合
+（`-v ./config.yaml:/app/config/config.yaml`）は、その場での書き込みに戻り、警告を一度だけ出します。
 
 ### リバースプロキシの背後に置く
 

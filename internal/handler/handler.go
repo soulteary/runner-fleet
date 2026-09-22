@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/soulteary/runner-fleet/internal/atomicfile"
 	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
@@ -273,7 +274,9 @@ func writeRegistrationResult(installDir string, success bool, message string) {
 		At      string `json:"at"`
 	}{Success: success, Message: message, At: time.Now().Format(time.RFC3339)}
 	b, _ := json.Marshal(body)
-	_ = os.WriteFile(p, b, 0644)
+	// 原子替换，理由同 runner.WriteGitHubStatus。错误仍然忽略：
+	// 注册结果写不下去不该让一次成功的注册报错，界面上少一条结果而已。
+	_ = atomicfile.WriteFile(p, b, 0644)
 }
 
 // ListRunners 列出所有 runner；容器模式下用容器内 Agent 状态覆盖 Running/Status

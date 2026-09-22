@@ -12,6 +12,7 @@ import (
 
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
+	"github.com/soulteary/runner-fleet/internal/atomicfile"
 	// go.yaml.in/yaml/v3 是 gopkg.in/yaml.v3 的延续：同一份代码、同一套 API、同样的
 	// yaml 包名与 struct tag，而后者停在 2022 年的最后一版不再发布。换过来之后
 	// Marshal 的输出逐字节未变（满配、空配、config.yaml.example 往返三种都比过），
@@ -20,7 +21,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// mu 保护配置文件的读写，避免并发写导致覆盖
+// mu 保护配置文件的读写，避免并发写导致覆盖。
+//
+// 只串行化写者，Load 刻意不加锁：Save 经 atomicfile 以 rename 发布，目标这个名字
+// 要么是旧内容要么是新内容，读者不会撞见半截文件，加读锁挡不住的崩溃场景它也一并解决了。
 var mu sync.Mutex
 var runnerContainerNameSanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
@@ -549,7 +553,10 @@ func (c *Config) Save(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	// 原子替换而不是 os.WriteFile：每个 API 请求、前端 15 秒一次的轮询和后台循环
+	// 都在读这个文件，就地截断重写会让它们读到空的或半截的 YAML（读空时
+	// yaml.Unmarshal 不报错，界面上会短暂出现「一个 Runner 都没有」）。
+	return atomicfile.WriteFile(path, data, 0644)
 }
 
 // LoadAndSave 在持锁下加载配置、执行 fn、写回；用于所有修改配置的写操作，避免并发覆盖

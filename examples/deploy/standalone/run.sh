@@ -12,7 +12,9 @@
 #   DATA_DIR              config/ 与 runners/ 的父目录，默认当前目录
 #   BASIC_AUTH_USER       默认 admin
 #   BASIC_AUTH_PASSWORD   留空则不鉴权（GET /health 始终免鉴权）
-#   WITH_DOCKER           1（默认）挂载宿主机 docker.sock 供 Job 使用，0 则不挂
+#   WITH_DOCKER           1（默认）挂载宿主机 docker.sock 供 Job 使用，0 则不挂。
+#                         挂载它等同于把宿主机 root 交给 Job：这套模式下 Job 与 Manager
+#                         同容器同用户，任何 Job 都能用它操作宿主机 Docker。不需要就设 0。
 #
 # 下面的 --stop-timeout 30 不是可选项：默认模式下 Runner 进程就在 Manager 容器里，
 # Manager 收到 SIGTERM 会先停它们再退出，而 docker stop 默认只给 10 秒。
@@ -48,7 +50,8 @@ set -- run -d --name "$NAME" \
     --stop-timeout 30
 
 if [ "$WITH_DOCKER" = "1" ]; then
-    # 容器内是 UID 1001，必须在 socket 所属组里，否则 Job 中 docker 报 permission denied
+    # 容器内是 UID 1001，必须在 socket 所属组里，否则 Job 中 docker 报 permission denied。
+    # 进到这个组就等于拿到宿主机 root——Job 与 Manager 同用户，挡不住。
     DOCKER_GID="${DOCKER_GID:-$(getent group docker 2>/dev/null | cut -d: -f3 || true)}"
     [ -n "$DOCKER_GID" ] || DOCKER_GID=999
     set -- "$@" -v /var/run/docker.sock:/var/run/docker.sock --group-add "$DOCKER_GID"
