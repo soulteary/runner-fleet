@@ -19,6 +19,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/secrets"
 	secure "github.com/soulteary/secure-kit/v2"
 )
 
@@ -35,6 +36,20 @@ var installRunnerScriptPath = "/app/scripts/install-runner.sh"
 
 // ConfigPath 配置文件路径，由 main 注入
 var ConfigPath string
+
+// Secrets Manager 侧凭据（可选 PAT）的存放位置，由 main 注入，与 ConfigPath 同理。
+var Secrets *secrets.Store
+
+// secretStore 返回凭据存放位置；main 没注入时按 ConfigPath 推导。
+//
+// 推导这一步是给测试留的：它们只设 ConfigPath，不必再记着多设一个包级变量，
+// 而凭据目录本来就是由配置文件路径决定的，两者不会各自指一处。
+func secretStore() *secrets.Store {
+	if Secrets != nil {
+		return Secrets
+	}
+	return secrets.NewStore(ConfigPath)
+}
 
 // lifecycleContext 为「启停 Runner」这类写操作派生上下文：只保留超时，丢掉请求的取消信号。
 //
@@ -750,7 +765,8 @@ func UpdateRunner(c echo.Context) error {
 }
 
 // deregisterFromGitHub 做成变量便于测试替换：真实实现要打 GitHub API，
-// 而这里真正要钉住的是「在删目录之前调用它」——令牌就放在那个目录里。
+// 而这里真正要钉住的是「在删目录之前调用它」——照旧文档放进那个目录的 PAT
+// 要先被搬出来才能用上，搬运的源头就是那个目录。
 var deregisterFromGitHub = githubcheck.Deregister
 
 // RemoveRunnerByName 从路径参数获取 name 并移除（DELETE /api/runners/:name）
@@ -780,14 +796,21 @@ func RemoveRunnerByName(c echo.Context) error {
 	} else {
 		_ = runner.Stop(installDir)
 	}
-	// 必须赶在删目录之前注销：GitHub 侧的删除要用该 Runner 目录里的 PAT。
+	// 必须赶在删目录之前注销：GitHub 侧的删除要用该 Runner 的 PAT，而照旧文档
+	// 放进该目录的那份要先被搬出来才能用上。
 	// 从本工具删掉不等于从 GitHub 删掉——留下的那个会让之后用同一名称重新添加时
 	// 撞上「存在同名 Runner」而注册失败。
+	store := secretStore()
 	deregCtx, deregCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	dereg := deregisterFromGitHub(deregCtx, installDir, info.TargetType, info.Target, name)
+	dereg := deregisterFromGitHub(deregCtx, store, installDir, info.TargetType, info.Target, name)
 	deregCancel()
 	if !dereg.Done {
 		log.Printf("[remove] %s: %s", name, trEnf(dereg.MessageKey, dereg.MessageArgs...))
+	}
+	// 凭据在注销之后才能删：注销正要用它。留着的话，下一个同名 Runner 会莫名
+	// 继承上一个的 PAT。
+	if err := store.Remove(name); err != nil {
+		log.Printf("[remove] %s: %v", name, err)
 	}
 	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
 	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {

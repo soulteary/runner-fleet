@@ -104,7 +104,7 @@ Runner 镜像：同 Manager 镜像名、tag 带 `-runner`（生产建议用版�
 - **Job 中 `command not found` 或缺少某个 SDK**：自托管 runner 不像 GitHub 托管的那样预装工具链。先看启动自检（`docker compose logs runner-manager | grep '\[preflight'`），它会指出配置中每个 Runner 镜像缺少 `git`/`unzip`/`tar`/`curl` 中的哪些。语言与平台 SDK 需自行扩展镜像，见 [`examples/runner-images/`](../../examples/runner-images/)。
 - **旧 Runner 镜像**：拉取或重新构建后直接启动该 Runner 即可——Manager 会发现镜像变了（比对引用与镜像 ID，同名 tag 重新构建同样算）并重建容器。正在运行的容器不会被动，可在该行点「重建容器」选择何时中断。
 - **日志里每 5 分钟刷一遍 `已定时拉起 runner: <名称>`，界面上也从来不显示「运行中」**：本版本已修复，升级即可，不需要重新注册任何 Runner。运行状态此前取自 pid 文件（`Runner.Listener.pid`，回退到 `.path`），而 actions/runner 这两个都不写：它的启动脚本没有一处落 pid 文件，`.path` 里装的是 PATH 字符串。于是每个 Runner 都被读成「已注册但没在跑」，5 分钟一次的巡检每轮都把它们再拉起一遍。现在改为查进程表；容器模式下则由各容器内的 Agent 作答——Manager 看不到别的容器里的进程。同一个根因还有一处：默认（非容器）模式下点「停止」必然报 `未找到 runner pid 文件或 pid 无效`。
-- **在界面上删掉的 Runner，GitHub 上还在；用同一个名字加回来还会注册失败**：删除现在会一并从 GitHub 注销，但前提是该 Runner 目录下放了 `.github_check_token`（可选 PAT，组织需 `admin:org`，仓库需 `repo`）。没有这个凭据就注销不了，删除响应会直接说明并指向 Settings → Actions → Runners。旧版本删掉的 Runner 从未被注销过，需要手动清理。
+- **在界面上删掉的 Runner，GitHub 上还在；用同一个名字加回来还会注册失败**：删除现在会一并从 GitHub 注销，但前提是 `config/tokens/<Runner 名称>` 放了可选 PAT（组织需 `admin:org`，仓库需 `repo`）。没有这个凭据就注销不了，删除响应会直接说明并指向 Settings → Actions → Runners。旧版本删掉的 Runner 从未被注销过，需要手动清理。
 - **某个 Runner 显示「GitHub 查询失败」**：查询发出去了但没得到答案，悬停可看原因（令牌过期、权限不足、限流、目标不可见）。它和「GitHub 未显示」是两回事——后者是 GitHub 答了、列表里确实没有。旧版本把前者一律报成后者。
 - **status=unknown**：详情弹窗看 `probe`，可尝试「启动/停止」自愈。
 
@@ -210,7 +210,7 @@ runners:
 
 **未安装 runner 时**：可从 [GitHub Actions Runner](https://github.com/actions/runner/releases) 下载解压到 `runners/<名称>/`，再在界面填 Token 或该目录下手动 `./config.sh`。容器部署下界面提交 Token 时会先自动安装再注册；容器模式需先配置 Runner 镜像与 `volume_host_path`（见上文容器模式）。
 
-**注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：在 runner 目录下放 `.github_check_token`（PAT，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。 同一次检查还会记录 GitHub 侧该 Runner 是否**正在跑 Job**，列表里显示为「忙碌中」徽标，配置弹窗中单列一行。它与上面同为约 5 分钟一次，因此最多可能滞后 5 分钟；没有 PAT 时保持「未知」，不会说成「空闲」。列表中的「已注册」与「GitHub ✓」均可点击，跳转到该目标在 GitHub 的 Runners 设置页。
+**注册结果**：写入该 runner 目录 `.registration_result.json`。**GitHub 显示检查**（可选）：把 PAT 放在 `config/tokens/<Runner 名称>`（权限 0600，组织需 `admin:org`、仓库需 `repo`），约每 5 分钟检查，结果写入 `.github_status.json`。旧版本留在 Runner 目录里的 PAT 会被自动搬到那里并从 Runner 目录删除——那个目录会被挂载进该 Runner 的容器，Job 读得到它。 同一次检查还会记录 GitHub 侧该 Runner 是否**正在跑 Job**，列表里显示为「忙碌中」徽标，配置弹窗中单列一行。它与上面同为约 5 分钟一次，因此最多可能滞后 5 分钟；没有 PAT 时保持「未知」，不会说成「空闲」。列表中的「已注册」与「GitHub ✓」均可点击，跳转到该目标在 GitHub 的 Runners 设置页。
 
 **名称冲突检查**：在名称输入框里打字时，表单会调用 `/api/runner-precheck`，把可能出问题的地方提前摆出来——配置里已有同名 Runner、名称规范化后与别人撞容器名、安装目录被别的 Runner 占了、磁盘上留着一个已注册过的目录（存在 `.runner`）、宿主机上还挂着同名容器。阻塞性的问题标红并给出一键可用的建议名；仅提示性的（目录非空会被复用）不挡提交。强行提交会被服务端以 **409** 拒绝并返回同样的冲突信息——此前「静默加随机后缀」的行为已取消（需要的话传 `auto_rename: true`）。
 
@@ -230,7 +230,7 @@ runners:
 
 **Agent 鉴权**（容器模式）：Manager 会为每个 Runner 在 `<runner 目录>/.agent_token` 写入随机令牌（权限 0600），创建容器时以 `AGENT_TOKEN` 环境变量注入，调用 Agent 时以 `Authorization: Bearer` 带上。Agent 读的是环境变量，因此不依赖 Manager 与 Agent 的 UID 一致；文件是 Manager 侧的持久副本，Manager 重启后无需重建容器。Agent 对 `/status`、`/start`、`/stop` 强制校验，同一网络内的其它容器无法再控制 Runner；`/health` 保持开放供容器 HEALTHCHECK 使用。本特性之前创建的容器没有注入令牌、仍按不鉴权运行；现在这种容器会被判为「配置已变更」，下次启动时自动重建补上（正在运行的可点「重建容器」）。
 
-**敏感文件**：config/config.yaml、.env 已入 `.gitignore`。各 runner 下的 `.github_check_token` 建议 `chmod 600`，版本库中应在 `.gitignore` 加 `**/.github_check_token`。
+**敏感文件**：config/config.yaml、.env 与 `config/tokens/` 已入 `.gitignore`。各 Runner 可选的 PAT 放在 `config/tokens/<Runner 名称>`，由 Manager 以目录 0700、文件 0600 创建——不要再放进 Runner 目录，容器模式会把那个目录挂进该 Runner 的容器，Job 读得到它。
 
 **Runner 目录权限**：每个 Runner 的安装目录按 0700 创建。`config.sh` 会往里写 `.credentials_rsaparams`——Runner 向 GitHub 表明身份的 RSA 私钥——而 actions/runner 不给这些文件设 Unix 权限，目录的权限位就是拦住宿主机上其他本地用户读走它、进而冒充该 Runner 的最后一道门。**旧版本建出来的目录仍是 0755**，启动自检会点名（`docker compose logs runner-manager | grep '\[preflight'`）并给出可直接执行的 `chmod 700`。自检只报不改：UID 不匹配的部署（Manager 以 root 跑、容器内是 app(1001)）下收紧权限会把本来能跑的弄坏，请看过再执行。
 
@@ -295,13 +295,13 @@ docker compose pull && docker compose up -d
 README 说配置就是你的备份。这话对**配置**成立，对**身份**不成立：Runner 的凭据存在它自己的安装目录里，
 没有它，恢复出来的部署只能一个个重新注册。
 
-备份 `config/config.yaml`，以及每个 `runners/<名称>/` 目录（`_work/` 除外）。
+备份 `config/` 目录（`config.yaml` 以及 `tokens/`），以及每个 `runners/<名称>/` 目录（`_work/` 除外）。
 
 | `runners/<名称>/` 里的 | 谁写的 | 丢了会怎样 |
 |---|---|---|
 | `.runner`、`.credentials_rsaparams` 等 `config.sh` 写下的文件 | actions/runner | 这个 Runner 就没了。需要重新注册，且要先到 GitHub 上把那条残留删掉——旧的还在列表里时，同名重新注册会失败 |
 | `.agent_token` | Manager（权限 `0600`） | 会重新生成；该容器被判为漂移，下次启动时重建 |
-| `.github_check_token` | 你放的，可选 | 可见性检查停止，删除 Runner 时也不能再从 GitHub 注销 |
+| `config/tokens/<名称>`（在 Runner 目录之外） | 你放的，可选 | 可见性检查停止，删除 Runner 时也不能再从 GitHub 注销 |
 | `.registration_result.json`、`.github_status.json` | Manager | 无关紧要——下一次注册或检查就会重新生成 |
 | `_work/` | Job 自己 | 没有值得留的。里面是检出的代码与构建产物，是磁盘上最大的一块，而且一直在长 |
 

@@ -225,10 +225,10 @@ déjà ; le mode protège des autres utilisateurs locaux, pas de cela.
 
 `DELETE /api/runners/:name` retire un runner de cet outil **et** de GitHub. Le côté GitHub exige
 un identifiant, et le seul dont cet outil dispose jamais est le PAT facultatif propre à chaque
-runner, dans `<répertoire du runner>/.github_check_token` — le même fichier que celui utilisé
-par la vérification de visibilité. Le désenregistrement s'exécute donc *avant* la suppression du
-répertoire d'installation, puisque c'est là que vit le jeton ; ignorer cet ordre revient à
-perdre silencieusement la possibilité de le faire.
+runner, dans `config/tokens/<nom du runner>` — le même fichier que celui utilisé
+par la vérification de visibilité. Le désenregistrement s'exécute donc toujours *avant* la suppression
+du répertoire d'installation : un PAT qu'une version antérieure y a laissé en est extrait au passage ;
+ignorer cet ordre revient à perdre silencieusement la possibilité de le faire.
 
 Sans PAT, le runner ne peut pas être désenregistré : GitHub veut un PAT ou un removal token
 frais, et `config.sh remove` veut ce dernier. La réponse le dit alors explicitement et indique

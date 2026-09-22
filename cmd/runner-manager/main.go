@@ -26,6 +26,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/githubcheck"
 	"github.com/soulteary/runner-fleet/internal/handler"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/secrets"
 	secure "github.com/soulteary/secure-kit/v2"
 )
 
@@ -126,6 +127,8 @@ func main() {
 	setupLogging()
 
 	handler.ConfigPath = *configPath
+	store := secrets.NewStore(*configPath)
+	handler.Secrets = store
 	handler.StartRegistrationWorker()
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -144,8 +147,12 @@ func main() {
 
 	addr := listenAddr(cfg)
 	srv := &http.Server{Addr: addr, Handler: e}
+	// 把可能留在 Runner 目录里的 PAT 搬到凭据目录，并从 Runner 目录删掉。
+	// 必须赶在拉起 Runner 之前：容器模式下那个目录会被整个挂进 Runner 容器，
+	// 容器一起来，Job 就能读到一个对组织目标而言等于 admin:org 的令牌。
+	secrets.MigrateAll(cfg, store)
 	go runAutoStartRunners(*configPath)
-	go runRegistrationCheck(*configPath)
+	go runRegistrationCheck(*configPath, store)
 	go func() {
 		log.Printf("listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -195,7 +202,7 @@ func startIdleRunners(ctx context.Context, cfg *config.Config, action string) {
 }
 
 // runRegistrationCheck 每 5 分钟加载配置并检查各 runner 是否已在 GitHub 显示，写入 .github_status.json 供界面展示
-func runRegistrationCheck(configPath string) {
+func runRegistrationCheck(configPath string, store *secrets.Store) {
 	const interval = 5 * time.Minute
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -205,7 +212,7 @@ func runRegistrationCheck(configPath string) {
 	for {
 		cfg, err := config.Load(configPath)
 		if err == nil {
-			githubcheck.Run(cfg)
+			githubcheck.Run(cfg, store)
 			// 首次不执行拉起，避免与 runAutoStartRunners(15s) 重叠导致重复启动同一 runner
 			if !firstRun {
 				startIdleRunners(context.Background(), cfg, "periodic start")

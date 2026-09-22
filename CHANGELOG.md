@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- The optional GitHub PAT moves from `runners/<name>/.github_check_token` to `config/tokens/<name>`. In container mode the runner directory is mounted into the runner's container, so any job could read a token that for organization targets carries `admin:org`. Existing tokens are moved on startup and removed from the runner directory.
+
+### Upgrading
+
+- Nothing to do: tokens are migrated automatically. Scripts or runbooks that write the PAT into the runner directory still work — it is moved on the next check — but should write to `config/tokens/<name>` instead. Rotate any PAT that was in a runner directory while untrusted workflows could run there.
+
 ## [1.8.0] - 2026-09-21
 
 ### Dependencies
