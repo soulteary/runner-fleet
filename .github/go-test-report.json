@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "tests": {
+    "total": 471,
+    "passed": 471,
+    "failed": 0,
+    "skipped": 0
+  },
+  "coverage": {
+    "covered_statements": 1810,
+    "total_statements": 2279,
+    "percentage": 79.42,
+    "threshold": 0
+  },
+  "packages": [
+    {
+      "name": "cmd/runner-agent",
+      "status": "pass",
+      "tests": 23,
+      "failed": 0,
+      "coverage": 69.29
+    },
+    {
+      "name": "cmd/runner-manager",
+      "status": "pass",
+      "tests": 79,
+      "failed": 0,
+      "coverage": 64.84
+    },
+    {
+      "name": "internal/atomicfile",
+      "status": "pass",
+      "tests": 6,
+      "failed": 0,
+      "coverage": 75
+    },
+    {
+      "name": "internal/childenv",
+      "status": "pass",
+      "tests": 10,
+      "failed": 0,
+      "coverage": 100
+    },
+    {
+      "name": "internal/config",
+      "status": "pass",
+      "tests": 51,
+      "failed": 0,
+      "coverage": 93.9
+    },
+    {
+      "name": "internal/docsconsistency",
+      "status": "pass",
+      "tests": 14,
+      "failed": 0,
+      "coverage": null
+    },
+    {
+      "name": "internal/githubcheck",
+      "status": "pass",
+      "tests": 28,
+      "failed": 0,
+      "coverage": 90.71
+    },
+    {
+      "name": "internal/handler",
+      "status": "pass",
+      "tests": 76,
+      "failed": 0,
+      "coverage": 72.56
+    },
+    {
+      "name": "internal/runner",
+      "status": "pass",
+      "tests": 152,
+      "failed": 0,
+      "coverage": 84.73
+    },
+    {
+      "name": "internal/runnerproc",
+      "status": "pass",
+      "tests": 15,
+      "failed": 0,
+      "coverage": 81.82
+    },
+    {
+      "name": "internal/secrets",
+      "status": "pass",
+      "tests": 17,
+      "failed": 0,
+      "coverage": 81.82
+    }
+  ],
+  "failures": null
+}
