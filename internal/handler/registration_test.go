@@ -310,7 +310,12 @@ func TestRunRegistrationJobFallsBackToErrWhenScriptSilent(t *testing.T) {
 // 而且 actions/runner 的注册本身就不适合并行。这里确认任务确实被逐个执行。
 func TestRegistrationWorkerProcessesQueueSequentially(t *testing.T) {
 	isolateConfigPath(t)
-	StartRegistrationWorker()
+	queue := make(chan registrationJob, 128)
+	done := startRegistrationWorker(queue)
+	defer func() {
+		close(queue)
+		<-done
+	}()
 
 	const n = 3
 	dirs := make([]string, n)
@@ -321,7 +326,7 @@ func TestRegistrationWorkerProcessesQueueSequentially(t *testing.T) {
 	for i, d := range dirs {
 		j := job(d)
 		j.RunnerName = "demo" + string(rune('a'+i))
-		registrationQueue <- j
+		queue <- j
 	}
 
 	deadline := time.Now().Add(10 * time.Second)

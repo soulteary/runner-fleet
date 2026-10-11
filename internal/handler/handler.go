@@ -82,11 +82,20 @@ var registrationQueue = make(chan registrationJob, 128)
 
 // StartRegistrationWorker 启动后台 worker，应在 main 中调用一次
 func StartRegistrationWorker() {
+	startRegistrationWorker(registrationQueue)
+}
+
+// startRegistrationWorker reports completion when its queue closes, so callers
+// can wait for the final job before releasing resources shared with the worker.
+func startRegistrationWorker(queue <-chan registrationJob) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		for j := range registrationQueue {
+		defer close(done)
+		for j := range queue {
 			runRegistrationJob(j)
 		}
 	}()
+	return done
 }
 
 // runRegistrationJob 执行单次安装+注册+启动（在后台 goroutine 中调用）
