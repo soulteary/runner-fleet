@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-10-11
+
+### Changed
+
+- Upgrade the Go toolchain to 1.27.2 and refresh soulteary kit and third-party dependencies.
+- Rebuild both Manager and Runner images with the updated toolchain and dependencies.
+
 ## [1.9.0] - 2026-09-22
 
 ### Added
@@ -394,7 +401,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/soulteary/runner-fleet/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/soulteary/runner-fleet/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/soulteary/runner-fleet/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/soulteary/runner-fleet/compare/v1.7.0...v1.7.1
