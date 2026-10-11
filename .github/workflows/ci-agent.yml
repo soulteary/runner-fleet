@@ -52,25 +52,25 @@ jobs:
         run: go test -race -v ./cmd/runner-agent/... ./internal/...
         working-directory: ${{ steps.modroot.outputs.root }}
 
-      - name: Test, race and coverage (GTR v1.1.2)
+      - name: Test, race and coverage (GTR v1.1.2)  # version-check-ignore: third-party tool version
         id: go_test_report
-        uses: soulteary/go-test-report-action@bf04b539f7bf2a6f67d602da4259904b3dcdeba1  # v1.1.2
+        uses: soulteary/go-test-report-action@bf04b539f7bf2a6f67d602da4259904b3dcdeba1  # v1.1.2  # version-check-ignore: third-party tool version
         with:
           directory: "."
           packages: "./..."
           race: "true"
           coverage_threshold: "0"
           test_args: "-count=1"
-          version: "v1.1.2"
+          version: "v1.1.2"  # version-check-ignore: third-party tool version
           cover_mode: "atomic"
           commit: "false"
         if: github.event_name == 'pull_request'
-      - name: Go quality report (v1.1.3)
+      - name: Go quality report (v1.1.3)  # version-check-ignore: third-party tool version
         id: go_report_card
-        uses: soulteary/goreportcard-action@fc43049a5fe61c3313294d217c2a783f375a7970  # v1.1.3
+        uses: soulteary/goreportcard-action@fc43049a5fe61c3313294d217c2a783f375a7970  # v1.1.3  # version-check-ignore: third-party tool version
         with:
           directory: "."
-          version: "v1.1.3"
+          version: "v1.1.3"  # version-check-ignore: third-party tool version
           threshold: "0"
           report: "true"
           commit: "false"

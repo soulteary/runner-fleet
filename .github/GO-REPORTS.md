@@ -1,7 +1,7 @@
 # Go report workflow
 
 The PR job runs both owned Actions with `commit: false` and released CLIs
-(`go-test-report-action v1.1.2`, `goreportcard-action v1.1.3`, pinned wrapper SHAs).
+(`go-test-report-action v1.1.2`, `goreportcard-action v1.1.3`, pinned wrapper SHAs). <!-- version-check-ignore: third-party tool version -->
 It replaces the primary Linux Go test/coverage invocation and reuses its profile
 for existing coverage artifacts/gates. Other OS matrices, release verification,
 integration, benchmarks and fuzz workflows retain their distinct checks.
@@ -19,3 +19,5 @@ Coverage floor: `0%` (zero records a baseline).
 Per-package floor: `0%`.
 Quality-score floor: `0%`.
 Raw profiles/test logs are artifacts, never committed.
+
+Published releases with a CI skip annotation use the release-event fallback. Ordinary releases use the tag-push report run; the release gate skips duplicate tests. Stable artifacts containing only reports under `.github` are downloaded into that directory explicitly; mixed report/document artifacts retain the repository hierarchy.
