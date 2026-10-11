@@ -1,5 +1,7 @@
 # Runner Fleet - GitHub Actions Runner Manager
 
+[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md)
+
 **文档 (Docs):** [中文](docs/zh/) · [Français](docs/fr/) · [Deutsch](docs/de/) · [한국어](docs/ko/) · [日本語](docs/ja/)
 
 ![](.github/assets/fleet.jpg)
