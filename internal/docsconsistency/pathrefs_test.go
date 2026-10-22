@@ -86,7 +86,7 @@ func TestPathRefs_NonMarkdownFilesPointAtRealFiles(t *testing.T) {
 				switch ref {
 				case ".github/go-test-report.md", ".github/go-test-report.json",
 					".github/coverage.svg", ".github/goreportcard.svg",
-					".github/goreportcard-report.md", ".github/test-results/":
+					".github/goreportcard-report.md", ".github/test-results", ".github/test-results/":
 					continue
 				}
 				if _, err := os.Stat(filepath.Join(repo, ref)); err != nil {
