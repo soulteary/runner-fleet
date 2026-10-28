@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update health-kit/v4 from 4.0.2 to 4.0.4 and its compatible shared dependency requirements; keep Go 1.27.3 and the existing health/readiness API.
+
 ## [1.9.2] - 2026-10-22
 
 ### Changed

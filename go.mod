@@ -6,7 +6,7 @@ require (
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/soulteary/cli-kit v1.9.2
 	github.com/soulteary/docker-kit v1.0.2
-	github.com/soulteary/health-kit/v4 v4.0.2
+	github.com/soulteary/health-kit/v4 v4.0.4
 	github.com/soulteary/i18n-kit/v4 v4.0.3
 	github.com/soulteary/logger-kit/v3 v3.0.3
 	github.com/soulteary/metrics-kit/v3 v3.0.3
@@ -33,7 +33,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
