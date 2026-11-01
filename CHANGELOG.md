@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Build release binaries outside the source checkout so earlier generated
+  artifacts do not mark later binaries as modified source. Keep VCS stamping
+  enabled and retain existing attachment names and checksum format.
 - Report GitHub deregistration transport failures as unconfirmed instead of
   treating a `404` substring in a runner ID or target URL as HTTP 404. A lost
   response does not prove the remote deletion succeeded; operators must check
