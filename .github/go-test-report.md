@@ -8,14 +8,14 @@
 | Passed | 522 |
 | Failed | 0 |
 | Skipped | 0 |
-| Coverage | 95.24% |
+| Coverage | 95.19% |
 | Threshold | 95.00% |
 
 ### Packages
 
 | Package | Status | Tests | Failed | Coverage |
 | --- | --- | --- | --- | --- |
-| cmd/runner-agent | pass | 29 | 0 | 92.31% |
+| cmd/runner-agent | pass | 29 | 0 | 91.61% |
 | cmd/runner-manager | pass | 81 | 0 | 91.94% |
 | internal/atomicfile | pass | 8 | 0 | 88.64% |
 | internal/childenv | pass | 10 | 0 | 100.00% |
