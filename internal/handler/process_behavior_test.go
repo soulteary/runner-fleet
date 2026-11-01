@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"github.com/labstack/echo/v4"
+	health "github.com/soulteary/health-kit/v4"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -93,5 +96,18 @@ func TestReadinessRejectsInvalidConfigAndNonDirectoryStorage(t *testing.T) {
 	}
 	if err := checkBasePathUsable(context.Background()); err == nil {
 		t.Fatal("regular file accepted as runner storage")
+	}
+}
+
+func TestProbeWhitelistRejectsRequestsWithoutExposingDetails(t *testing.T) {
+	agg := health.NewAggregator(health.DefaultConfig().WithIPWhitelist([]string{"127.0.0.1"}))
+	req := httptest.NewRequest("GET", "/ready", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	err := writeHealth(c, agg)
+	he, ok := err.(*echo.HTTPError)
+	if !ok || he.Code != 403 || he.Message != "Forbidden" {
+		t.Fatalf("restricted probe accepted or disclosed details: %v", err)
 	}
 }

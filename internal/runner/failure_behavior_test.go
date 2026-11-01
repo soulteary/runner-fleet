@@ -197,3 +197,20 @@ func TestPreflightChecksRealDinDEndpointAndMissingImageTools(t *testing.T) {
 		t.Fatalf("missing tool not reported: %+v", got)
 	}
 }
+
+func TestDockerReachabilityDiagnosticsDoNotDependOnHostDaemon(t *testing.T) {
+	for _, output := range []string{"", "daemon access refused"} {
+		fakeDockerProgram(t, "printf '%s' '"+output+"'; exit 1")
+		got := checkDockerReachable(context.Background())
+		if got.Level != CheckError || got.Hint != dockerAccessHint || !strings.Contains(got.Message, "cannot reach the Docker daemon") {
+			t.Fatalf("unreachable daemon incorrectly classified: %+v", got)
+		}
+		if output != "" && !strings.Contains(got.Message, output) {
+			t.Fatalf("diagnostic lost: %+v", got)
+		}
+	}
+	fakeDockerProgram(t, "echo 29.0.0")
+	if got := checkDockerReachable(context.Background()); got.Level != CheckOK || !strings.Contains(got.Message, "29.0.0") {
+		t.Fatalf("reachable daemon incorrectly classified: %+v", got)
+	}
+}
