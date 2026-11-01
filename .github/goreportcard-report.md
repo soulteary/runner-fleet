@@ -36,28 +36,19 @@
   - Line 43: cyclomatic complexity 20 for function TestEnvVars_EveryVariableTheCodeReadsIsDocumented
 - `internal/runner/drift.go`
   - Line 201: cyclomatic complexity 19 for function (containerSpec).driftReason
-- `internal/handler/precheck.go`
-  - Line 92: cyclomatic complexity 17 for function collectRunnerConflicts
-- `internal/secrets/guardrail_test.go`
-  - Line 88: cyclomatic complexity 16 for function TestNoManagerSecretsUnderRunnerDirs
-- `internal/docsconsistency/apikeys_test.go`
-  - Line 29: cyclomatic complexity 23 for function TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages
 - `internal/runnerproc/runnerproc_test.go`
   - Line 180: cyclomatic complexity 17 for function TestFind_RealProcesses
 - `internal/runner/githubstatus_test.go`
   - Line 12: cyclomatic complexity 17 for function TestGitHubStatus_RoundTripsThreeStates
+- `internal/handler/precheck.go`
+  - Line 92: cyclomatic complexity 17 for function collectRunnerConflicts
+- `internal/docsconsistency/apikeys_test.go`
+  - Line 29: cyclomatic complexity 23 for function TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages
+- `internal/secrets/guardrail_test.go`
+  - Line 88: cyclomatic complexity 16 for function TestNoManagerSecretsUnderRunnerDirs
 
 ### misspell
 
-- `cmd/runner-manager/i18n/fr.json`
-  - Line 23: "conteneurs" is a misspelling of "contenders"
-  - Line 30: "marrage" is a misspelling of "marriage"
-  - Line 31: "marrage" is a misspelling of "marriage"
-  - Line 32: "marrage" is a misspelling of "marriage"
-  - Line 41: "marrage" is a misspelling of "marriage"
-  - Line 178: "marrage" is a misspelling of "marriage"
-- `docs/de/README.md`
-  - Line 7: "Konfiguration" is a misspelling of "Configuration"
 - `docs/de/development.md`
   - Line 7: "Produktion" is a misspelling of "Production"
   - Line 62: "Konfiguration" is a misspelling of "Configuration"
@@ -66,6 +57,23 @@
   - Line 115: "Konfiguration" is a misspelling of "Configuration"
   - Line 116: "Konfiguration" is a misspelling of "Configuration"
   - Line 270: "Produktion" is a misspelling of "Production"
+- `docs/de/guide.md`
+  - Line 7: "Konfiguration" is a misspelling of "Configuration"
+  - Line 20: "Produktion" is a misspelling of "Production"
+  - Line 90: "Produktion" is a misspelling of "Production"
+  - Line 96: "Konfiguration" is a misspelling of "Configuration"
+  - Line 124: "Konfiguration" is a misspelling of "Configuration"
+  - Line 194: "Konfiguration" is a misspelling of "Configuration"
+  - Line 237: "persistente" is a misspelling of "persistence"
+  - Line 245: "Konfiguration" is a misspelling of "Configuration"
+  - Line 255: "Konfiguration" is a misspelling of "Configuration"
+  - Line 255: "Konfiguration" is a misspelling of "Configuration"
+  - Line 256: "Konfiguration" is a misspelling of "Configuration"
+  - Line 292: "Konfiguration" is a misspelling of "Configuration"
+  - Line 305: "Konfiguration" is a misspelling of "Configuration"
+  - Line 321: "Konfiguration" is a misspelling of "Configuration"
+  - Line 321: "Konfiguration" is a misspelling of "Configuration"
+  - Line 353: "Konfiguration" is a misspelling of "Configuration"
 - `docs/fr/README.md`
   - Line 9: "conteneurs" is a misspelling of "contenders"
   - Line 10: "Superposer" is a misspelling of "Superpowers"
@@ -143,23 +151,6 @@
   - Line 354: "origines" is a misspelling of "origins"
   - Line 355: "origines" is a misspelling of "origins"
   - Line 370: "marrage" is a misspelling of "marriage"
-- `docs/de/guide.md`
-  - Line 7: "Konfiguration" is a misspelling of "Configuration"
-  - Line 20: "Produktion" is a misspelling of "Production"
-  - Line 90: "Produktion" is a misspelling of "Production"
-  - Line 96: "Konfiguration" is a misspelling of "Configuration"
-  - Line 124: "Konfiguration" is a misspelling of "Configuration"
-  - Line 194: "Konfiguration" is a misspelling of "Configuration"
-  - Line 237: "persistente" is a misspelling of "persistence"
-  - Line 245: "Konfiguration" is a misspelling of "Configuration"
-  - Line 255: "Konfiguration" is a misspelling of "Configuration"
-  - Line 255: "Konfiguration" is a misspelling of "Configuration"
-  - Line 256: "Konfiguration" is a misspelling of "Configuration"
-  - Line 292: "Konfiguration" is a misspelling of "Configuration"
-  - Line 305: "Konfiguration" is a misspelling of "Configuration"
-  - Line 321: "Konfiguration" is a misspelling of "Configuration"
-  - Line 321: "Konfiguration" is a misspelling of "Configuration"
-  - Line 353: "Konfiguration" is a misspelling of "Configuration"
 - `cmd/runner-manager/i18n/de.json`
   - Line 2: "Konfiguration" is a misspelling of "Configuration"
   - Line 8: "Konfiguration" is a misspelling of "Configuration"
@@ -168,6 +159,15 @@
   - Line 27: "Konfiguration" is a misspelling of "Configuration"
   - Line 70: "Konfiguration" is a misspelling of "Configuration"
   - Line 178: "Konfiguration" is a misspelling of "Configuration"
+- `cmd/runner-manager/i18n/fr.json`
+  - Line 23: "conteneurs" is a misspelling of "contenders"
+  - Line 30: "marrage" is a misspelling of "marriage"
+  - Line 31: "marrage" is a misspelling of "marriage"
+  - Line 32: "marrage" is a misspelling of "marriage"
+  - Line 41: "marrage" is a misspelling of "marriage"
+  - Line 178: "marrage" is a misspelling of "marriage"
+- `docs/de/README.md`
+  - Line 7: "Konfiguration" is a misspelling of "Configuration"
 
 ---
 
