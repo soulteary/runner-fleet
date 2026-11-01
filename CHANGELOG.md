@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Report GitHub deregistration transport failures as unconfirmed instead of
+  treating a `404` substring in a runner ID or target URL as HTTP 404. A lost
+  response does not prove the remote deletion succeeded; operators must check
+  GitHub before retrying. No credential records, API fields or migration change.
+
 ### Performance
 
 - Inspect only one directory entry when checking whether a runner installation is
