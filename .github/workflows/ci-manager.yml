@@ -135,4 +135,7 @@ jobs:
       # 完整工作区里的 go build 验不出构建上下文缺路径。Manager 侧目前 COPY 了 cmd 与
       # internal 全量、没出过问题，这一步是防止它哪天被收窄成 Dockerfile.runner 那样。
       - name: Build Manager image builder stage
-        run: docker build --target builder -f Dockerfile .
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify both Linux image binary architectures
+        run: scripts/test-image-architecture.sh Dockerfile runner-manager
