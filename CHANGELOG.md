@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- Inspect only one directory entry when checking whether a runner installation is
+  nonempty. Preserve registered, empty and missing-directory behavior. See the
+  [Linux benchmark and limits](docs/benchmarks/precheck.md).
+
 ### Changed
 
 - Update health-kit/v4 from 4.0.2 to 4.0.4 and its compatible shared dependency requirements; keep Go 1.27.3 and the existing health/readiness API.
