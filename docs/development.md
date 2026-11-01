@@ -72,7 +72,7 @@ Run `make test-coverage` on Linux (or in a Linux container) before merging or re
 go build -o runner-manager ./cmd/runner-manager
 
 # With version (for /version and debugging)
-go build -ldflags "-X main.Version=v1.9.4" -o runner-manager ./cmd/runner-manager
+go build -ldflags "-X main.Version=v1.9.5" -o runner-manager ./cmd/runner-manager
 
 # Build Runner Agent only (container mode)
 go build -o runner-agent ./cmd/runner-agent
