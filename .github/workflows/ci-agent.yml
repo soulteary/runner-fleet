@@ -162,5 +162,8 @@ jobs:
       # 这里按 Dockerfile 自己的 COPY 列表真构建一次 builder 阶段——不另写一份路径清单，
       # 所以它不会跟 Dockerfile 漂移。只构建 builder：运行阶段的 apt 安装与发布无关，
       # 要验的是「构建上下文够不够编出这个二进制」。
-      - name: Build Runner image builder stage
-        run: docker build --target builder -f Dockerfile.runner .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify both Linux image binary architectures
+        run: scripts/test-image-architecture.sh Dockerfile.runner runner-agent

@@ -1,5 +1,5 @@
 # Manager：多阶段构建，BUILDPLATFORM 宿机构建、TARGETOS/TARGETARCH 交叉编译
-ARG BUILDPLATFORM=linux/amd64
+ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -10,8 +10,8 @@ ARG VERSION=dev
 # 未传入时为空，version-kit 会把空字段从输出里省掉
 ARG COMMIT=
 ARG BUILD_DATE=
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" -o runner-manager ./cmd/runner-manager
 
 FROM ubuntu:24.04
