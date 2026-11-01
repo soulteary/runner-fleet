@@ -74,3 +74,10 @@ not account for them is the more likely problem.
 ## Supported versions
 
 The latest release. Fixes go into a new release rather than being backported.
+
+## Agent credential failures
+
+Missing, empty or unreadable Agent credentials must reject control requests. See the
+[upgrade guide](docs/agent-auth-upgrade.md) for the affected network boundary, legacy
+Agent replacement, persistent token recovery and rollback restrictions. A running old
+Agent is not secured merely by upgrading its Manager.

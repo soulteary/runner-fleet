@@ -47,7 +47,7 @@ var agentBaseURL = func(containerName string, port int) string {
 }
 
 // GetAgentStatus 请求 Runner 容器内 Agent 的 /status，超时 5 秒。
-// token 为空时不带鉴权头，兼容本特性之前创建的容器。
+// 调用方必须先获取持久令牌；新 Agent 会拒绝匿名请求。
 func GetAgentStatus(ctx context.Context, containerName string, port int, token string) (*AgentStatus, error) {
 	if port <= 0 {
 		port = 8081
@@ -80,7 +80,7 @@ func GetAgentStatus(ctx context.Context, containerName string, port int, token s
 }
 
 // CallAgentStart 请求 Runner 容器内 Agent 的 POST /start。
-// token 为空时不带鉴权头，兼容本特性之前创建的容器。
+// 调用方必须先获取持久令牌；新 Agent 会拒绝匿名请求。
 func CallAgentStart(ctx context.Context, containerName string, port int, token string) error {
 	if port <= 0 {
 		port = 8081
@@ -268,8 +268,7 @@ func startRunnerContainer(ctx context.Context, cfg *config.Config, runnerName, i
 	// 在创建/启动容器之前写好令牌：容器内 Agent 启动时即可从挂载目录读到
 	token, tokenErr := EnsureAgentToken(installDir)
 	if tokenErr != nil {
-		// 拿不到令牌不阻断启停，降级为不带鉴权头（与旧版本行为一致）
-		log.Printf("warning: %s %v, so this Agent call carries no auth header", runnerName, tokenErr)
+		return fmt.Errorf("cannot authenticate runner Agent: %w", tokenErr)
 	}
 	facts, err := inspectRunnerContainer(ctx, cn)
 	if err != nil {
@@ -399,14 +398,12 @@ func ContainerRunnerStatus(ctx context.Context, cfg *config.Config, runnerName, 
 	if facts == nil {
 		return false, diskStatus(installDir), "", nil
 	}
-	// 这里也要 Ensure 而不是 Read：升级时那些正在运行的旧容器目录里还没有令牌文件，
-	// 而自动拉起只管没在跑的，它们永远等不到有人替它生成——不生成就报不出 agent_token 漂移，
-	// 界面上不提示，人也就不知道该点「重建容器」。生成失败时返回空串，
-	// 退化为原先「没有令牌就不谈漂移」的行为，不会把容器反复删了重建。
+	// 为旧容器生成持久令牌，以便检测漂移；失败时不可发送匿名 Agent 请求。
 	token, tokenErr := EnsureAgentToken(installDir)
-	// 拿不到令牌意味着这个 Runner 的 Agent 不鉴权，而且 agent_token 漂移检查会因为
-	// 「手头没有令牌」而跳过自己，界面上什么都看不到——至少要在日志里说一次
-	WarnAgentTokenUnavailable(installDir, tokenErr)
+	if tokenErr != nil {
+		WarnAgentTokenUnavailable(installDir, tokenErr)
+		return facts.Running, StatusUnknown, "", newProbeError(ProbeErrorTypeAgentHTTP, tokenErr)
+	}
 	drift = driftFromFacts(ctx, cfg, runnerName, installDir, token, facts, cachedImageID)
 	if !facts.Running {
 		// 容器未跑时保留磁盘状态（已注册即「已注册未运行」），不覆盖为 unknown

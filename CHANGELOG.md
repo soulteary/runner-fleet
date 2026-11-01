@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Reject Agent status/start/stop with HTTP 503 when credentials are missing, empty
+  or unreadable, instead of allowing anonymous calls. Stop Manager start/recreate
+  and status calls when persistent token retrieval fails. Valid bearer credentials
+  and `/health` are unchanged. Legacy Agents require replacement; see the
+  [upgrade guide](docs/agent-auth-upgrade.md) for volume preservation, recovery,
+  mixed-version limits and rollback restrictions.
+
 ### Changed
 
 - Update health-kit/v4 from 4.0.2 to 4.0.4 and its compatible shared dependency requirements; keep Go 1.27.3 and the existing health/readiness API.
