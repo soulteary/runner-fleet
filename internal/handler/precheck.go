@@ -194,7 +194,13 @@ func inspectInstallDir(installDir string) string {
 	if _, err := os.Stat(filepath.Join(installDir, ".runner")); err == nil {
 		return "registered"
 	}
-	entries, err := os.ReadDir(installDir)
+	dir, err := os.Open(installDir)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = dir.Close() }()
+	// 这里只判断非空，无需读取、分配和排序整个目录。
+	entries, err := dir.ReadDir(1)
 	if err != nil || len(entries) == 0 {
 		return ""
 	}

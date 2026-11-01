@@ -1,0 +1,45 @@
+goos: linux
+goarch: arm64
+pkg: github.com/soulteary/runner-fleet/internal/handler
+BenchmarkInspectInstallDir/files=0         	   18243	     20536 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   24320	     13846 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   25622	     14183 ns/op	     824 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   26145	     12351 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   29571	     14762 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   21700	     15184 ns/op	     824 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   18522	     21083 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   21314	     15614 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   34843	     15585 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=0         	   28748	     10930 ns/op	     840 B/op	      10 allocs/op
+BenchmarkInspectInstallDir/files=1         	   32482	     15198 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   16990	     23318 ns/op	     920 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   17076	     19368 ns/op	     920 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   26151	     13508 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   31509	     11940 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   32439	     14122 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   29308	     12478 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   26406	     12596 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   38482	     12015 ns/op	     936 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1         	   26865	     18046 ns/op	     920 B/op	      13 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1113	    375517 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1238	    415426 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1245	    382919 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	     982	    354154 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1098	    370449 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1309	    247036 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	     840	    444890 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1004	    349235 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1246	    315506 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=1000      	    1351	    290035 ns/op	  116045 B/op	    2021 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     141	   3671307 ns/op	 1466954 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     133	   5421631 ns/op	 1466960 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     100	   3219973 ns/op	 1466982 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	      91	   6935407 ns/op	 1466990 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     100	   3034900 ns/op	 1466976 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     100	   4710455 ns/op	 1466979 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     100	   3750809 ns/op	 1466979 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	      84	   4695455 ns/op	 1466998 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     140	   3023068 ns/op	 1466956 B/op	   20029 allocs/op
+BenchmarkInspectInstallDir/files=10000     	     130	   2350394 ns/op	 1466961 B/op	   20029 allocs/op
+PASS
+ok  	github.com/soulteary/runner-fleet/internal/handler	61.943s

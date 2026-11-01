@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [upgrade guide](docs/agent-auth-upgrade.md) for volume preservation, recovery,
   mixed-version limits and rollback restrictions.
 
+### Performance
+
+- Inspect only one directory entry when checking whether a runner installation is
+  nonempty. Preserve registered, empty and missing-directory behavior. See the
+  [Linux benchmark and limits](docs/benchmarks/precheck.md).
+
 ## [1.9.3] - 2026-11-02
 
 ### Changed
