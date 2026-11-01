@@ -372,7 +372,7 @@ func Deregister(ctx context.Context, store *secrets.Store, installDir, targetTyp
 	}
 	if err := doJSON(ctx, client, http.MethodDelete, base+"/"+strconv.FormatInt(id, 10), tok, nil); err != nil {
 		// 404 说明它已经不在了，目的已经达到
-		if strings.Contains(err.Error(), "404") {
+		if errors.Is(err, errNotFound) {
 			return DeregisterResult{Done: true, MessageKey: "github.dereg.not_listed"}
 		}
 		return DeregisterResult{
