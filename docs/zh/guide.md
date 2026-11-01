@@ -232,7 +232,7 @@ runners:
 
 **路径与唯一性**：name/path 禁止 `..`、`/`、`\`；目录强制落在 `runners.base_path` 下。禁止同名；编辑时名称不可改。容器模式下名称规范为容器名，映射后重名会报错。
 
-**Agent 鉴权**（容器模式）：Manager 会为每个 Runner 在 `<runner 目录>/.agent_token` 写入随机令牌（权限 0600），创建容器时以 `AGENT_TOKEN` 环境变量注入，调用 Agent 时以 `Authorization: Bearer` 带上。Agent 读的是环境变量，因此不依赖 Manager 与 Agent 的 UID 一致；文件是 Manager 侧的持久副本，Manager 重启后无需重建容器。Agent 对 `/status`、`/start`、`/stop` 强制校验，同一网络内的其它容器无法再控制 Runner；`/health` 保持开放供容器 HEALTHCHECK 使用。本特性之前创建的容器没有注入令牌、仍按不鉴权运行；现在这种容器会被判为「配置已变更」，下次启动时自动重建补上（正在运行的可点「重建容器」）。
+**Agent 鉴权**（容器模式）：Manager 会为每个 Runner 在 `<runner 目录>/.agent_token` 写入随机令牌（权限 0600），创建容器时以 `AGENT_TOKEN` 环境变量注入，调用 Agent 时以 `Authorization: Bearer` 带上。Agent 读的是环境变量，因此不依赖 Manager 与 Agent 的 UID 一致；文件是 Manager 侧的持久副本，Manager 重启后无需重建容器。Agent 对 `/status`、`/start`、`/stop` 强制校验，同一网络内的其它容器无法再控制 Runner；`/health` 保持开放供容器 HEALTHCHECK 使用。凭据缺失、为空或不可读时返回 HTTP 503，不执行处理器；Bearer 令牌错误返回 401。Manager 无法获取持久令牌时停止启动、重建和状态调用。旧版无鉴权 Agent 必须替换；升级顺序、持久卷和回滚限制见 [Agent 鉴权升级指南](../agent-auth-upgrade.md)（英文）。
 
 **传给 Runner 的环境变量**：Manager 与 Agent 启动的每个进程——`run.sh` 及其运行的 Job、`config.sh`、`install-runner.sh`——都不会拿到 `BASIC_AUTH_PASSWORD`、`BASIC_AUTH_USER` 和 `AGENT_TOKEN`，其余变量（包括 `DOCKER_HOST` 与代理设置）原样透传。这能让管理凭据不出现在 Job 日志里，但它不是隔离边界：默认模式下 Job 与 Manager 以同一用户运行（见 [SECURITY.md](../../SECURITY.md)）。
 

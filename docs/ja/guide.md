@@ -233,7 +233,7 @@ runners:
 
 **パスと一意性**: name/path に `..`、`/`、`\` は不可。ディレクトリは `runners.base_path` 以下である必要あり。名前の重複不可。編集時は名前は読み取り専用。コンテナモードでは名前はコンテナ名に正規化され、マッピング後の重複はエラーになります。
 
-**Agent 認証**（コンテナモード）: Manager は Runner ごとにランダムなトークンを `<runner ディレクトリ>/.agent_token`（0600）へ書き込み、コンテナ作成時に `AGENT_TOKEN` として注入し、Agent 呼び出し時に `Authorization: Bearer` で送ります。Agent は環境変数を読むため、Manager と Agent の UID 一致に依存しません。ファイルは Manager 側の永続コピーです。Agent は `/status`、`/start`、`/stop` をトークンなしでは拒否します。`/health` は HEALTHCHECK 用に開放したままです。本機能より前に作成したコンテナはトークンが注入されておらず、認証なしのまま動作します。現在はこれを「設定変更あり」と判定し、次回起動時に自動で作り直して補います（実行中なら「コンテナ再作成」で）。
+**Agent 認証**（コンテナモード）：Manager は Runner ごとに `<runner dir>/.agent_token`（0600）を永続化し、コンテナ作成時に `AGENT_TOKEN` として注入します。呼び出しは `Authorization: Bearer` を使用し、環境変数をファイルより優先します。認証情報が存在しない、空、または読み取れない場合、`/status`、`/start`、`/stop` は処理を実行せず HTTP 503 を返します。不正なトークンは 401、`/health` は引き続き公開です。Manager も永続トークンを取得できない場合は起動・再作成・状態呼び出しを拒否します。旧 Agent の置換、永続ボリューム、更新順序とロールバック制限は [移行ガイド](../agent-auth-upgrade.md)（英語）を参照してください。
 
 **Runner に渡される環境変数**: Manager と Agent は、自分が起動するすべてのプロセス——`run.sh` とそれが実行する Job、`config.sh`、`install-runner.sh`——の環境から `BASIC_AUTH_PASSWORD`、`BASIC_AUTH_USER`、`AGENT_TOKEN` を取り除きます。それ以外は `DOCKER_HOST` やプロキシ設定も含めてそのまま渡します。これにより管理用の認証情報が Job のログに出なくなりますが、分離の境界ではありません。デフォルトモードでは Job は Manager と同じユーザーで動作します（[SECURITY.md](../../SECURITY.md) を参照）。
 
