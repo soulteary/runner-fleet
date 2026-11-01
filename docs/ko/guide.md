@@ -233,7 +233,7 @@ runners:
 
 **경로 및 고유성**: name/path에 `..`, `/`, `\` 포함 불가. 디렉터리는 `runners.base_path` 아래에 있어야 함. 중복 이름 불가. 편집 시 이름은 읽기 전용. 컨테이너 모드에서 이름은 컨테이너 이름으로 정규화되며, 매핑 후 중복 시 오류.
 
-**Agent 인증**(컨테이너 모드): Manager가 Runner마다 무작위 토큰을 `<runner 디렉터리>/.agent_token`(0600)에 기록하고, 컨테이너 생성 시 `AGENT_TOKEN`으로 주입하며, Agent 호출 시 `Authorization: Bearer`로 전송합니다. Agent는 환경 변수를 읽으므로 Manager와 Agent의 UID 일치에 의존하지 않습니다. 파일은 Manager 측 영구 사본입니다. Agent는 토큰 없는 `/status`, `/start`, `/stop`을 거부하며 `/health`는 HEALTHCHECK용으로 열려 있습니다. 이 기능 이전에 생성된 컨테이너는 토큰이 주입되지 않아 인증 없이 동작합니다. 이제 이런 컨테이너는 "설정 변경됨"으로 판정되어 다음 시작 때 자동으로 재생성되며 토큰이 채워집니다(실행 중이면 "컨테이너 재생성" 사용).
+**Agent 인증** (컨테이너 모드): Manager는 Runner마다 `<runner dir>/.agent_token` (0600)을 영구 저장하고 컨테이너 생성 시 `AGENT_TOKEN`으로 주입합니다. 호출에는 `Authorization: Bearer`를 사용하며 환경 변수가 파일보다 우선합니다. 자격 증명이 없거나 비어 있거나 읽을 수 없으면 `/status`, `/start`, `/stop`은 처리기를 실행하지 않고 HTTP 503을 반환합니다. 잘못된 토큰은 401이며 `/health`는 계속 공개됩니다. Manager도 영구 토큰을 얻지 못하면 시작, 재생성 및 상태 호출을 거부합니다. 기존 Agent 교체, 영구 볼륨, 업그레이드 순서와 롤백 제한은 [마이그레이션 안내](../agent-auth-upgrade.md) (영문)를 참고하세요.
 
 **Runner에 전달되는 환경 변수**: Manager와 Agent는 자신이 시작하는 모든 프로세스(`run.sh`와 그것이 실행하는 Job, `config.sh`, `install-runner.sh`)의 환경에서 `BASIC_AUTH_PASSWORD`, `BASIC_AUTH_USER`, `AGENT_TOKEN`을 제거합니다. 나머지는 `DOCKER_HOST`와 프록시 설정을 포함해 그대로 전달됩니다. 이렇게 하면 관리용 자격 증명이 Job 로그에 남지 않지만, 격리 경계는 아닙니다. 기본 모드에서 Job은 Manager와 같은 사용자로 실행됩니다([SECURITY.md](../../SECURITY.md) 참고).
 

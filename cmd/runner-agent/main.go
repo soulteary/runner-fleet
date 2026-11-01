@@ -164,7 +164,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 const agentTokenFile = ".agent_token"
 
 // expectedToken 返回本 Agent 要求的令牌：优先环境变量，其次安装目录下的令牌文件。
-// 返回空字符串表示未配置令牌，此时不启用鉴权（兼容本特性之前创建的容器）。
+// 返回空字符串表示凭据不可用；控制接口必须拒绝请求。
 func expectedToken() string {
 	// 优先环境变量：Manager 创建容器时注入，不依赖挂载文件的 UID 可读性
 	if t := strings.TrimSpace(os.Getenv("AGENT_TOKEN")); t != "" {
@@ -173,8 +173,7 @@ func expectedToken() string {
 	path := filepath.Join(installDir(), agentTokenFile)
 	b, err := os.ReadFile(path)
 	if err != nil {
-		// 文件不存在 = 本特性之前创建的容器，属于预期的兼容路径；
-		// 存在却读不了（多为 UID 不匹配）则必须说出来，否则会静默地不鉴权
+		// 文件不存在或不可读时，不得将读取失败解释为无需认证。
 		if !os.IsNotExist(err) {
 			logTokenUnreadable(path, err)
 		}
@@ -188,7 +187,7 @@ var tokenWarnOnce sync.Once
 
 func logTokenUnreadable(path string, err error) {
 	tokenWarnOnce.Do(func() {
-		log.Printf("warning: the token file %s exists but cannot be read (%v), so the endpoints run unauthenticated. "+
+		log.Printf("warning: the token file %s exists but cannot be read (%v), so the endpoints reject requests. "+
 			"This usually means the Manager and the Agent run under different UIDs; recreate the runner container "+
 			"to have the token injected through the environment instead", path, err)
 	})
@@ -211,21 +210,21 @@ func bearerToken(header string) string {
 	return strings.TrimSpace(h[len(bearerPrefix):])
 }
 
-// requireToken 包装控制类接口；令牌未配置时直接放行，配置了则要求 Bearer 匹配。
+// requireToken 包装控制类接口；令牌不可用时失败关闭，否则要求 Bearer 匹配。
 // 每次请求重新读取令牌，便于 Manager 在容器启动后才写入令牌的场景。
 func requireToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		want := expectedToken()
-		if want != "" {
-			got := bearerToken(r.Header.Get("Authorization"))
-			// 与 Manager 侧同理：subtle.ConstantTimeCompare 在两侧长度不等时立即
-			// 返回，耗时会随「猜的长度是否等于真实长度」而变，把令牌长度泄漏出去；
-			// secure.ConstantTimeEqual 先把两侧补到同长再比
-			if !secure.ConstantTimeEqual(got, want) {
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"message":"unauthorized"}`))
-				return
-			}
+		if want == "" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"message":"agent authentication unavailable"}`))
+			return
+		}
+		got := bearerToken(r.Header.Get("Authorization"))
+		if !secure.ConstantTimeEqual(got, want) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"unauthorized"}`))
+			return
 		}
 		next(w, r)
 	}
@@ -311,7 +310,7 @@ func main() {
 	srv := newAgentServer(port, newAgentMux())
 	authState := "enabled"
 	if expectedToken() == "" {
-		authState = "disabled (no token file; kept for containers created by older versions)"
+		authState = "unavailable (control requests rejected until credentials are restored)"
 	}
 	log.Printf("Runner Agent listening on :%s, RUNNER_INSTALL_DIR=%s, endpoint auth %s", port, installDir(), authState)
 

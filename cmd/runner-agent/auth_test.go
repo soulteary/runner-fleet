@@ -64,7 +64,7 @@ func TestExpectedTokenFallsBackToFile(t *testing.T) {
 	}
 }
 
-// 没有令牌文件 = 本特性之前创建的旧容器，属于刻意保留的兼容路径
+// 旧容器没有令牌时也必须拒绝控制请求。
 func TestExpectedTokenEmptyWhenNoTokenConfigured(t *testing.T) {
 	agentDir(t, "")
 	if got := expectedToken(); got != "" {
@@ -72,9 +72,8 @@ func TestExpectedTokenEmptyWhenNoTokenConfigured(t *testing.T) {
 	}
 }
 
-// 文件在、却读不出来（多为 UID 不匹配），同样返回空串降级为不鉴权。
-// 这是刻意的取舍，但必须留下告警——否则鉴权悄悄失效，外部完全看不出来。
-func TestExpectedTokenUnreadableFileDegradesButWarns(t *testing.T) {
+// 文件读取失败返回空串，由 requireToken 拒绝请求。
+func TestExpectedTokenUnreadableFileReturnsEmpty(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("权限位在 Windows 上语义不同")
 	}
@@ -94,10 +93,10 @@ func TestExpectedTokenUnreadableFileDegradesButWarns(t *testing.T) {
 
 // ---- requireToken ----
 
-func TestRequireTokenAllowsAllWhenNoTokenConfigured(t *testing.T) {
+func TestRequireTokenRejectsWhenNoTokenConfigured(t *testing.T) {
 	agentDir(t, "")
-	if rec := callGuarded(t, ""); rec.Code != http.StatusOK {
-		t.Fatalf("未配置令牌时应放行，得到 %d", rec.Code)
+	if rec := callGuarded(t, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("未配置令牌时应拒绝，得到 %d", rec.Code)
 	}
 }
 
@@ -155,8 +154,8 @@ func TestRequireTokenAcceptsCorrectToken(t *testing.T) {
 // 启动时读一次并缓存的话，那之后再补上的令牌永远不会生效
 func TestRequireTokenPicksUpTokenWrittenAfterStart(t *testing.T) {
 	dir := agentDir(t, "")
-	if rec := callGuarded(t, ""); rec.Code != http.StatusOK {
-		t.Fatalf("起初没有令牌，应放行，得到 %d", rec.Code)
+	if rec := callGuarded(t, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("起初没有令牌，应拒绝，得到 %d", rec.Code)
 	}
 	if err := os.WriteFile(filepath.Join(dir, agentTokenFile), []byte("late-token"), 0o600); err != nil {
 		t.Fatal(err)

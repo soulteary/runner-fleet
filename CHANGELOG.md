@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nonempty. Preserve registered, empty and missing-directory behavior. See the
   [Linux benchmark and limits](docs/benchmarks/precheck.md).
 
+### Security
+
+- Reject Agent status/start/stop with HTTP 503 when credentials are missing, empty
+  or unreadable, instead of allowing anonymous calls. Stop Manager start/recreate
+  and status calls when persistent token retrieval fails. Valid bearer credentials
+  and `/health` are unchanged. Legacy Agents require replacement; see the
+  [upgrade guide](docs/agent-auth-upgrade.md) for volume preservation, recovery,
+  mixed-version limits and rollback restrictions.
+
 ## [1.9.3] - 2026-11-02
 
 ### Changed

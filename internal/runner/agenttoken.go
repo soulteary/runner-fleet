@@ -24,7 +24,7 @@ const AgentTokenFile = ".agent_token"
 const agentTokenBytes = 32
 
 // EnsureAgentToken 返回该 Runner 的 Agent 令牌：已存在则读出，否则生成并以 0600 写入。
-// 生成或写入失败时返回错误，调用方可选择降级为不带令牌（保持旧行为）。
+// 生成或写入失败时返回错误，调用方必须停止需要认证的操作。
 //
 // 启停路径（持 runnerOps 锁）与状态路径（不持锁，因为它每次列表都要跑，不能被一次几秒的
 // docker create 挡住）会同时走到这里，所以创建必须是「单一胜者」：各生成一个的话，
@@ -79,8 +79,8 @@ func EnsureAgentToken(installDir string) (string, error) {
 		// 写入失败的残留，要么是权限问题。两种都不该由这里擅自删除——见上面关于
 		// unlink 的说明——交给人处理，并把该做什么说清楚。
 		return "", fmt.Errorf("the token file %s exists but reads back empty (a leftover from a failed write by an earlier version, "+
-			"or the permissions are wrong). Delete it once you are sure, and the Manager writes a new one; "+
-			"until then this runner's Agent runs unauthenticated", path)
+			"or the permissions are wrong). Restore the existing token and its permissions before retrying; "+
+			"the Manager will not make unauthenticated Agent calls", path)
 	}
 	return token, nil
 }
@@ -89,7 +89,7 @@ func EnsureAgentToken(installDir string) (string, error) {
 var tokenWarnOnce sync.Map
 
 // WarnAgentTokenUnavailable 令牌拿不到时告警。状态路径每次列表都会调用 EnsureAgentToken，
-// 不能每次都打；但也不能完全不打——拿不到令牌意味着这个 Runner 的 Agent 不鉴权，
+// 不能每次都打；但也不能完全不打——拿不到令牌会阻止 Manager 调用 Agent，
 // 而且 agent_token 漂移检查会因为「手头没有令牌」而跳过自己，界面上什么都看不到。
 func WarnAgentTokenUnavailable(installDir string, err error) {
 	if err == nil {
@@ -102,8 +102,7 @@ func WarnAgentTokenUnavailable(installDir string, err error) {
 }
 
 // ReadAgentToken 读取令牌；文件不存在或内容为空时返回空字符串。
-// 空字符串表示「该 Runner 没有令牌」，此时 Manager 不带鉴权头、Agent 也不校验，
-// 以兼容本特性之前创建的容器。
+// 空字符串表示凭据不可用，不能视为允许匿名访问。
 func ReadAgentToken(installDir string) string {
 	b, err := os.ReadFile(filepath.Join(installDir, AgentTokenFile))
 	if err != nil {

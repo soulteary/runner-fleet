@@ -53,6 +53,7 @@ func newTrappingRunnerDir(t *testing.T, trap func(dir string) string) string {
 		}
 	}
 	script := "#!/bin/bash\ntrap '" + trap(dir) + "' TERM\n" +
+		": > \"" + filepath.Join(dir, ".test-ready") + "\"\n" +
 		"read -r -t 120 < \"" + filepath.Join(dir, ".test-block") + "\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -69,13 +70,16 @@ func newTrappingRunnerDir(t *testing.T, trap func(dir string) string) string {
 	return dir
 }
 
-// startAndWait 拉起 run.sh 并等到它出现在进程表里
+// startAndWait 等脚本安装 trap 后发出就绪标记；仅出现在进程表里还不够。
 func startAndWait(t *testing.T, dir string) {
 	t.Helper()
 	if err := startRunner(dir); err != nil {
 		t.Fatalf("启动 run.sh 失败: %v", err)
 	}
-	if !waitUntil(func() bool { return runnerproc.Running(dir) }) {
+	if !waitUntil(func() bool {
+		_, err := os.Stat(filepath.Join(dir, ".test-ready"))
+		return err == nil && runnerproc.Running(dir)
+	}) {
 		t.Fatal("准备阶段：run.sh 应已在运行")
 	}
 }
