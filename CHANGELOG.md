@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-11-02
+
+### Fixed
+
+- Preserve automatic BuildKit platform arguments in both container Dockerfiles.
+  The v1.9.4 arm64 images contain amd64 executables despite their arm64 manifests;
+  standalone download binaries are unaffected. Replace both images and rebuild
+  custom Runner images without changing persistent volumes or identity records.
+- Build both production builder stages for Linux amd64 and arm64 in CI and verify
+  the exported ELF architecture. The regression fails before the fix and passes
+  after it. Keep the exact 95% production statement coverage requirement.
+- Use the native build platform to cross-compile target binaries, avoiding Go
+  compiler emulation during multi-platform builds. No new runtime benchmark claim.
+
 ## [1.9.4] - 2026-11-02
 
 ### Changed
