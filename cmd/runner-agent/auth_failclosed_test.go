@@ -78,3 +78,28 @@ func TestRequireTokenRejectsCredentialsLostAfterSuccessfulRequest(t *testing.T) 
 		t.Fatal(rec.Code)
 	}
 }
+
+func TestControlMethodsAndScriptExecutionFailures(t *testing.T) {
+	dir := agentDir(t, "token")
+	for _, fn := range []http.HandlerFunc{handleStart, handleStop} {
+		rec := httptest.NewRecorder()
+		fn(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Code != 405 {
+			t.Fatal(rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	handleStart(rec, httptest.NewRequest(http.MethodPost, "/start", nil))
+	if rec.Code != 500 {
+		t.Fatalf("missing script: %d", rec.Code)
+	}
+	if err := os.WriteFile(filepath.Join(dir, runScriptName()), []byte("not executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := startRunner(dir); err == nil {
+		t.Fatal("non-executable script started")
+	}
+	if got, running := getStatus(""); got != "missing" || running {
+		t.Fatalf("empty install path: %s %v", got, running)
+	}
+}

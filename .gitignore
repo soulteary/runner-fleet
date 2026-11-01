@@ -28,3 +28,6 @@ Thumbs.db
 
 .cursor/
 *.out
+
+# Local test evidence
+/.coverage/

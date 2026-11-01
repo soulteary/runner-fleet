@@ -59,6 +59,8 @@ Runner 做同样的事。两者前面都站着 `tini`，负责回收 Job 留下�
 
 ## 构建
 
+合并或发布前，在 Linux（或 Linux 容器）以非 root 用户执行 `make test-coverage`。该命令对全部生产包运行禁用缓存的竞态测试，按精确语句数强制总覆盖率至少 95%；`.coverage/` 保存 JSON 结果和覆盖文件。真实入口子进程的执行覆盖也会计入，不排除生产代码。
+
 ```bash
 # 生成可执行文件 runner-manager
 go build -o runner-manager ./cmd/runner-manager

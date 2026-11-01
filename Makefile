@@ -12,10 +12,10 @@ DOCKER_GID ?= 999
 EXAMPLE ?= android
 IMAGE   ?= runner-fleet-$(EXAMPLE)-runner:dev
 
-.PHONY: build build-agent build-all test test-race lint check install-ci-recipes run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
+.PHONY: build build-agent build-all test test-race test-coverage lint check install-ci-recipes run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean help
 
 help:
-	@echo "targets: build build-agent build-all test test-race lint check install-ci-recipes run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
+	@echo "targets: build build-agent build-all test test-race test-coverage lint check install-ci-recipes run docker-build docker-build-runner docker-build-runner-example docker-run docker-stop clean"
 	@echo "  check: 提交前跑这一个——CI 会跑的检查都在里面"
 	@echo "  install-ci-recipes: 装 check 需要的 ci-recipes（版本跟 CI 钉的同一个）"
 	@echo "  docker-build-runner-example: 构建自定义 Runner 镜像示例，如"
@@ -35,6 +35,10 @@ build-all: build build-agent
 
 test:
 	go test ./...
+
+# Linux only; keep every production package in the statement coverage gate.
+test-coverage:
+	bash scripts/test-coverage.sh
 
 # CI 跑的是这个。并发面（注册队列、runnerOps 锁、Agent 令牌的单一胜者创建）
 # 出问题时普通 go test 是静默通过的，提交前至少跑一次。
@@ -78,7 +82,7 @@ check:
 	fi
 	go vet ./...
 	$(MAKE) lint
-	go test -race ./...
+	$(MAKE) test-coverage
 	@command -v $(CI_RECIPES) >/dev/null 2>&1 || { \
 		echo "未找到 $(CI_RECIPES)。安装：make install-ci-recipes"; \
 		echo '装好后确认 $$(go env GOPATH)/bin 在 PATH 上。'; \

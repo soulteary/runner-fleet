@@ -64,6 +64,8 @@ Manager가 Runner의 프로세스를 볼 수 없습니다. 그래서 Agent에게
 
 ## 빌드
 
+병합 또는 출시 전에 Linux(또는 Linux 컨테이너)에서 root가 아닌 사용자로 `make test-coverage`를 실행하세요. 모든 운영 패키지를 캐시 없이 경쟁 상태 검사와 함께 테스트하고 실제 진입점 하위 프로세스를 포함한 전체 구문 커버리지 95% 이상을 정확히 검사합니다. JSON 결과와 프로필은 `.coverage/`에 저장하며 운영 코드는 제외하지 않습니다.
+
 ```bash
 # runner-manager 바이너리 빌드
 go build -o runner-manager ./cmd/runner-manager

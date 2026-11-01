@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Add behavioral tests for real service entrypoints, process signals, HTTP and
+  storage failures, retry boundaries and legacy container state. Require at
+  least 95% total production statement coverage in Linux PR and release checks.
+  The exact-count gate rejects rounding and invalid profiles; no production Go
+  code is excluded.
+
 ### Fixed
 
 - Report GitHub deregistration transport failures as unconfirmed instead of

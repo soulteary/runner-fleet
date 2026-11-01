@@ -65,6 +65,8 @@ Manager は各コンテナの実際の作成パラメータを現在の設定と
 
 ## ビルド
 
+マージ・リリース前に Linux（または Linux コンテナ）で非 root ユーザーとして `make test-coverage` を実行してください。全本番パッケージをキャッシュなし・競合検出付きでテストし、実際のエントリーポイントの子プロセスを含む総ステートメントカバレッジを正確に 95% 以上に保ちます。結果とプロファイルは `.coverage/` に保存され、本番コードを除外しません。
+
 ```bash
 # runner-manager バイナリをビルド
 go build -o runner-manager ./cmd/runner-manager

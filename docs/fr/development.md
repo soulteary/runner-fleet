@@ -68,6 +68,8 @@ L'image est comparée par ID autant que par référence, donc reconstruire le m�
 
 ## Build
 
+Avant fusion ou publication, exécutez `make test-coverage` sous Linux (ou en conteneur Linux), sans root pour tester les permissions. Tous les paquets de production sont testés sans cache avec le détecteur de courses ; le seuil total exact est de 95 %. `.coverage/` conserve les résultats JSON et le profil, y compris les sous-processus des points d’entrée réels. Aucun code de production n’est exclu.
+
 ```bash
 # Construire le binaire runner-manager
 go build -o runner-manager ./cmd/runner-manager
