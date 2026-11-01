@@ -18,6 +18,7 @@ func TestContainerStartStopsAtDockerFailureBoundaries(t *testing.T) {
 	for _, stage := range []string{"inspect", "forced-remove", "drift-remove", "start", "create", "new-start", "invalid-backend", "manager-mount"} {
 		t.Run(stage, func(t *testing.T) {
 			cfg, dir := driftTestConfig(t, "host-socket")
+			cfg.Runners.DockerGID = 999
 			if err := os.WriteFile(filepath.Join(dir, AgentTokenFile), []byte("fixture-token"), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -75,6 +76,7 @@ func TestContainerStartStopsAtDockerFailureBoundaries(t *testing.T) {
 
 func TestStoppedContainerStartAndResourceUpdateFailure(t *testing.T) {
 	cfg, dir := driftTestConfig(t, "host-socket")
+	cfg.Runners.DockerGID = 999
 	cfg.Runners.Resources = config.ResourceLimits{CPUs: "1"}
 	if err := os.WriteFile(filepath.Join(dir, AgentTokenFile), []byte("fixture-token"), 0600); err != nil {
 		t.Fatal(err)
