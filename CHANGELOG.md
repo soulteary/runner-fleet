@@ -489,7 +489,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.4...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.5...HEAD
+[1.9.5]: https://github.com/soulteary/runner-fleet/compare/v1.9.4...v1.9.5
 [1.9.4]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...v1.9.4
 [1.9.3]: https://github.com/soulteary/runner-fleet/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/soulteary/runner-fleet/compare/v1.9.1...v1.9.2
