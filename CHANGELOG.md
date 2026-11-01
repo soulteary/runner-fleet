@@ -16,9 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [upgrade guide](docs/agent-auth-upgrade.md) for volume preservation, recovery,
   mixed-version limits and rollback restrictions.
 
+## [1.9.3] - 2026-11-02
+
 ### Changed
 
-- Update health-kit/v4 from 4.0.2 to 4.0.4 and its compatible shared dependency requirements; keep Go 1.27.3 and the existing health/readiness API.
+- Refresh cli-kit, health-kit/v4, i18n-kit/v4, logger-kit/v3, metrics-kit/v3, secure-kit/v2 and version-kit/v4 to their latest compatible patch releases.
+- Rebuild Manager and Runner with Go 1.27.3. Existing configuration, HTTP endpoints and runner image derivation remain compatible.
+- Synchronize default image tags, deployment examples and translated guides with v1.9.3.
+
+### Upgrade
+
+- Upgrade Manager to `v1.9.3` and Runner images to `v1.9.3-runner`; retain existing configuration and persistent runner data. No configuration or data migration is required from v1.9.2.
 
 ## [1.9.2] - 2026-10-22
 
@@ -425,7 +433,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.2...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...HEAD
+[1.9.3]: https://github.com/soulteary/runner-fleet/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/soulteary/runner-fleet/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/soulteary/runner-fleet/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/soulteary/runner-fleet/compare/v1.8.0...v1.9.0
