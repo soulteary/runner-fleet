@@ -67,6 +67,8 @@ per Referenz verglichen, ein Neubau desselben Tags zählt also ebenfalls.
 
 ## Build
 
+Vor Merge oder Release `make test-coverage` unter Linux bzw. im Linux-Container ohne root ausführen. Alle Produktionspakete werden ohne Cache mit Race-Erkennung geprüft; mindestens 95 % der Anweisungen müssen abgedeckt sein. `.coverage/` enthält JSON-Ergebnisse und Profil einschließlich der echten Einstiegspunkt-Unterprozesse. Produktionscode wird nicht ausgeschlossen.
+
 ```bash
 # runner-manager-Binary bauen
 go build -o runner-manager ./cmd/runner-manager

@@ -175,7 +175,7 @@ jobs:
           directory: "."
           packages: "./..."
           race: "true"
-          coverage_threshold: "0"
+          coverage_threshold: "95"
           test_args: "-count=1"
           version: "v1.1.2"  # version-check-ignore: third-party tool version
           cover_mode: "atomic"

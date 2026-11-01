@@ -65,6 +65,8 @@ compared by ID as well as by reference, so rebuilding the same tag counts.
 
 ## Build
 
+Run `make test-coverage` on Linux (or in a Linux container) before merging or releasing. It runs every production package with uncached race tests and requires at least 95% total statement coverage; `.coverage/` retains the JSON results and profile. Permission tests require a non-root user. Startup subprocess tests exercise the real entrypoints and contribute their coverage; no production code is excluded.
+
 ```bash
 # Build runner-manager binary
 go build -o runner-manager ./cmd/runner-manager

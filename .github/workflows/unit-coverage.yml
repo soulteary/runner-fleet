@@ -1,0 +1,33 @@
+name: Unit coverage
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Linux race and 95% coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Test all production packages and enforce 95%
+        run: make test-coverage
+      - name: Preserve test and coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-unit-coverage
+          path: .coverage/
+          include-hidden-files: true
+          if-no-files-found: error
