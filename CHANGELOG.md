@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- Inspect only one directory entry when checking whether a runner installation is
+  nonempty. Preserve registered, empty and missing-directory behavior. See the
+  [Linux benchmark and limits](docs/benchmarks/precheck.md).
+
 ### Security
 
 - Reject Agent status/start/stop with HTTP 503 when credentials are missing, empty
