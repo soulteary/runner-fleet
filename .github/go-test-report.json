@@ -1,38 +1,38 @@
 {
   "schema_version": "1.0",
   "tests": {
-    "total": 471,
-    "passed": 471,
+    "total": 522,
+    "passed": 522,
     "failed": 0,
     "skipped": 0
   },
   "coverage": {
-    "covered_statements": 1810,
-    "total_statements": 2279,
-    "percentage": 79.42,
-    "threshold": 0
+    "covered_statements": 2180,
+    "total_statements": 2289,
+    "percentage": 95.24,
+    "threshold": 95
   },
   "packages": [
     {
       "name": "cmd/runner-agent",
       "status": "pass",
-      "tests": 23,
+      "tests": 29,
       "failed": 0,
-      "coverage": 69.29
+      "coverage": 92.31
     },
     {
       "name": "cmd/runner-manager",
       "status": "pass",
-      "tests": 79,
+      "tests": 81,
       "failed": 0,
-      "coverage": 64.84
+      "coverage": 91.94
     },
     {
       "name": "internal/atomicfile",
       "status": "pass",
-      "tests": 6,
+      "tests": 8,
       "failed": 0,
-      "coverage": 75
+      "coverage": 88.64
     },
     {
       "name": "internal/childenv",
@@ -44,9 +44,9 @@
     {
       "name": "internal/config",
       "status": "pass",
-      "tests": 51,
+      "tests": 54,
       "failed": 0,
-      "coverage": 93.9
+      "coverage": 98.37
     },
     {
       "name": "internal/docsconsistency",
@@ -58,23 +58,23 @@
     {
       "name": "internal/githubcheck",
       "status": "pass",
-      "tests": 28,
+      "tests": 30,
       "failed": 0,
-      "coverage": 90.71
+      "coverage": 96.43
     },
     {
       "name": "internal/handler",
       "status": "pass",
-      "tests": 76,
+      "tests": 94,
       "failed": 0,
-      "coverage": 72.56
+      "coverage": 96.09
     },
     {
       "name": "internal/runner",
       "status": "pass",
-      "tests": 152,
+      "tests": 167,
       "failed": 0,
-      "coverage": 84.73
+      "coverage": 95.63
     },
     {
       "name": "internal/runnerproc",
@@ -86,9 +86,9 @@
     {
       "name": "internal/secrets",
       "status": "pass",
-      "tests": 17,
+      "tests": 20,
       "failed": 0,
-      "coverage": 81.82
+      "coverage": 94.81
     }
   ],
   "failures": null
