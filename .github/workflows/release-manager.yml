@@ -131,34 +131,7 @@ jobs:
         with:
           files: dist/*
           name: Release ${{ steps.version.outputs.tag }}
-          body: |
-            ## Changes
-
-            详见 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/CHANGELOG.md) 与提交历史。
-
-            ## 使用方式
-
-            ### Docker 镜像 (GHCR)
-
-            - Manager（管理服务）:
-            ```bash
-            docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}
-            ```
-            - Runner 容器镜像（容器模式，同镜像名，tag 带 -runner 后缀，由 Release (Runner) 工作流推送）:
-            ```bash
-            docker pull ${{ steps.vars.outputs.canonical }}:${{ steps.version.outputs.tag }}-runner
-            ```
-
-            ### 二进制
-
-            - Linux AMD64: `runner-manager-linux-amd64`
-            - Linux ARM64: `runner-manager-linux-arm64`
-            - macOS AMD64: `runner-manager-darwin-amd64`
-            - macOS ARM64: `runner-manager-darwin-arm64`
-
-            ### 校验和
-
-            见 `checksums.txt` 中的 SHA256。
+          body_path: .github/release-notes.md
           draft: false
           prerelease: false
 
