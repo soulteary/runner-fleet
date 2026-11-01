@@ -4,17 +4,17 @@ go 1.27.3
 
 require (
 	github.com/labstack/echo/v4 v4.16.0
-	github.com/soulteary/cli-kit v1.9.2
+	github.com/soulteary/cli-kit v1.9.3
 	github.com/soulteary/docker-kit v1.0.2
-	github.com/soulteary/health-kit/v4 v4.0.4
-	github.com/soulteary/i18n-kit/v4 v4.0.3
-	github.com/soulteary/logger-kit/v3 v3.0.3
-	github.com/soulteary/metrics-kit/v3 v3.0.3
+	github.com/soulteary/health-kit/v4 v4.0.5
+	github.com/soulteary/i18n-kit/v4 v4.0.4
+	github.com/soulteary/logger-kit/v3 v3.0.4
+	github.com/soulteary/metrics-kit/v3 v3.0.4
 	github.com/soulteary/preflight-kit v1.0.2
 	github.com/soulteary/procfind-kit v1.0.2
-	github.com/soulteary/secure-kit/v2 v2.1.2
-	github.com/soulteary/version-kit/v4 v4.0.2
-	go.yaml.in/yaml/v3 v3.0.5
+	github.com/soulteary/secure-kit/v2 v2.1.3
+	github.com/soulteary/version-kit/v4 v4.0.3
+	go.yaml.in/yaml/v3 v3.0.6
 )
 
 require (
@@ -25,10 +25,11 @@ require (
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/prometheus/client_golang v1.25.0 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
-	github.com/prometheus/common v0.72.1 // indirect
-	github.com/prometheus/procfs v0.22.0 // indirect
+	github.com/prometheus/common v0.73.1 // indirect
+	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
