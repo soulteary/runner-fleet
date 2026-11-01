@@ -48,6 +48,7 @@ func mkTrappingRunnerDir(t *testing.T, base, name string, windDown time.Duration
 			`read -r -t ` + strconv.Itoa(int(windDown/time.Second)) + ` -u 3; exit 0`
 	}
 	script := "#!/bin/bash\ntrap '" + trap + "' TERM\n" +
+		": > \"" + filepath.Join(dir, ".test-ready") + "\"\n" +
 		"read -r -t 120 < \"" + filepath.Join(dir, ".test-block") + "\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -67,7 +68,10 @@ func startRunnerAt(t *testing.T, dir string) {
 	if err := runner.Start(dir); err != nil {
 		t.Fatalf("启动 %s 的 run.sh 失败: %v", dir, err)
 	}
-	if !waitUntil(func() bool { return runnerproc.Running(dir) }) {
+	if !waitUntil(func() bool {
+		_, err := os.Stat(filepath.Join(dir, ".test-ready"))
+		return err == nil && runnerproc.Running(dir)
+	}) {
 		t.Fatalf("准备阶段：%s 的 run.sh 应已在运行", dir)
 	}
 }
