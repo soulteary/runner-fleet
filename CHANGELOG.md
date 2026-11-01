@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-11-02
+
 ### Changed
 
 - Add behavioral tests for real service entrypoints, process signals, HTTP and
@@ -36,6 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `/health` are unchanged. Legacy Agents require replacement; see the
   [upgrade guide](docs/agent-auth-upgrade.md) for volume preservation, recovery,
   mixed-version limits and rollback restrictions.
+
+### Upgrade
+
+- Upgrade the Manager first, drain active jobs, and replace old Runner containers
+  with `v1.9.4-runner`. Preserve configuration, `.agent_token`, registration files
+  and persistent volumes. An old running Agent is not secured by upgrading only
+  its Manager. Restore matching credentials and permissions instead of deleting
+  or replacing occupied token records; see the [upgrade guide](docs/agent-auth-upgrade.md).
+- Valid authenticated calls, token paths and formats remain compatible. Missing,
+  empty or unreadable Agent credentials now return 503; incorrect bearer tokens
+  still return 401. Rolling back an Agent restores permissive legacy behavior,
+  so pause jobs and restrict network access before any rollback.
+- Existing logs and exported copies are not rewritten. If an earlier deployment
+  exposed credentials, restrict access, apply retention or cleanup to all copies,
+  and rotate exposed credentials. This is a continuing recovery requirement,
+  not a newly confirmed log leak in this release.
 
 ## [1.9.3] - 2026-11-02
 
@@ -454,7 +472,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.4...HEAD
+[1.9.4]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...v1.9.4
 [1.9.3]: https://github.com/soulteary/runner-fleet/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/soulteary/runner-fleet/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/soulteary/runner-fleet/compare/v1.9.0...v1.9.1
