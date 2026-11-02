@@ -1,7 +1,7 @@
 # Recovering an unconfirmed container removal
 
 A Manager API caller with delete access can request `DELETE /api/runners/:name`.
-In v1.9.5, an unsuccessful `docker rm -f` was ignored: local files, PAT and
+In v1.9.5, an unsuccessful `docker rm -f` was ignored: local files, PAT and <!-- version-check-ignore: affected baseline -->
 configuration could be deleted even though the container remained alive. This
 is a lifecycle reliability defect, not an authentication bypass.
 

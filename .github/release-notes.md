@@ -1,23 +1,31 @@
 ## Changes
 
-Fix the Manager and Runner container builds for Linux arm64. In v1.9.4 the arm64 image manifests were correct, but their embedded Go executables targeted amd64 because Dockerfile defaults overrode BuildKit's automatic platform arguments. Without amd64 emulation these containers cannot start; with emulation they run the wrong architecture. Standalone v1.9.4 download binaries are unaffected. Both Dockerfiles now preserve BuildKit's build and target platforms. CI builds the actual production builder stages for linux/amd64 and linux/arm64 and verifies their ELF machine fields. <!-- version-check-ignore: affected release or continuing upgrade requirement -->
+Runner deletion now stops when container removal cannot be confirmed. In v1.9.5, a caller with deletion access could receive HTTP 200 after Docker failed, while local configuration, installation files and the stored PAT were removed. A container could remain running without its management records. This is a lifecycle reliability defect, not an authentication bypass. <!-- version-check-ignore: affected baseline -->
 
-This is a packaging and reliability correction, not a newly confirmed authentication bypass. No protocol, authentication format, diagnostic field or stored-record schema changes. BuildKit is required for multi-platform image builds. The native builder cross-compiles each target without emulating the Go compiler.
+Local directory or PAT cleanup errors also return HTTP 500 and retain the configuration record. Installation cleanup precedes PAT deletion. The same runner identity can be inspected and retried after an uncertain response. Tests cover a simulated committed Docker removal with a lost acknowledgment, real Linux permission failures, and cleanup committed before a failed configuration save followed by retry. They do not remove real GitHub runners.
 
-## Upgrade and rollback
+Repeated credential-unavailable warnings now check the existing cache before constructing a candidate entry. Ten samples in the same Linux arm64 setup measured medians of 200.2 to 80.62 ns/op, 32 to 0 B/op, and 2 to 0 allocations. The one-warning-per-directory behavior is unchanged and tested with 64 concurrent callers and the race detector. This is a cached failure/status-polling microbenchmark, not an HTTP throughput result. External host load was uncontrolled. [Raw samples and conditions](https://github.com/soulteary/runner-fleet/blob/v1.9.6/docs/benchmarks/credential-warning.md).
 
-Replace v1.9.4 Manager and Runner images with v1.9.5 images, including cached custom Runner base images. Drain active jobs before replacing containers. Preserve configuration, persistent runner volumes, `.agent_token` and registration files. No data migration is required. Do not delete token records or rotate identity to conceal storage failures. Avoid rolling back arm64 containers to v1.9.4 images. <!-- version-check-ignore: affected release or continuing upgrade requirement -->
+The six-language guides now point to the recovery procedure and correct an old deletion paragraph that still described the historical runner-directory PAT location. PAT storage remains in the Manager's configuration volume; this documentation correction introduces no new migration.
 
-The Agent authentication recovery requirements introduced in v1.9.4 continue: upgrade the Manager first, restrict Agent access during mixed-version operation, then replace all legacy Agents before resuming normal scheduling. Rolling back to an Agent predating that fix restores permissive legacy behavior. [Recovery and replacement order](https://github.com/soulteary/runner-fleet/blob/v1.9.5/docs/agent-auth-upgrade.md). <!-- version-check-ignore: affected release or continuing upgrade requirement -->
+## Compatibility and recovery
 
-Existing logs and exported copies are not rewritten. If credentials were exposed in an earlier deployment, restrict access, apply retention or cleanup to all copies, and rotate exposed credentials. These are continuing operational requirements, not a new logging finding. Published v1.9.4 tags and attachments remain unchanged for traceability. <!-- version-check-ignore: affected release or continuing upgrade requirement -->
+No API JSON fields, authentication format, configuration keys or persistent schemas change. The new localized `api.remove_failed` message describes deletion failures; affected failures change from false success to HTTP 500. Existing success behavior and GitHub deregistration's `github_deregistered` result remain unchanged.
+
+Pause deletion traffic while upgrading Managers. Mixed old Managers retain the previous behavior. Preserve configuration, PAT and runner volumes. No volume migration is required. Previously deleted management records are not reconstructed automatically: restore them from trusted backups and inspect surviving containers before reusing names. Do not delete token records or create replacement identities to conceal uncertain completion.
+
+Docker, GitHub, the filesystem and configuration storage are not one transaction. An HTTP 500 can follow a successful remote action or partial local cleanup. Verify the original resources and retry against the retained configuration record. GitHub deregistration remains best effort; inspect GitHub when `github_deregistered` is false. [Recovery details](https://github.com/soulteary/runner-fleet/blob/v1.9.6/docs/container-removal-recovery.md).
+
+Rolling back a Manager restores the previous deletion behavior, so keep deletion traffic paused during rollback. The earlier Agent authentication upgrade/replacement order and identity-preservation requirements continue; they are not new changes in this release. Existing logs and exported copies are not rewritten. If credentials were exposed previously, restrict access, apply retention or cleanup to all copies and rotate exposed credentials; no new logging leak is claimed.
 
 ## Linux validation
 
-The new regression test fails before the fix with ELF machine 62 for arm64 (expected 183), then passes for both image builders on amd64 and arm64. Full Linux tests, race detection and the exact 95% total production statement coverage gate run in PR and release CI; production Go code is not excluded. No new application performance claim is made. The directory precheck improvement and its benchmark remain documented in [the existing benchmark](https://github.com/soulteary/runner-fleet/blob/v1.9.5/docs/benchmarks/precheck.md).
+Go 1.27.3, non-root Linux amd64 CI: 527 top-level tests / 799 named test and subtest results passed, zero failures and zero skips, with the race detector and cache disabled. Exact coverage was 2188/2293 production statements (95.4208%); no production code is excluded and the gate remains at 95%. Formatting, vet, lint, documentation consistency and both Linux image builder architectures passed. See the release workflows for results on the signed release source.
+
+Both production image builder stages are checked for Linux amd64 and arm64 ELF payloads. Release verification checks attachment hashes, binary source/architecture metadata, OCI source/subject bindings and isolated runtime authentication. Darwin attachments retain the existing distribution format; Runner lifecycle support remains Linux amd64/arm64.
 
 ## Downloads
 
-- Manager: `docker pull ghcr.io/soulteary/runner-fleet:v1.9.5`
-- Runner: `docker pull ghcr.io/soulteary/runner-fleet:v1.9.5-runner`
-- Verify standalone downloads with `checksums.txt`. Runner lifecycle support remains Linux amd64/arm64. Darwin attachments retain the existing distribution format.
+- Manager: `docker pull ghcr.io/soulteary/runner-fleet:v1.9.6`
+- Runner: `docker pull ghcr.io/soulteary/runner-fleet:v1.9.6-runner`
+- Verify standalone downloads with `checksums.txt`.

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.6] - 2026-11-02
+
+### Fixed
+
+- Fail runner deletion closed when Docker removal is unconfirmed or local cleanup
+  fails. Preserve tracking records for inspection and retry; directory cleanup
+  precedes PAT deletion. Docker, GitHub and storage are not one transaction.
+- Test lost removal acknowledgments, real Linux permission failures and cleanup
+  committed before configuration-save failure, including retry. Synchronize six
+  language errors/recovery guidance and correct a historical PAT-path description.
+
+### Performance
+
+- Avoid allocations for cached credential warnings while preserving concurrent
+  one-warning-per-directory behavior. Linux arm64 ten-sample medians: 200.2 to
+  80.62 ns/op, 32 to 0 B/op and 2 to 0 allocations. This is a cached-failure
+  microbenchmark, not HTTP throughput; see [samples](docs/benchmarks/credential-warning.md).
+
 ## [1.9.5] - 2026-11-02
 
 ### Fixed
@@ -489,7 +507,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.5...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.6...HEAD
+[1.9.6]: https://github.com/soulteary/runner-fleet/compare/v1.9.5...v1.9.6
 [1.9.5]: https://github.com/soulteary/runner-fleet/compare/v1.9.4...v1.9.5
 [1.9.4]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...v1.9.4
 [1.9.3]: https://github.com/soulteary/runner-fleet/compare/v1.9.2...v1.9.3
