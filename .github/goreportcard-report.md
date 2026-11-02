@@ -4,8 +4,8 @@
 
 | Metric | Value |
 | ------ | ----- |
-| Files | 109 |
-| Issues | 27 |
+| Files | 112 |
+| Issues | 28 |
 
 ## Checks
 
@@ -22,18 +22,38 @@
 
 ### gocyclo
 
-- `internal/config/config.go`
-  - Line 404: cyclomatic complexity 30 for function Validate
-  - Line 195: cyclomatic complexity 19 for function (ResourceLimits).Validate
-  - Line 343: cyclomatic complexity 17 for function Load
-- `cmd/runner-agent/entrypoint_test.go`
-  - Line 26: cyclomatic complexity 22 for function TestAgentEntrypointLifecycle
-- `internal/docsconsistency/envvars_test.go`
-  - Line 43: cyclomatic complexity 20 for function TestEnvVars_EveryVariableTheCodeReadsIsDocumented
 - `internal/handler/handler.go`
   - Line 377: cyclomatic complexity 27 for function AddRunner
   - Line 701: cyclomatic complexity 21 for function UpdateRunner
   - Line 102: cyclomatic complexity 16 for function runRegistrationJob
+- `internal/handler/container_behavior_test.go`
+  - Line 30: cyclomatic complexity 25 for function TestContainerAPIUsesAgentStatusAndPreservesProbeFailures
+- `internal/runner/container_failure_paths_test.go`
+  - Line 16: cyclomatic complexity 24 for function TestContainerStartStopsAtDockerFailureBoundaries
+- `internal/runner/drift.go`
+  - Line 201: cyclomatic complexity 19 for function (containerSpec).driftReason
+- `internal/runner/githubstatus_test.go`
+  - Line 12: cyclomatic complexity 17 for function TestGitHubStatus_RoundTripsThreeStates
+- `internal/secrets/guardrail_test.go`
+  - Line 88: cyclomatic complexity 16 for function TestNoManagerSecretsUnderRunnerDirs
+- `internal/handler/remove_failure_test.go`
+  - Line 153: cyclomatic complexity 16 for function TestRemoveRunnerReportsConfigCommitFailureAfterCleanup
+- `internal/docsconsistency/envvars_test.go`
+  - Line 43: cyclomatic complexity 20 for function TestEnvVars_EveryVariableTheCodeReadsIsDocumented
+- `internal/handler/process_behavior_test.go`
+  - Line 18: cyclomatic complexity 18 for function TestProcessAPIReusesRunningRunnerAndDeliversStop
+- `internal/docsconsistency/apikeys_test.go`
+  - Line 29: cyclomatic complexity 23 for function TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages
+- `cmd/runner-manager/entrypoint_test.go`
+  - Line 33: cyclomatic complexity 23 for function TestManagerEntrypointServesAndShutsDown
+- `cmd/runner-agent/entrypoint_test.go`
+  - Line 26: cyclomatic complexity 22 for function TestAgentEntrypointLifecycle
+- `internal/handler/precheck.go`
+  - Line 92: cyclomatic complexity 17 for function collectRunnerConflicts
+- `internal/config/config.go`
+  - Line 404: cyclomatic complexity 30 for function Validate
+  - Line 195: cyclomatic complexity 19 for function (ResourceLimits).Validate
+  - Line 343: cyclomatic complexity 17 for function Load
 - `internal/handler/api_behavior_test.go`
   - Line 131: cyclomatic complexity 24 for function TestAddRegistrationQueuePreservesAcceptedState
   - Line 85: cyclomatic complexity 16 for function TestViewsUseCurrentRunnerStateAndTranslationFallback
@@ -41,36 +61,15 @@
   - Line 262: cyclomatic complexity 21 for function startRunnerContainer
 - `internal/handler/precheck_behavior_test.go`
   - Line 45: cyclomatic complexity 20 for function TestPrecheckDockerFailuresAndConflictsAreExplicit
-- `internal/runner/githubstatus_test.go`
-  - Line 12: cyclomatic complexity 17 for function TestGitHubStatus_RoundTripsThreeStates
-- `internal/handler/precheck.go`
-  - Line 92: cyclomatic complexity 17 for function collectRunnerConflicts
-- `internal/secrets/storage_failure_test.go`
-  - Line 12: cyclomatic complexity 16 for function TestMigrationRetryAfterDestinationCommitAndSourceRemovalFailure
-- `internal/secrets/guardrail_test.go`
-  - Line 88: cyclomatic complexity 16 for function TestNoManagerSecretsUnderRunnerDirs
-- `internal/handler/container_behavior_test.go`
-  - Line 30: cyclomatic complexity 25 for function TestContainerAPIUsesAgentStatusAndPreservesProbeFailures
-- `internal/docsconsistency/apikeys_test.go`
-  - Line 29: cyclomatic complexity 23 for function TestAPIKeys_EveryKeyTheHandlerUsesExistsInAllLanguages
-- `internal/runner/failure_behavior_test.go`
-  - Line 50: cyclomatic complexity 17 for function TestPersistedStatusRejectsCorruptRecordsAndKeepsValidDetails
 - `internal/runnerproc/runnerproc_test.go`
   - Line 180: cyclomatic complexity 17 for function TestFind_RealProcesses
-- `internal/runner/container_failure_paths_test.go`
-  - Line 16: cyclomatic complexity 24 for function TestContainerStartStopsAtDockerFailureBoundaries
-- `cmd/runner-manager/entrypoint_test.go`
-  - Line 33: cyclomatic complexity 23 for function TestManagerEntrypointServesAndShutsDown
-- `internal/runner/drift.go`
-  - Line 201: cyclomatic complexity 19 for function (containerSpec).driftReason
-- `internal/handler/process_behavior_test.go`
-  - Line 18: cyclomatic complexity 18 for function TestProcessAPIReusesRunningRunnerAndDeliversStop
+- `internal/runner/failure_behavior_test.go`
+  - Line 50: cyclomatic complexity 17 for function TestPersistedStatusRejectsCorruptRecordsAndKeepsValidDetails
+- `internal/secrets/storage_failure_test.go`
+  - Line 12: cyclomatic complexity 16 for function TestMigrationRetryAfterDestinationCommitAndSourceRemovalFailure
 
 ### misspell
 
-- `docs/fr/README.md`
-  - Line 9: "conteneurs" is a misspelling of "contenders"
-  - Line 10: "Superposer" is a misspelling of "Superpowers"
 - `docs/de/guide.md`
   - Line 7: "Konfiguration" is a misspelling of "Configuration"
   - Line 20: "Produktion" is a misspelling of "Production"
@@ -78,6 +77,8 @@
   - Line 96: "Konfiguration" is a misspelling of "Configuration"
   - Line 124: "Konfiguration" is a misspelling of "Configuration"
   - Line 194: "Konfiguration" is a misspelling of "Configuration"
+  - Line 223: "Konfiguration" is a misspelling of "Configuration"
+  - Line 223: "Konfiguration" is a misspelling of "Configuration"
   - Line 237: "persistente" is a misspelling of "persistence"
   - Line 245: "Konfiguration" is a misspelling of "Configuration"
   - Line 255: "Konfiguration" is a misspelling of "Configuration"
@@ -88,6 +89,9 @@
   - Line 321: "Konfiguration" is a misspelling of "Configuration"
   - Line 321: "Konfiguration" is a misspelling of "Configuration"
   - Line 353: "Konfiguration" is a misspelling of "Configuration"
+- `docs/fr/README.md`
+  - Line 9: "conteneurs" is a misspelling of "contenders"
+  - Line 10: "Superposer" is a misspelling of "Superpowers"
 - `docs/fr/development.md`
   - Line 7: "contributeurs" is a misspelling of "contributes"
   - Line 63: "existant" is a misspelling of "existent"
