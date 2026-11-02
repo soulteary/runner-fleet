@@ -108,6 +108,9 @@ func TestRemoveRunnerRetriesAfterLostContainerRemovalAcknowledgment(t *testing.T
 func TestRemoveRunnerPreservesTrackingWhenLocalCleanupFails(t *testing.T) {
 	for _, failure := range []string{"installation", "credential"} {
 		t.Run(failure, func(t *testing.T) {
+			if failure == "installation" && os.Geteuid() == 0 {
+				t.Skip("root bypasses directory write permissions; run as a non-root user")
+			}
 			_, dir := removeTestSetup(t, tokenInStore)
 			if failure == "installation" {
 				if err := os.Chmod(dir, 0500); err != nil {
@@ -148,6 +151,9 @@ func TestRemoveRunnerPreservesTrackingWhenLocalCleanupFails(t *testing.T) {
 }
 
 func TestRemoveRunnerReportsConfigCommitFailureAfterCleanup(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file write permissions; run as a non-root user")
+	}
 	_, dir := removeTestSetup(t, tokenInStore)
 	cfgDir := filepath.Dir(ConfigPath)
 	t.Cleanup(func() { _ = os.Chmod(cfgDir, 0700); _ = os.Chmod(ConfigPath, 0600) })
