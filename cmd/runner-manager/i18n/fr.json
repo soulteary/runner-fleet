@@ -203,5 +203,6 @@
   "runner_list.title": "Liste des runners",
   "toast.dismiss": "Fermer",
   "toast.reload_list": "Actualiser la liste",
-  "toast.view_detail": "Voir les détails"
+  "toast.view_detail": "Voir les détails",
+  "api.remove_failed": "Échec de la suppression : %v"
 }

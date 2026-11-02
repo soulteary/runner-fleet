@@ -810,7 +810,9 @@ func RemoveRunnerByName(c echo.Context) error {
 	if cfg.Runners.ContainerMode {
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 		defer cancel()
-		_ = runner.RemoveRunnerContainer(ctx, name)
+		if err := runner.RemoveRunnerContainer(ctx, name); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.remove_failed", err))
+		}
 	} else {
 		_ = runner.Stop(installDir)
 	}
@@ -827,12 +829,15 @@ func RemoveRunnerByName(c echo.Context) error {
 	}
 	// 凭据在注销之后才能删：注销正要用它。留着的话，下一个同名 Runner 会莫名
 	// 继承上一个的 PAT。
-	if err := store.Remove(name); err != nil {
-		log.Printf("[remove] %s: %v", name, err)
-	}
-	// 仅当安装目录在 base_path 下时才删除，防止误删系统路径
+	// Keep credentials until installation cleanup is confirmed, so failures can be
+	// inspected and retried using the existing identity and configuration.
 	if installDir != "" && isUnderBasePath(cfg.Runners.BasePath, installDir) {
-		_ = os.RemoveAll(installDir)
+		if err := os.RemoveAll(installDir); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.remove_failed", err))
+		}
+	}
+	if err := store.Remove(name); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.remove_failed", err))
 	}
 	if err := config.LoadAndSave(ConfigPath, func(cfg *config.Config) error {
 		return removeRunnerFromConfig(c, cfg, name)
@@ -840,7 +845,7 @@ func RemoveRunnerByName(c echo.Context) error {
 		if he, ok := err.(*echo.HTTPError); ok {
 			return he
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.config_save_failed", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, trf(c, "api.remove_failed", err))
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"message":             trf(c, "api.removed", trf(c, dereg.MessageKey, dereg.MessageArgs...)),
