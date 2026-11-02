@@ -203,5 +203,6 @@
   "runner_list.title": "Runner 一覧",
   "toast.dismiss": "閉じる",
   "toast.reload_list": "一覧を再読み込み",
-  "toast.view_detail": "詳細を見る"
+  "toast.view_detail": "詳細を見る",
+  "api.remove_failed": "削除に失敗しました：%v"
 }

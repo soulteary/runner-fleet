@@ -203,5 +203,6 @@
   "runner_list.title": "Runner 列表",
   "toast.dismiss": "知道了",
   "toast.reload_list": "刷新列表",
-  "toast.view_detail": "查看详情"
+  "toast.view_detail": "查看详情",
+  "api.remove_failed": "删除失败：%v"
 }

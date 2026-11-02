@@ -203,5 +203,6 @@
   "runner_list.title": "Runner 목록",
   "toast.dismiss": "닫기",
   "toast.reload_list": "목록 새로고침",
-  "toast.view_detail": "자세히 보기"
+  "toast.view_detail": "자세히 보기",
+  "api.remove_failed": "삭제 실패: %v"
 }

@@ -203,5 +203,6 @@
   "runner_list.title": "Runner-Liste",
   "toast.dismiss": "Schließen",
   "toast.reload_list": "Liste neu laden",
-  "toast.view_detail": "Details anzeigen"
+  "toast.view_detail": "Details anzeigen",
+  "api.remove_failed": "Entfernen fehlgeschlagen: %v"
 }

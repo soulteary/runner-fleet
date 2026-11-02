@@ -218,7 +218,7 @@ runners:
 
 **Name conflict check**: While you type a name, the form asks `/api/runner-precheck` and shows what would go wrong before you submit — a runner with that name already in the config, a name that normalizes to a container name already in use, an install directory taken by another runner, a leftover directory that already holds a registered runner (`.runner`), or a leftover container of that name on the host. Blocking findings are shown in red with a one-click suggested name; warnings (a non-empty directory that will be reused) let you continue. Submitting anyway is rejected server-side with **409** plus the same conflicts — the old behaviour of silently appending a random suffix is gone (send `auto_rename: true` if you want it back).
 
-**Deleting a runner**: it is stopped, deregistered from GitHub when that runner's directory holds a PAT, and **its install directory is deleted** — only when that directory is under `runners.base_path`, so a misconfigured path cannot take a system directory with it. `_work` and any caches under it go too, so there is nothing to recover afterwards.
+**Deleting a runner**: stop it, confirm container removal in container mode, attempt GitHub deregistration using the PAT in `config/tokens/<runner name>`, then remove its installation directory (only below `runners.base_path`), PAT and configuration. `_work` and caches are deleted too. Unconfirmed container removal or local cleanup failure returns HTTP 500 and retains configuration for inspection and retry; an error does not roll back steps already completed. See the [recovery guide](container-removal-recovery.md).
 
 Multiple runners per machine: use separate subdirs.
 
