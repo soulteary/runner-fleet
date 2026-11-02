@@ -95,7 +95,10 @@ func WarnAgentTokenUnavailable(installDir string, err error) {
 	if err == nil {
 		return
 	}
-	v, _ := tokenWarnOnce.LoadOrStore(installDir, &sync.Once{})
+	v, ok := tokenWarnOnce.Load(installDir)
+	if !ok {
+		v, _ = tokenWarnOnce.LoadOrStore(installDir, &sync.Once{})
+	}
 	v.(*sync.Once).Do(func() {
 		log.Printf("warning: %v", err)
 	})
