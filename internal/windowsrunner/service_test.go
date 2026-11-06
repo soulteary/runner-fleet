@@ -348,3 +348,21 @@ func TestControllerRejectsMalformedMarkerAndIncompleteRepair(t *testing.T) {
 	}
 	_ = s
 }
+
+func TestControllerRejectsInvalidProxyBeforeStartingService(t *testing.T) {
+	c, _, s, dir := serviceFixture(t)
+	content := proxyBegin + "\nhttps_proxy=http://localhost:7890\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetRunning(context.Background(), dir, true); err == nil || !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("invalid proxy configuration did not fail startup: %v", err)
+	}
+	if s.starts != 0 {
+		t.Fatal("service started despite invalid proxy configuration")
+	}
+	b, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil || string(b) != content {
+		t.Fatal("invalid proxy configuration was overwritten", err)
+	}
+}

@@ -12,7 +12,7 @@ Windows x64 릴리스 ZIP을 풀고 **관리자 PowerShell**에서 실행합니�
 Start-Process http://127.0.0.1:8080
 ```
 
-설치 시 프로그램을 `%ProgramFiles%\RunnerFleet\runner-manager.exe`로 복사하고 `LocalSystem` 계정의 자동 시작 서비스 `RunnerFleet`을 등록합니다. 기본 데이터 위치:
+설치 시 프로그램을 `%ProgramFiles%\RunnerFleet\runner-manager.exe`로 복사하고 `NetworkService` 계정의 자동 시작 서비스 `RunnerFleet`을 등록합니다. 기본 데이터 위치:
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml
@@ -27,7 +27,7 @@ Start-Process http://127.0.0.1:8080
 
 GitHub에서 Settings → Actions → Runners → New self-hosted runner를 열고 Windows/x64를 선택합니다. `.\config.cmd --url https://github.com/owner/repo --token TOKEN`을 Manager에 붙여 넣고 분석한 뒤 이름과 레이블을 확인하여 추가합니다. 붙여 넣은 텍스트는 데이터로만 처리하며 스크립트로 실행하지 않습니다.
 
-Manager가 공식 Windows ZIP을 다운로드하고 공식 SHA256을 검증한 후 압축을 풀고 `NT AUTHORITY\NETWORK SERVICE` 계정의 무인 서비스를 등록합니다. 서비스 작업 전 공식 `.service` 파일과 실행 파일 경로를 확인합니다.
+Manager가 공식 Windows ZIP을 다운로드하고 공식 SHA256을 검증한 후 압축을 풀고 `NetworkService` 계정의 무인 서비스를 등록합니다. 서비스 작업 전 공식 `.service` 파일과 실행 파일 경로를 확인합니다.
 
 시작은 `desired_state: running`을 저장하고 자동 시작과 복구를 활성화합니다. 중지는 `stopped`를 저장하고 자동 시작과 복구를 비활성화한 뒤 서비스 중지를 기다립니다. 중지 상태는 재부팅 후에도 유지됩니다. Manager 재시작이나 업그레이드는 Runner를 중지하지 않으며 상태를 모르면 자동 생성이나 재시작을 하지 않습니다.
 
@@ -35,7 +35,7 @@ Manager가 공식 Windows ZIP을 다운로드하고 공식 SHA256을 검증한 �
 
 ## 빌드 환경과 유지보수
 
-MSVC, Windows SDK, Git 등은 `NetworkService`가 사용할 수 있도록 미리 설치해야 합니다. 개인 프로필, 자격 증명 및 매핑된 네트워크 드라이브는 자동 공유되지 않습니다. 모든 Runner는 동일 계정을 사용하며 인스턴스별 계정 격리는 없습니다. 웹은 기본적으로 로컬 주소에 바인딩되므로 원격 접속 전 주소와 기존 인증을 설정하세요.
+MSVC, Windows SDK, Git 등은 `NetworkService`가 사용할 수 있도록 미리 설치해야 합니다. 개인 프로필, 자격 증명 및 매핑된 네트워크 드라이브는 자동 공유되지 않습니다. Manager는 LocalSystem, Runner는 낮은 권한의 NetworkService를 사용합니다. LocalSystem Runner에서 전환할 때는 작업이 끝난 후 중지하고 시작하세요. 모든 Runner가 NetworkService를 공유하며 개별 계정 격리는 없습니다. 웹은 기본적으로 로컬 주소에 바인딩되므로 원격 접속 전 주소와 기존 인증을 설정하세요.
 
 ```powershell
 .\runner-manager.exe service stop
@@ -44,6 +44,30 @@ MSVC, Windows SDK, Git 등은 `NetworkService`가 사용할 수 있도록 미리
 ```
 
 제거는 Manager 서비스만 삭제하고 파일, 설정 및 Runner 서비스는 보존합니다. 업그레이드하려면 Manager를 중지하고 설치된 실행 파일을 바꾼 뒤 다시 시작합니다. Runner 작업은 계속 실행됩니다.
+
+## Windows 프록시 사용
+
+`service install` 시 Manager는 프록시 환경 변수를 우선 사용하고, 없으면 설치 사용자가 활성화한 수동 Windows 시스템 프록시(Clash/v2ray 등)를 읽습니다. 프록시 설정만 `config.yaml` 옆의 `proxy.env`에 저장하고 Manager ACL로 보호합니다. 서비스 시작 시 저장된 값을 읽으며 데스크톱 설정을 계속 감시하지 않습니다. 프록시를 켠 동일 사용자의 관리자 터미널을 사용하세요. PAC 스크립트와 SOCKS 전용 설정은 가져오지 않으므로 HTTP/혼합 포트를 사용하거나 `proxy.env`를 편집하세요.
+
+기존 설치 또는 포트 변경 시 관리자 PowerShell에서 다음을 실행하고, 작업이 끝난 후 웹에서 해당 Runner를 중지하고 시작하세요. 사용자 지정 설정에는 설치 시와 동일한 `-config` 경로를 전달하세요:
+
+```powershell
+.\runner-manager.exe service proxy-import
+.\runner-manager.exe service stop
+.\runner-manager.exe service start
+```
+
+새 Runner에는 등록 전, 기존 Runner에는 시작 시 프록시가 적용됩니다. 실행 중인 작업은 자동 재시작하지 않습니다. Windows 재부팅 후에도 프록시 프로그램이 실행 중이고 로컬 포트에 NetworkService가 접근할 수 있어야 합니다. `proxy.env`가 없는 기존 LocalSystem 설치는 위 가져오기 명령이 필요합니다.
+
+Runner별 수동 설정은 먼저 중지하고 `<base_path>\<runner>\.env`의 `Runner Fleet managed proxy` 블록 밖에 다음 내용을 추가한 후 시작하세요:
+
+```text
+http_proxy=http://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+no_proxy=localhost,127.0.0.1
+```
+
+수동 설정이 우선하며 다른 `.env` 설정은 보존됩니다. Manager의 `proxy.env`도 같은 형식이며 수정 후 Manager를 다시 시작하세요. 프록시 자격 증명은 해당 프록시를 사용하는 작업에 노출됩니다. 프록시 서비스 설치, 개인 인증 전달 및 빌드 도구별 프록시 설정은 이 기능에 포함되지 않습니다.
 
 ## Windows 인수 검증
 

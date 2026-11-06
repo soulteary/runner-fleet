@@ -137,6 +137,9 @@ func runManager(runCtx context.Context) {
 	}
 
 	setupLogging()
+	if err := platformConfigureEnvironment(*configPath); err != nil {
+		log.Fatalf("cannot load proxy configuration: %v", err)
+	}
 
 	handler.ConfigPath = *configPath
 	store := secrets.NewStore(*configPath)

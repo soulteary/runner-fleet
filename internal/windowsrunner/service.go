@@ -255,6 +255,9 @@ func (c Controller) SetRunning(ctx context.Context, dir string, running bool) er
 		}
 	}
 	if running {
+		if err := SyncRunnerProxy(dir); err != nil {
+			return fmt.Errorf("configure runner proxy: %w", err)
+		}
 		err = s.Start()
 	} else {
 		err = s.Stop()

@@ -31,7 +31,7 @@ func windowsDataDir() string {
 func platformServiceMain() (bool, error) {
 	if len(os.Args) > 1 && os.Args[1] == "service" {
 		if len(os.Args) < 3 {
-			return true, fmt.Errorf("usage: runner-manager.exe service install|start|stop|uninstall [-config path]")
+			return true, fmt.Errorf("usage: runner-manager.exe service install|start|stop|uninstall|proxy-import [-config path]")
 		}
 		flags := flag.NewFlagSet("service", flag.ContinueOnError)
 		configPath := flags.String("config", defaultConfigPath(), "absolute config file path")
@@ -90,8 +90,18 @@ func (managerService) Execute(_ []string, requests <-chan svc.ChangeRequest, sta
 }
 
 func manageService(action, configPath string) error {
-	if action != "install" && action != "start" && action != "stop" && action != "uninstall" {
+	if action != "install" && action != "start" && action != "stop" && action != "uninstall" && action != "proxy-import" {
 		return fmt.Errorf("unknown service action %q", action)
+	}
+	if action == "proxy-import" {
+		if !windows.GetCurrentProcessToken().IsElevated() {
+			return fmt.Errorf("proxy import requires an administrator terminal")
+		}
+		if err := importUserProxy(configPath, true); err != nil {
+			return err
+		}
+		fmt.Println("Restart the Manager service to load the proxy; Stop/Start existing runners after their jobs finish.")
+		return nil
 	}
 	m, err := mgr.Connect()
 	if err != nil {
@@ -117,6 +127,9 @@ func manageService(action, configPath string) error {
 			return err
 		}
 
+		if err := importUserProxy(configPath, false); err != nil {
+			return err
+		}
 		if err := cfg.Save(configPath); err != nil {
 			return err
 		}

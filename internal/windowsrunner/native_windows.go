@@ -53,7 +53,7 @@ func (m *nativeManager) CreateRunnerService(name, binary string) (Service, error
 	}
 	s, err := m.CreateService(name, binary, mgr.Config{
 		DisplayName: "GitHub Actions Runner (Runner Fleet)", StartType: mgr.StartAutomatic,
-		ServiceStartName: `NT AUTHORITY\NETWORK SERVICE`,
+		ServiceStartName: `NT AUTHORITY\NetworkService`,
 	}, name)
 	if err != nil {
 		return nil, err
@@ -80,10 +80,59 @@ func (s *nativeService) State() (State, error) {
 		return "", fmt.Errorf("unsupported runner service state %d", st.State)
 	}
 }
+
+// RunnerLogonAccount resolves NetworkService's well-known SID so GitHub's NTAccount
+// parser also receives the correct account name on non-English Windows.
+func RunnerLogonAccount() (string, error) {
+	sid, err := windows.CreateWellKnownSid(windows.WinNetworkServiceSid)
+	if err != nil {
+		return "", err
+	}
+	account, domain, _, err := sid.LookupAccount("")
+	if err != nil {
+		return "", fmt.Errorf("resolve NetworkService service account: %w", err)
+	}
+	if domain != "" {
+		account = domain + `\` + account
+	}
+	return account, nil
+}
+
+func isRunnerAccount(account string) bool {
+	if strings.EqualFold(account, `NT AUTHORITY\NetworkService`) {
+		return true // SCM uses this non-localized spelling.
+	}
+	sid, _, _, err := windows.LookupSID("", account)
+	return err == nil && sid.IsWellKnown(windows.WinNetworkServiceSid)
+}
+
 func (s *nativeService) SetEnabled(enable bool) error {
 	c, err := s.Config()
 	if err != nil {
 		return err
+	}
+	// Changing the configured account does not change a running process token.
+	// Require an explicit Stop before migrating, rather than interrupting a job
+	// or reporting that a running SYSTEM process already uses NetworkService.
+	if !isRunnerAccount(c.ServiceStartName) {
+		if enable {
+			state, err := s.State()
+			if err != nil {
+				return err
+			}
+			if state != Stopped {
+				return fmt.Errorf("runner service account must change to NetworkService; stop this runner, then start it again after its job finishes")
+			}
+		}
+		// A previous LocalSystem installation may have a SYSTEM-only DACL.
+		args, err := windows.DecomposeCommandLine(c.BinaryPathName)
+		if err != nil || len(args) == 0 {
+			return fmt.Errorf("cannot resolve runner service directory for account migration")
+		}
+		if err := ProtectRunner(filepath.Dir(filepath.Dir(args[0]))); err != nil {
+			return err
+		}
+		c.ServiceStartName = `NT AUTHORITY\NetworkService`
 	}
 	c.StartType = mgr.StartDisabled
 	if enable {
@@ -118,8 +167,8 @@ func (s *nativeService) Stop() error {
 	return err
 }
 
-// Protected DACLs prevent Runner jobs (NetworkService) from reading Manager
-// configuration/PATs or modifying the executable that LocalSystem runs.
+// Manager directories are restricted to SYSTEM and administrators. Runner
+// directories also grant NetworkService access for the separate service account.
 func ProtectManager(dir string) error { return protect(dir, "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)") }
 func ProtectRunner(dir string) error {
 	return protect(dir, "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;NS)")

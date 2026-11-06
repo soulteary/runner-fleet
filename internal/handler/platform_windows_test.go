@@ -22,11 +22,14 @@ import (
 // exercises Windows process arguments and working directories without GitHub.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "configure" {
-		var token string
+		var token, account string
 		unattended, service := false, false
 		for i, arg := range os.Args {
 			if arg == "--token" && i+1 < len(os.Args) {
 				token = os.Args[i+1]
+			}
+			if arg == "--windowslogonaccount" && i+1 < len(os.Args) {
+				account = os.Args[i+1]
 			}
 			if arg == "--unattended" {
 				unattended = true
@@ -35,7 +38,8 @@ func TestMain(m *testing.M) {
 				service = true
 			}
 		}
-		if !unattended || !service || os.Getenv("BASIC_AUTH_PASSWORD") != "" {
+		wantAccount, accountErr := windowsrunner.RunnerLogonAccount()
+		if accountErr != nil || account != wantAccount || !unattended || !service || os.Getenv("BASIC_AUTH_PASSWORD") != "" {
 			os.Exit(3)
 		}
 		f, err := os.OpenFile(".configure-attempts", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)

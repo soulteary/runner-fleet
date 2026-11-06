@@ -35,6 +35,8 @@ jobs:
           try {
             .\runner-manager.exe service install -config "$env:RUNNER_TEMP\RunnerFleetData\config.yaml"
             if ($LASTEXITCODE -ne 0) { throw 'service install failed' }
+            $manager = Get-CimInstance Win32_Service -Filter "Name='RunnerFleet'"
+            if ($manager.StartName -ne 'LocalSystem') { throw 'Manager must run as LocalSystem' }
             .\runner-manager.exe service start
             if ($LASTEXITCODE -ne 0) { throw 'service start failed' }
             $healthy = $false

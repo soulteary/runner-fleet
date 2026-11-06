@@ -51,6 +51,10 @@ func runWindowsRegistrationJob(j registrationJob) {
 			fail("installing Windows runner failed", err, nil)
 			return
 		}
+		if err := windowsrunner.SyncRunnerProxy(j.InstallDir); err != nil {
+			fail("configuring Windows runner proxy failed", err, nil)
+			return
+		}
 		out, err := runConfigScript(j.InstallDir, j.URL, j.Token, j.RunnerName, j.Labels, 2*time.Minute)
 		if err != nil {
 			stage := "registering Windows runner failed (check the name and use a fresh GitHub registration token)"
@@ -200,10 +204,14 @@ func lockPlatformUpdate(c echo.Context) (func(), error) {
 	return unlock, err
 }
 
-func registrationCommand(ctx context.Context, script string, args []string) *exec.Cmd {
+func registrationCommand(ctx context.Context, script string, args []string) (*exec.Cmd, error) {
+	account, err := windowsrunner.RunnerLogonAccount()
+	if err != nil {
+		return nil, err
+	}
 	args = append([]string{"configure"}, args...)
-	args = append(args, "--runasservice")
-	return exec.CommandContext(ctx, filepath.Join(filepath.Dir(script), "bin", "Runner.Listener.exe"), args...)
+	args = append(args, "--runasservice", "--windowslogonaccount", account)
+	return exec.CommandContext(ctx, filepath.Join(filepath.Dir(script), "bin", "Runner.Listener.exe"), args...), nil
 }
 func validatePlatformUpdate(cfg *config.Config, old config.RunnerItem, path string) error {
 	if !sameInstallPath(old.InstallPath(cfg.Runners.BasePath), (config.RunnerItem{Name: old.Name, Path: path}).InstallPath(cfg.Runners.BasePath)) {

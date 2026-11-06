@@ -12,7 +12,7 @@ Extract the Windows x64 release ZIP and run in **Administrator PowerShell**:
 Start-Process http://127.0.0.1:8080
 ```
 
-Installation copies the executable to `%ProgramFiles%\RunnerFleet\runner-manager.exe` and registers the automatic `RunnerFleet` service as `LocalSystem`. Default data locations:
+Installation copies the executable to `%ProgramFiles%\RunnerFleet\runner-manager.exe` and registers the automatic `RunnerFleet` service as `NetworkService`. Default data locations:
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml
@@ -27,7 +27,7 @@ For custom configuration, copy `config.windows.yaml.example` to a dedicated dire
 
 On GitHub, open Settings → Actions → Runners → New self-hosted runner and choose Windows/x64. Paste `.\config.cmd --url https://github.com/owner/repo --token TOKEN` into the Manager, parse it, confirm the name/labels, and add. Pasted text is data and is never executed as a shell script.
 
-The Manager downloads the official Windows ZIP, verifies its official SHA256, extracts it and registers an unattended service using `NT AUTHORITY\NETWORK SERVICE`. It reads the official `.service` marker and verifies the service executable path before control operations.
+The Manager downloads the official Windows ZIP, verifies its official SHA256, extracts it and registers an unattended service using `NetworkService`. It reads the official `.service` marker and verifies the service executable path before control operations.
 
 Start persists `desired_state: running` and enables automatic startup/recovery. Stop persists `stopped`, disables startup/recovery and waits for the service to stop; this survives reboot. Manager restart or upgrade leaves runner services running. Unknown status does not trigger automatic creation or restart.
 
@@ -35,7 +35,7 @@ Use a fresh GitHub token after registration failure. If registration succeeded b
 
 ## Build environment and maintenance
 
-Preinstall MSVC, Windows SDK, Git and other tools for `NetworkService`. Personal profile settings, credentials and mapped drives are not shared automatically. All runners use this account; there is no per-runner account isolation. The UI binds to loopback by default; configure the bind address and existing authentication before remote access.
+Preinstall MSVC, Windows SDK, Git and other tools for `NetworkService`. Personal profile settings, credentials and mapped drives are not shared automatically. The Manager uses LocalSystem and runners use the lower-privilege NetworkService account. If upgrading from a LocalSystem runner, finish its job, then Stop and Start it to switch accounts. All runners share NetworkService; there is no per-runner account isolation. The UI binds to loopback by default; configure the bind address and existing authentication before remote access.
 
 ```powershell
 .\runner-manager.exe service stop
@@ -44,6 +44,30 @@ Preinstall MSVC, Windows SDK, Git and other tools for `NetworkService`. Personal
 ```
 
 Uninstall removes only the Manager service, preserving files, configuration and runner services. To upgrade, stop the Manager, replace its installed executable, then start it again. Runner jobs continue running.
+
+## Use your Windows proxy
+
+During `service install`, the Manager captures proxy environment variables, or otherwise the installing user's enabled manual Windows system proxy (such as Clash/v2ray). It saves only proxy settings in `proxy.env` next to `config.yaml`, protected by the Manager directory ACL. The service loads this snapshot on startup; it does not continuously watch your desktop settings. Install from an elevated terminal under the same user who enabled the proxy. PAC scripts and SOCKS-only settings are not imported; use an HTTP/mixed port or edit `proxy.env` manually.
+
+For an existing installation or a changed proxy port, run the following in Administrator PowerShell, then Stop and Start each affected runner in the UI after its job finishes. Use the same `-config` path as installation for a custom configuration:
+
+```powershell
+.\runner-manager.exe service proxy-import
+.\runner-manager.exe service stop
+.\runner-manager.exe service start
+```
+
+New runners receive the proxy automatically before registration. Existing runners receive it when started; running jobs are never restarted automatically. The proxy application must be running and its local port accessible to NetworkService, including after Windows restarts. An existing LocalSystem installation without `proxy.env` needs the import command above.
+
+To override a runner manually, Stop it and edit `<base_path>\<runner>\.env`, adding entries outside the `Runner Fleet managed proxy` block, then Start it:
+
+```text
+http_proxy=http://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+no_proxy=localhost,127.0.0.1
+```
+
+Manual entries override inherited values and other `.env` settings are preserved. The same format is supported in the Manager's `proxy.env`; restart the Manager after editing it. Proxy credentials are visible to jobs using that proxy. Installing a proxy service, forwarding personal authentication, and configuring each build tool's own proxy are outside this import feature.
 
 ## Acceptance on Windows
 

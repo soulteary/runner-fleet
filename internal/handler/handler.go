@@ -268,7 +268,10 @@ func runConfigScript(installDir, url, token, name string, labels []string, timeo
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := registrationCommand(ctx, configScript, args)
+	cmd, err := registrationCommand(ctx, configScript, args)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = installDir
 	cmd.Env = childenv.Environ()
 	out, err := cmd.CombinedOutput()

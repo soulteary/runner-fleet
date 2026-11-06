@@ -35,7 +35,7 @@ func Preflight(ctx context.Context, cfg *config.Config) []CheckResult {
 	if _, err := os.Stat(cfg.Runners.BasePath); err != nil {
 		return []CheckResult{{Name: "Windows runner directory", Level: CheckWarn, Message: err.Error(), Hint: "The directory will be created when adding the first runner"}}
 	}
-	return []CheckResult{{Name: "Windows services", Level: CheckOK, Message: "Runner lifecycle uses Windows SCM; build tools must be accessible to NetworkService"}}
+	return []CheckResult{{Name: "Windows services", Level: CheckOK, Message: "Runner lifecycle uses Windows SCM; Manager uses LocalSystem and runners use NetworkService; build tools must be accessible to NetworkService"}}
 }
 func LogPreflight(results []CheckResult) {
 	for _, r := range results {

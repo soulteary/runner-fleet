@@ -27,7 +27,7 @@ Start-Process http://127.0.0.1:8080
 
 在 GitHub 的 Settings → Actions → Runners → New self-hosted runner 中选择 Windows/x64。将 `.\config.cmd --url https://github.com/owner/repo --token TOKEN` 粘贴到 Manager，解析并确认名称、标签后添加。粘贴内容仅作为数据解析，不会作为整段脚本执行。
 
-Manager 自动下载官方 Windows ZIP，校验官方 SHA256，解压并以 `NT AUTHORITY\NETWORK SERVICE` 注册无人值守服务。操作服务前，会读取官方 `.service` 文件并核对服务程序路径。
+Manager 自动下载官方 Windows ZIP，校验官方 SHA256，解压并以 `NetworkService` 注册无人值守服务。操作服务前，会读取官方 `.service` 文件并核对服务程序路径。
 
 启动会保存 `desired_state: running`，启用开机启动和故障恢复；停止会保存 `stopped`，禁用启动及恢复动作，并等待服务停止。停止状态跨重启保持。重启或升级 Manager 不会停止 Runner；状态未知时不会自动创建或重启。
 
@@ -35,7 +35,7 @@ Manager 自动下载官方 Windows ZIP，校验官方 SHA256，解压并以 `NT 
 
 ## 构建环境与维护
 
-MSVC、Windows SDK、Git 等工具需预先安装并对 `NetworkService` 可用。个人配置、凭据和映射网络盘不会自动共享。所有 Runner 共用该账户，不提供实例间账户隔离。网页默认仅监听本机；远程访问前需配置监听地址与现有认证。
+MSVC、Windows SDK、Git 等工具需预先安装并对 `NetworkService` 可用。个人配置、凭据和映射网络盘不会自动共享。Manager 使用 LocalSystem，Runner 使用低权限 NetworkService。从 LocalSystem Runner 升级时，先等待任务结束，再停止、启动以切换账户。所有 Runner 共用 NetworkService，不提供实例间账户隔离。网页默认仅监听本机；远程访问前需配置监听地址与现有认证。
 
 ```powershell
 .\runner-manager.exe service stop
@@ -44,6 +44,30 @@ MSVC、Windows SDK、Git 等工具需预先安装并对 `NetworkService` 可用�
 ```
 
 卸载仅移除 Manager 服务，保留文件、配置及 Runner 服务。升级时停止 Manager，替换已安装的 exe，再启动；Runner 任务继续运行。
+
+## 使用自己的 Windows 代理
+
+执行 `service install` 时，Manager 优先读取代理环境变量，否则读取安装用户已启用的手动 Windows 系统代理（例如 Clash/v2ray），仅将代理配置保存到 `config.yaml` 旁的 `proxy.env`，由 Manager 目录 ACL 保护。服务启动时加载这份快照，不会持续监听桌面代理设置。请使用开启代理的同一用户提升权限安装。PAC 脚本和仅 SOCKS 的配置不会导入，请使用 HTTP／混合端口或手动编辑 `proxy.env`。
+
+已有安装或代理端口变更时，在管理员 PowerShell 执行下列命令；然后等待任务结束，在网页对需要更新的 Runner 执行停止、启动。自定义配置需传入安装时相同的 `-config` 路径：
+
+```powershell
+.\runner-manager.exe service proxy-import
+.\runner-manager.exe service stop
+.\runner-manager.exe service start
+```
+
+新 Runner 在注册前自动获得代理；已有 Runner 在启动时获得代理，不会自动重启正在执行的任务。代理软件必须保持运行，且本地端口需允许 NetworkService 访问，Windows 重启后也一样。原有 LocalSystem 安装若尚无 `proxy.env`，需执行上述导入命令。
+
+如需单独覆盖某个 Runner，先停止它，编辑 `<base_path>\<runner>\.env`，在 `Runner Fleet managed proxy` 区块之外添加以下内容，再启动：
+
+```text
+http_proxy=http://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+no_proxy=localhost,127.0.0.1
+```
+
+手动配置优先于继承值，其他 `.env` 设置保持不变。Manager 的 `proxy.env` 也使用上述格式，修改后重启 Manager。代理凭据对使用该代理的任务可见。此导入功能不负责安装代理服务、转发个人身份认证，也不代替各构建工具自身的代理配置。
 
 ## Windows 实机验收
 

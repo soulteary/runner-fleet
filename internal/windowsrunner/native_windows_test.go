@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 // The test executable doubles as a harmless service host for real SCM tests.
@@ -32,6 +33,10 @@ func TestMain(m *testing.M) {
 type testServiceHost struct{}
 
 func (testServiceHost) Execute(_ []string, requests <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil || !user.User.Sid.IsWellKnown(windows.WinNetworkServiceSid) {
+		return false, 5
+	}
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	for req := range requests {
 		if req.Cmd == svc.Stop || req.Cmd == svc.Shutdown {
@@ -89,6 +94,17 @@ func TestWindowsNativeSCMTwoIndependentServices(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Exercise migration of a stopped service created by the old backend.
+		if i == 0 {
+			cfg, err := s.(*nativeService).Config()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.ServiceStartName = "LocalSystem"
+			if err := s.(*nativeService).UpdateConfig(cfg); err != nil {
+				t.Fatal(err)
+			}
+		}
 		_ = s.Close()
 		// Always remove the service, even if the marker write or assertions fail.
 		t.Cleanup(func() {
@@ -116,6 +132,39 @@ func TestWindowsNativeSCMTwoIndependentServices(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	// A running legacy account needs an explicit Stop/Start. Changing only its
+	// SCM configuration cannot change the running process's token.
+	manager, err := mgr.Connect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker, err := os.ReadFile(filepath.Join(dirs[0], ".service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := manager.OpenService(string(marker))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyConfig, err := legacy.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isRunnerAccount(legacyConfig.ServiceStartName) {
+		t.Fatal("stopped legacy service was not migrated to NetworkService")
+	}
+	legacyConfig.ServiceStartName = "LocalSystem"
+	if err := legacy.UpdateConfig(legacyConfig); err != nil {
+		t.Fatal(err)
+	}
+	_ = legacy.Close()
+	_ = manager.Disconnect()
+	if err := Default.SetRunning(ctx, dirs[0], true); err == nil || !strings.Contains(err.Error(), "stop this runner") {
+		t.Fatalf("running legacy service must require explicit stop/start: %v", err)
+	}
+	if state, err := Default.Status(dirs[0]); err != nil || state != Running {
+		t.Fatalf("account migration interrupted a running job: %v %v", state, err)
+	}
 	if err := Default.SetRunning(ctx, dirs[0], false); err != nil {
 		t.Fatal(err)
 	}
@@ -136,9 +185,34 @@ func TestWindowsNativeSCMTwoIndependentServices(t *testing.T) {
 	}
 	_ = s.Close()
 	_ = m.Close()
+	if err := Default.SetRunning(ctx, dirs[0], true); err != nil {
+		t.Fatalf("explicit restart after migration failed: %v", err)
+	}
+	if state, err := Default.Status(dirs[0]); err != nil || state != Running {
+		t.Fatalf("migrated service did not run as NetworkService: %v %v", state, err)
+	}
 	for _, dir := range dirs {
 		if err := Default.Remove(ctx, dir); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestWindowsRunnerLogonAccount(t *testing.T) {
+	name, err := RunnerLogonAccount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{name, `NT AUTHORITY\NetworkService`} {
+		if !isRunnerAccount(account) {
+			t.Fatalf("NetworkService alias %q was treated as a legacy account", account)
+		}
+	}
+	if isRunnerAccount("LocalSystem") {
+		t.Fatal("LocalSystem was treated as NetworkService")
+	}
+	sid, _, _, err := windows.LookupSID("", name)
+	if err != nil || !sid.IsWellKnown(windows.WinNetworkServiceSid) {
+		t.Fatalf("registration account %q does not resolve to NetworkService: %v", name, err)
 	}
 }

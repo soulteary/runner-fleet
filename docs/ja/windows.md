@@ -12,7 +12,7 @@ Windows x64 のリリース ZIP を展開し、**管理者 PowerShell** で実�
 Start-Process http://127.0.0.1:8080
 ```
 
-プログラムを `%ProgramFiles%\RunnerFleet\runner-manager.exe` にコピーし、`LocalSystem` の自動起動サービス `RunnerFleet` を登録します。既定のデータ配置：
+プログラムを `%ProgramFiles%\RunnerFleet\runner-manager.exe` にコピーし、`NetworkService` の自動起動サービス `RunnerFleet` を登録します。既定のデータ配置：
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml
@@ -27,7 +27,7 @@ Start-Process http://127.0.0.1:8080
 
 GitHub の Settings → Actions → Runners → New self-hosted runner で Windows/x64 を選びます。`.\config.cmd --url https://github.com/owner/repo --token TOKEN` を Manager に貼り付けて解析し、名前とラベルを確認して追加します。貼り付けた内容はデータとして解析し、スクリプトとして実行しません。
 
-Manager は公式 Windows ZIP を取得し、公式 SHA256 を検証して展開し、`NT AUTHORITY\NETWORK SERVICE` で無人サービス登録します。制御前に公式 `.service` ファイルと実行ファイルのパスを確認します。
+Manager は公式 Windows ZIP を取得し、公式 SHA256 を検証して展開し、`NetworkService` で無人サービス登録します。制御前に公式 `.service` ファイルと実行ファイルのパスを確認します。
 
 起動は `desired_state: running` を保存して自動起動と障害復旧を有効化します。停止は `stopped` を保存し、起動と復旧を無効化して停止を待ちます。停止状態は再起動後も維持します。Manager の再起動や更新は Runner を停止せず、状態不明時に自動作成や再起動もしません。
 
@@ -35,7 +35,7 @@ Manager は公式 Windows ZIP を取得し、公式 SHA256 を検証して展開
 
 ## ビルド環境と保守
 
-MSVC、Windows SDK、Git などは `NetworkService` が利用できる形で事前にインストールします。個人プロファイル、資格情報、割り当てたネットワークドライブは自動共有されません。全 Runner が同じアカウントを使用し、インスタンス別のアカウント分離はありません。Web は既定でローカルのみ待ち受けるため、遠隔アクセス前にアドレスと既存の認証を設定します。
+MSVC、Windows SDK、Git などは `NetworkService` が利用できる形で事前にインストールします。個人プロファイル、資格情報、割り当てたネットワークドライブは自動共有されません。Manager は LocalSystem、Runner は低権限の NetworkService を使用します。LocalSystem の Runner から移行する場合はジョブ完了後に停止、起動してください。全 Runner が NetworkService を共有し、個別のアカウント分離はありません。Web は既定でローカルのみ待ち受けるため、遠隔アクセス前にアドレスと既存の認証を設定します。
 
 ```powershell
 .\runner-manager.exe service stop
@@ -44,6 +44,30 @@ MSVC、Windows SDK、Git などは `NetworkService` が利用できる形で事�
 ```
 
 アンインストールは Manager サービスのみを削除し、ファイル、設定、Runner サービスは保持します。更新時は Manager を停止し、インストール済みの exe を交換して再起動します。Runner のジョブは継続します。
+
+## Windows のプロキシを使う
+
+`service install` 時に Manager はプロキシ環境変数を優先し、未設定ならインストールユーザーが有効にした手動 Windows システムプロキシ（Clash/v2ray など）を読み取ります。プロキシ設定だけを `config.yaml` 隣の `proxy.env` に保存し、Manager の ACL で保護します。サービス起動時に保存値を読み込み、デスクトップ設定は常時監視しません。プロキシを有効にしたユーザーの昇格端末を使用してください。PAC と SOCKS のみの設定は取り込まず、HTTP／混合ポートを使うか `proxy.env` を編集します。
+
+既存環境やポート変更時は管理者 PowerShell で次を実行し、ジョブ完了後に対象 Runner を画面で停止、起動してください。独自設定ではインストール時と同じ `-config` パスを指定します：
+
+```powershell
+.\runner-manager.exe service proxy-import
+.\runner-manager.exe service stop
+.\runner-manager.exe service start
+```
+
+新しい Runner には登録前、既存 Runner には起動時にプロキシを設定します。実行中のジョブは自動再起動しません。Windows 再起動後もプロキシアプリが稼働し、そのローカルポートに NetworkService が接続できる必要があります。`proxy.env` のない既存 LocalSystem 環境は上記の取り込みが必要です。
+
+Runner ごとに変更する場合は停止し、`<base_path>\<runner>\.env` の `Runner Fleet managed proxy` ブロック外に以下を追加して起動します：
+
+```text
+http_proxy=http://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+no_proxy=localhost,127.0.0.1
+```
+
+手動設定が優先され、他の `.env` 設定は保持されます。Manager の `proxy.env` も同形式で、編集後は Manager を再起動します。プロキシの資格情報は利用するジョブから参照できます。プロキシサービスの導入、個人認証の転送、各ビルドツール固有のプロキシ設定は行いません。
 
 ## Windows での受け入れ確認
 

@@ -16,8 +16,8 @@ func removeWindowsRunner(echo.Context) (bool, error)       { return false, nil }
 
 func lockPlatformUpdate(echo.Context) (func(), error) { return func() {}, nil }
 
-func registrationCommand(ctx context.Context, script string, args []string) *exec.Cmd {
-	return exec.CommandContext(ctx, script, args...)
+func registrationCommand(ctx context.Context, script string, args []string) (*exec.Cmd, error) {
+	return exec.CommandContext(ctx, script, args...), nil
 }
 func validatePlatformUpdate(*config.Config, config.RunnerItem, string) error { return nil }
 func sameInstallPath(a, b string) bool                                       { return filepath.Clean(a) == filepath.Clean(b) }
