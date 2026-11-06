@@ -1,3 +1,5 @@
+//go:build !windows
+
 package handler
 
 import (
@@ -7,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -16,6 +19,9 @@ import (
 )
 
 func TestProcessAPIReusesRunningRunnerAndDeliversStop(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires Linux process/filesystem semantics")
+	}
 	cfg := behaviorConfig(t)
 	dir := filepath.Join(cfg.Runners.BasePath, "demo")
 	if err := os.MkdirAll(dir, 0700); err != nil {

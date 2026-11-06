@@ -70,9 +70,7 @@ func startRunner(installDir string) error {
 	cmd.Dir = installDir
 	// run.sh 跑的是用户的 Job：不能把注入给 Agent 的 AGENT_TOKEN 传下去，见 internal/childenv
 	cmd.Env = childenv.Environ()
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
+	runnerproc.ConfigureCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}

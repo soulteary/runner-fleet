@@ -169,7 +169,7 @@
   "parse.filled": "已填充：目标类型 {{target_type}}，目标 {{target}}{{token_part}}",
   "parse.filled_token": "，Token 已填入",
   "parse.invalid_url": "URL 格式无效",
-  "parse.label": "从 GitHub 复制命令解析（粘贴 ./config.sh --url ... --token ... 后点击解析）",
+  "parse.label": "从 GitHub 复制命令解析（粘贴 ./config.sh / .\\config.cmd --url ... --token ... 后点击解析）",
   "parse.no_url": "未找到 --url 参数",
   "parse.placeholder": "./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN",
   "parse.please_enter_command": "请输入命令",
@@ -204,5 +204,10 @@
   "toast.dismiss": "知道了",
   "toast.reload_list": "刷新列表",
   "toast.view_detail": "查看详情",
-  "api.remove_failed": "删除失败：%v"
+  "api.remove_failed": "删除失败：%v",
+  "api.windows_running": "Windows Runner 服务已运行",
+  "api.windows_stopped": "Windows Runner 服务已停止，系统重启后仍保持停止",
+  "api.windows_changed": "Runner 已发生变化，请刷新后重试",
+  "api.windows_repair_failed": "已注册 Runner 的服务修复失败：%v",
+  "api.windows_state_failed": "期望状态已保存，Windows 服务操作失败：%v"
 }

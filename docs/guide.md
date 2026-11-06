@@ -10,7 +10,7 @@ Deployment, configuration, adding runners, and security are covered here. For co
 
 ## 1. Deployment (Docker)
 
-- **Linux only**, `linux/amd64` and `linux/arm64`. Whether a runner is running is read from the process table through `/proc`; on any other OS every runner reports "not running", so start/stop and the self-heal sweep cannot work. Published images cover those two architectures.
+- Docker deployment uses Linux (`linux/amd64`, `linux/arm64`). Native Windows x64 service deployment is documented in [Windows services](windows.md).
 - **The interface and its messages follow your language; the logs are fixed to English.** The UI and what the server says back — API messages and toasts — are chosen from `?lang=`, the language cookie, or `Accept-Language`. A script that sends no `Accept-Language` gets English. Logs are English by decision, not by omission: a log line has no request to follow, its reader is whoever operates the deployment, and grep, Loki queries and alert rules all break when the same event shows up in a different language each run. The startup self-check goes to the log as well, prefixed `[preflight …]`.
 - Image is **Ubuntu**-based with .NET Core 6.0 dependencies; runs as **UID 1001**—host-mounted dirs must be writable by that user (e.g. `chown 1001:1001 config runners`).
 - ~15 seconds after start, registered but stopped runners are auto-started; periodic check every 5 minutes.
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` or `repo` | required |
 | `runners.items[].target` | Org name, or `owner/repo` | required |
 | `runners.items[].labels` | Custom labels; a workflow's `runs-on` selects on them | empty |
+| `runners.items[].desired_state` | Windows service intent: `running` or `stopped`; manual stop survives reboot | `running` |
 | `runners.items[].container_image` | Per-runner image override (container mode); falls back to the global value | empty |
 | `runners.items[].job_docker_backend` | Per-runner Docker backend override (container mode); falls back to the global value | empty |
 | `runners.resources` | Resource limits for runner containers (`cpus` / `memory` / `memory_swap` / `pids_limit`), passed to `docker create` and applied to existing containers via `docker update` on start | empty (unlimited) |

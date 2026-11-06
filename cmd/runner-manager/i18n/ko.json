@@ -169,7 +169,7 @@
   "parse.filled": "입력됨: 대상 유형 {{target_type}}, 대상 {{target}}{{token_part}}",
   "parse.filled_token": ", 토큰 입력됨",
   "parse.invalid_url": "URL 형식이 잘못되었습니다",
-  "parse.label": "GitHub 명령 구문 분석(./config.sh --url ... --token ... 붙여넣기 후 구문 분석 클릭)",
+  "parse.label": "GitHub 명령 구문 분석(./config.sh / .\\config.cmd --url ... --token ... 붙여넣기 후 구문 분석 클릭)",
   "parse.no_url": "--url 인수가 없습니다",
   "parse.placeholder": "./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN",
   "parse.please_enter_command": "명령을 입력하세요",
@@ -204,5 +204,10 @@
   "toast.dismiss": "닫기",
   "toast.reload_list": "목록 새로고침",
   "toast.view_detail": "자세히 보기",
-  "api.remove_failed": "삭제 실패: %v"
+  "api.remove_failed": "삭제 실패: %v",
+  "api.windows_running": "Windows Runner 서비스가 실행 중입니다",
+  "api.windows_stopped": "Windows Runner 서비스가 중지되었으며 재부팅 후에도 유지됩니다",
+  "api.windows_changed": "Runner가 변경되었습니다. 새로 고친 후 다시 시도하세요",
+  "api.windows_repair_failed": "등록된 Runner 서비스를 복구하지 못했습니다: %v",
+  "api.windows_state_failed": "목표 상태가 저장되었지만 Windows 서비스 작업이 실패했습니다: %v"
 }

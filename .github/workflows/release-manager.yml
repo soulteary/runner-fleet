@@ -66,6 +66,18 @@ jobs:
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o "$dist_dir/runner-manager-darwin-amd64" ./cmd/runner-manager
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o "$dist_dir/runner-manager-darwin-arm64" ./cmd/runner-manager
 
+      - name: Package Windows x64 Manager
+        run: |
+          dist_dir="$RUNNER_TEMP/runner-fleet-dist"
+          package_dir="$RUNNER_TEMP/runner-fleet-windows-amd64"
+          mkdir -p "$package_dir"
+          LDFLAGS="-s -w -X main.Version=${{ steps.version.outputs.tag }} -X main.Commit=${{ steps.version.outputs.commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$package_dir/runner-manager.exe" ./cmd/runner-manager
+          cp config.windows.yaml.example "$package_dir/"
+          cp docs/windows.md "$package_dir/README.md"
+          cd "$package_dir"
+          zip -r "$dist_dir/runner-fleet-windows-amd64.zip" .
+
       - name: Generate checksums
         run: |
           cd "$RUNNER_TEMP/runner-fleet-dist"

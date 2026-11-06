@@ -3,19 +3,13 @@ package runner
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/soulteary/runner-fleet/internal/atomicfile"
-	"github.com/soulteary/runner-fleet/internal/childenv"
 	"github.com/soulteary/runner-fleet/internal/config"
-	"github.com/soulteary/runner-fleet/internal/runnerproc"
 )
 
 // 与 handler 写入的文件名一致，供 cron 与 API 读取
@@ -36,6 +30,7 @@ const (
 
 // RunnerInfo 供前端展示的 runner 信息
 type RunnerInfo struct {
+	DesiredState          string     `json:"desired_state,omitempty"`
 	Name                  string     `json:"name"`
 	Path                  string     `json:"path"`
 	TargetType            string     `json:"target_type"`
@@ -106,6 +101,7 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 			Labels:     append([]string(nil), item.Labels...),
 			InstallDir: installDir,
 		}
+		info.DesiredState = desiredState(item)
 		if cfg.Runners.ContainerMode {
 			info.JobDockerBackend = cfg.Runners.JobDockerBackend
 		}
@@ -113,6 +109,7 @@ func GetByName(cfg *config.Config, name string) *RunnerInfo {
 			info.Path = item.Name
 		}
 		info.Status, info.Running = getStatus(installDir)
+		applyWindowsServiceStatus(info)
 		info.RegistrationMessage, info.RegistrationCheckedAt = readRegistrationResult(installDir)
 		info.applyGitHubStatus(installDir)
 		info.GitHubURL = GitHubSettingsURL(item.TargetType, item.Target)
@@ -142,6 +139,7 @@ func List(cfg *config.Config) []RunnerInfo {
 			Labels:     append([]string(nil), item.Labels...),
 			InstallDir: installDir,
 		}
+		info.DesiredState = desiredState(item)
 		if cfg.Runners.ContainerMode {
 			info.JobDockerBackend = cfg.Runners.JobDockerBackend
 		}
@@ -156,10 +154,7 @@ func List(cfg *config.Config) []RunnerInfo {
 		dirs = append(dirs, installDir)
 	}
 	// 一次扫描认领所有安装目录：逐个判定等于把整张进程表读 len(list) 遍
-	procs := runnerproc.FindMany(dirs)
-	for i := range list {
-		list[i].Running = list[i].Status == StatusInstalled && len(procs[list[i].InstallDir]) > 0
-	}
+	applyLocalStatuses(list, dirs)
 	return list
 }
 
@@ -215,7 +210,7 @@ func getStatus(installDir string) (Status, bool) {
 	if status != StatusInstalled {
 		return status, false
 	}
-	return status, isProcessRunning(installDir)
+	return status, localRunning(installDir)
 }
 
 // readRegistrationResult 读取 handler 写入的注册结果，返回 message 与 at
@@ -300,15 +295,6 @@ func (r *RunnerInfo) applyGitHubStatus(installDir string) {
 	r.GitHubCheckAt, r.GitHubCheckError = gh.LastCheck, gh.Error
 }
 
-// isProcessRunning 检测本机是否有属于该安装目录的 Runner 进程存活。
-//
-// 只对「Runner 进程与 Manager 同在一个 PID namespace」的默认模式有意义。
-// 容器模式下 Runner 跑在各自的容器里，Manager 扫自己的 /proc 必然找不到，
-// 判定要走 ContainerRunnerStatus 问容器内的 Agent——见 ListWithLiveStatus。
-func isProcessRunning(installDir string) bool {
-	return runnerproc.Running(installDir)
-}
-
 // EnsureRunnerDir 确保 runner 目录存在并返回路径，且必须在 base_path 之下（防路径穿越）
 func EnsureRunnerDir(cfg *config.Config, name, subPath string) (string, error) {
 	dir := subPath
@@ -352,54 +338,6 @@ func EnsureRunnerDir(cfg *config.Config, name, subPath string) (string, error) {
 // 目录里有 GitHub 凭据，见 EnsureRunnerDir 的说明。
 const RunnerDirMode = 0o700
 
-// ConfigScriptName 返回当前系统的配置脚本名
-func ConfigScriptName() string {
-	if runtime.GOOS == "windows" {
-		return "config.cmd"
-	}
-	return "config.sh"
-}
-
-// RunScriptName 返回当前系统的运行脚本名
-func RunScriptName() string {
-	if runtime.GOOS == "windows" {
-		return "run.cmd"
-	}
-	return "run.sh"
-}
-
-var execCommand = exec.Command
-
-// Start 在 installDir 下后台启动 runner（执行 run.sh/run.cmd）
-// 将 installDir 转为绝对路径，避免相对路径在 exec 时随进程 CWD 解析导致找不到 run.sh
-func Start(installDir string) error {
-	absDir, err := filepath.Abs(installDir)
-	if err != nil {
-		return fmt.Errorf("cannot resolve the runner path: %w", err)
-	}
-	installDir = absDir
-	script := filepath.Join(installDir, RunScriptName())
-	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("run script %s not found: %w", script, err)
-	}
-	cmd := execCommand(script)
-	cmd.Dir = installDir
-	// run.sh 跑的是用户的 Job：不能把 Manager 自己的凭据传下去，见 internal/childenv
-	cmd.Env = childenv.Environ()
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	// 必须对子进程 Wait，否则在容器内（主进程为 PID 1）退出的 run.sh 会变成僵尸进程。
-	// 在后台 goroutine 中 Wait，不阻塞 Start 返回。
-	go func() {
-		_ = cmd.Wait()
-	}()
-	return nil
-}
-
 // StartIfInstalled 若已注册则启动：容器模式调 StartRunnerContainer，否则调 Start。供 main 与 handler 统一“已注册未运行则启动”逻辑
 func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir string) error {
 	if cfg == nil {
@@ -408,39 +346,5 @@ func StartIfInstalled(ctx context.Context, cfg *config.Config, name, installDir 
 	if cfg.Runners.ContainerMode {
 		return StartRunnerContainer(ctx, cfg, name, installDir)
 	}
-	return Start(installDir)
-}
-
-// Stop 向该安装目录下的 Runner 进程发送 SIGTERM。
-//
-// runnerproc.Find 把监护脚本排在监听器之前，这里按序发信号：先让 run.sh 退出，
-// 它的 while 循环才不会在监听器被终止后又拉起一个新的。
-// 一个都没找到时返回错误——调用方（界面上的「停止」）需要知道没停成。
-func Stop(installDir string) error {
-	absDir, err := filepath.Abs(installDir)
-	if err != nil {
-		return fmt.Errorf("cannot resolve the runner path: %w", err)
-	}
-	installDir = absDir
-	pids := runnerproc.Find(installDir)
-	if len(pids) == 0 {
-		return fmt.Errorf("no running runner process found under %s", installDir)
-	}
-	var firstErr error
-	for _, pid := range pids {
-		process, err := os.FindProcess(pid)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		// 进程可能在扫描与发信号之间自己退了，ESRCH 不算失败
-		if err := process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
+	return startLocal(ctx, installDir)
 }

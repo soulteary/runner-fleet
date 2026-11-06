@@ -28,6 +28,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/runner"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
 	"github.com/soulteary/runner-fleet/internal/secrets"
+	"github.com/soulteary/runner-fleet/internal/windowsrunner"
 	secure "github.com/soulteary/secure-kit/v2"
 )
 
@@ -109,7 +110,17 @@ func newTemplateRenderer() *templateRenderer {
 }
 
 func main() {
-	configPath := flag.String("config", "config/config.yaml", "path to the config file")
+	if handled, err := platformServiceMain(); handled {
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	runManager(context.Background())
+}
+
+func runManager(runCtx context.Context) {
+	configPath := flag.String("config", defaultConfigPath(), "path to the config file")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
@@ -162,7 +173,11 @@ func main() {
 	}()
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case <-runCtx.Done():
+	}
+	signal.Stop(quit)
 	log.Println("shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -182,7 +197,7 @@ func main() {
 	// 容器模式下 Runner 容器有自己的生命周期，与 Manager 无关：Manager 重启或升级
 	// 不该顺手把别人的 Job 停掉。默认模式下则相反——Runner 进程就在本容器里，
 	// Manager 一走，内核就会 SIGKILL 它们。
-	if !cfg.Runners.ContainerMode {
+	if !cfg.Runners.ContainerMode && !windowsrunner.Enabled {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), runnerproc.StopGracePeriod)
 		stopDefaultModeRunners(stopCtx, cfg, runnerproc.StopGracePeriod-runnerproc.ShutdownReserve)
 		stopCancel()
@@ -295,6 +310,10 @@ func runAutoStartRunners(configPath string) {
 // PID namespace，List 的 Running 恒为 false，照着它拉会把每个 runner 每轮都再起一遍。
 // 探测不出来的（StatusUnknown）一律跳过——不确知它没在跑，就别动它。
 func startIdleRunners(ctx context.Context, cfg *config.Config, action string) {
+	if windowsrunner.Enabled {
+		runner.ReconcileWindows(ctx, handler.ConfigPath)
+		return
+	}
 	for _, info := range runner.ListWithLiveStatus(ctx, cfg) {
 		if info.Status != runner.StatusInstalled || info.Running {
 			continue

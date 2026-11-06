@@ -10,7 +10,7 @@
 
 ## 一、部署（Docker）
 
-- **仅支持 Linux**，`linux/amd64` 与 `linux/arm64`。Runner 是否在运行是查 `/proc` 的进程表得来的；换别的操作系统上每个 Runner 都会读成「未运行」，启停与自动拉起因而都无法工作。已发布镜像覆盖这两种架构。
+- Docker 部署支持 Linux（`linux/amd64`、`linux/arm64`）。Windows x64 原生服务部署见 [Windows 使用说明](windows.md)。
 - **界面与它的消息跟随语言，日志固定英文。** 界面以及服务端回给你的那些话——API 消息与提示条——来源依次是 `?lang=`、语言 cookie、`Accept-Language`；不带 `Accept-Language` 的脚本拿到英文。日志固定英文是有意为之，不是没译：一条日志没有请求可依，它的读者是运维，而 grep、Loki 查询与告警规则最怕的就是同一件事换着语言出现。启动自检同样写进日志，行首是 `[preflight …]`。
 - 镜像基于 **Ubuntu**，预装 .NET Core 6.0 依赖；以 **UID 1001** 运行，宿主机挂载目录需对该用户可写（如 `chown 1001:1001 config runners`）。
 - 启动约 15 秒后自动拉起已注册未运行的 Runner，并每 5 分钟定时检查。
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` 或 `repo` | 必填 |
 | `runners.items[].target` | 组织名，或 `owner/repo` | 必填 |
 | `runners.items[].labels` | 自定义标签；workflow 的 `runs-on` 按它挑 Runner | 空 |
+| `runners.items[].desired_state` | Windows 服务期望状态：`running` / `stopped`；手动停止跨重启保持 | `running` |
 | `runners.items[].container_image` | 按 Runner 覆盖容器镜像（仅容器模式），留空回落全局 | 空 |
 | `runners.items[].job_docker_backend` | 按 Runner 覆盖 Job Docker 后端（仅容器模式），留空回落全局 | 空 |
 | `runners.resources` | Runner 容器资源上限（`cpus` / `memory` / `memory_swap` / `pids_limit`），透传给 `docker create`；启动时通过 `docker update` 对存量容器同样生效 | 空（不限制） |

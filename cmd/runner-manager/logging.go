@@ -23,7 +23,7 @@ const serviceName = "runner-fleet"
 // 默认 console 而不是 kit 的默认 JSON：现在的输出是人读的，
 // 默认切成 JSON 等于让所有在终端里看日志的人先吃一记退化。
 // 要 JSON 的场合（采集到 ELK/Loki）设 LOG_FORMAT=json。
-func setupLogging() *logkit.Logger { return setupLoggingTo(os.Stderr) }
+func setupLogging() *logkit.Logger { return setupLoggingTo(platformLogOutput()) }
 
 // setupLoggingTo 是 setupLogging 的可测形式：输出目标由调用方给。
 func setupLoggingTo(out io.Writer) *logkit.Logger {

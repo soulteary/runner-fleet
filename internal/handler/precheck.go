@@ -21,6 +21,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/soulteary/runner-fleet/internal/config"
 	"github.com/soulteary/runner-fleet/internal/runner"
+	"github.com/soulteary/runner-fleet/internal/windowsrunner"
 )
 
 // 冲突类型，前端据此做本地化文案，未知类型回落到 message
@@ -100,7 +101,7 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 
 	nameTaken := false
 	for _, existing := range cfg.Runners.Items {
-		if existing.Name == name {
+		if existing.Name == name || (windowsrunner.Enabled && strings.EqualFold(existing.Name, name)) {
 			nameTaken = true
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictNameTaken,
@@ -111,7 +112,7 @@ func collectRunnerConflicts(cfg *config.Config, name, path string, lookup contai
 			})
 			continue
 		}
-		if filepath.Clean(existing.InstallPath(cfg.Runners.BasePath)) == filepath.Clean(installDir) {
+		if sameInstallPath(existing.InstallPath(cfg.Runners.BasePath), installDir) {
 			conflicts = append(conflicts, RunnerConflict{
 				Type:       ConflictInstallDir,
 				Level:      ConflictLevelError,

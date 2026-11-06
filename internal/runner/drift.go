@@ -1,3 +1,5 @@
+//go:build !windows
+
 // 容器配置漂移检测。
 //
 // Runner 容器的镜像、网络、挂载目录、Job Docker 后端全都只在 docker create 那一刻定下来，

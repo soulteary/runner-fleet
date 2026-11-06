@@ -252,11 +252,12 @@ func parseDockerSize(v string) (int64, error) {
 
 // RunnerItem 单个 Runner 配置
 type RunnerItem struct {
-	Name       string   `yaml:"name"`        // 显示名称，也用作目录名
-	Path       string   `yaml:"path"`        // 相对 base_path 的目录，空则用 name
-	TargetType string   `yaml:"target_type"` // org | repo
-	Target     string   `yaml:"target"`      // org 名或 owner/repo
-	Labels     []string `yaml:"labels"`      // 自定义标签
+	DesiredState string   `yaml:"desired_state,omitempty" json:"desired_state,omitempty"`
+	Name         string   `yaml:"name"`        // 显示名称，也用作目录名
+	Path         string   `yaml:"path"`        // 相对 base_path 的目录，空则用 name
+	TargetType   string   `yaml:"target_type"` // org | repo
+	Target       string   `yaml:"target"`      // org 名或 owner/repo
+	Labels       []string `yaml:"labels"`      // 自定义标签
 
 	// 以下仅容器模式有效，留空则回落到 runners 下的全局同名配置。
 	// 一台机器上不同项目往往需要不同工具链（如 Flutter+Android 与 Node），
@@ -322,7 +323,7 @@ func defaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Port: 8080,
-			Addr: "0.0.0.0",
+			Addr: defaultServerAddr(),
 		},
 		Runners: RunnersConfig{
 			BasePath:         "./runners",
@@ -339,6 +340,9 @@ func defaultConfig() *Config {
 	}
 }
 
+// WantsRunning treats old configuration files as enabled, without rewriting them.
+func (r RunnerItem) WantsRunning() bool { return r.DesiredState != "stopped" }
+
 // Load 从文件加载配置。若文件不存在，则基于默认配置与环境变量生成配置并写入 path，然后返回。
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -346,6 +350,9 @@ func Load(path string) (*Config, error) {
 		if os.IsNotExist(err) {
 			c := defaultConfig()
 			applyEnvOverrides(c)
+			if err := resolvePlatformPaths(c, path); err != nil {
+				return nil, err
+			}
 			if err := Validate(c); err != nil {
 				return nil, err
 			}
@@ -394,6 +401,9 @@ func Load(path string) (*Config, error) {
 		c.Runners.DindHost = "runner-dind"
 	}
 	applyEnvOverrides(&c)
+	if err := resolvePlatformPaths(&c, path); err != nil {
+		return nil, err
+	}
 	if err := Validate(&c); err != nil {
 		return nil, err
 	}
@@ -402,6 +412,9 @@ func Load(path string) (*Config, error) {
 
 // Validate 校验配置：同名 Runner 冲突等
 func Validate(c *Config) error {
+	if err := validatePlatformConfig(c); err != nil {
+		return err
+	}
 	seen := make(map[string]bool)
 	seenContainerNames := make(map[string]string)
 	seenInstallPaths := make(map[string]string)
@@ -446,6 +459,9 @@ func Validate(c *Config) error {
 		}
 	}
 	for i, item := range c.Runners.Items {
+		if item.DesiredState != "" && item.DesiredState != "running" && item.DesiredState != "stopped" {
+			return fmt.Errorf("runners.items[%d].desired_state must be running or stopped", i)
+		}
 		name := strings.TrimSpace(item.Name)
 		path := strings.TrimSpace(item.Path)
 		targetType := strings.ToLower(strings.TrimSpace(item.TargetType))
@@ -478,12 +494,13 @@ func Validate(c *Config) error {
 				return fmt.Errorf("runners.items[%d].job_docker_backend can only be set when container_mode=true", i)
 			}
 		}
-		if seen[name] {
+		nameKey := platformIdentity(name)
+		if seen[nameKey] {
 			return fmt.Errorf("runners.items has two runners with the same name: %s", name)
 		}
-		seen[name] = true
+		seen[nameKey] = true
 		installPath := item.InstallPath(c.Runners.BasePath)
-		installKey := filepath.Clean(installPath)
+		installKey := platformIdentity(filepath.Clean(installPath))
 		if existing, ok := seenInstallPaths[installKey]; ok {
 			return fmt.Errorf("runners.items has an install directory conflict: %s and %s both map to %s", existing, name, installKey)
 		}
@@ -512,6 +529,9 @@ func NormalizedContainerName(name string) string {
 // IsSafeRunnerNameOrPath 校验 name/path 不含路径穿越或非法字符（禁止 .. / \）
 func IsSafeRunnerNameOrPath(s string) bool {
 	if s == "" {
+		return false
+	}
+	if !safePlatformName(s) {
 		return false
 	}
 	return !strings.Contains(s, "..") && !strings.Contains(s, "/") && !strings.Contains(s, "\\")

@@ -10,7 +10,7 @@
 
 ## 1. デプロイ (Docker)
 
-- **Linux のみ**、`linux/amd64` と `linux/arm64`。Runner が動いているかは `/proc` のプロセステーブルから読みます。ほかの OS ではすべての Runner が「停止中」と報告されるため、起動・停止も自動復帰も機能しません。公開イメージはこの 2 アーキテクチャを対象にしています。
+- Docker 配備は Linux (`linux/amd64`、`linux/arm64`) を使用します。Windows x64 ネイティブサービスは [Windows ガイド](windows.md) を参照してください。
 - **画面とそのメッセージは言語に追従し、ログは英語に固定です。** UI と、サーバーが返すもの——API メッセージとトースト——は `?lang=`、言語 cookie、`Accept-Language` の順で決まり、`Accept-Language` を送らないスクリプトには英語が返ります。ログが英語なのは訳し残しではなく決めごとです。ログ行には追従すべきリクエストがなく、読者は運用担当であり、grep・Loki のクエリ・アラートルールは同じ事象が実行ごとに違う言語で現れると壊れます。起動時セルフチェックもログに出力され、行頭に `[preflight …]` が付きます。
 - イメージは **Ubuntu** ベースで .NET Core 6.0 の依存関係を含み、**UID 1001** で実行されます。ホストにマウントするディレクトリはこのユーザーが書き込み可能である必要があります（例: `chown 1001:1001 config runners`）。
 - 起動から約 15 秒後に、登録済みだが停止している Runner が自動で起動し、5 分ごとに定期チェックされます。
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` または `repo` | 必須 |
 | `runners.items[].target` | Organization 名、または `owner/repo` | 必須 |
 | `runners.items[].labels` | カスタムラベル。workflow の `runs-on` がこれで選ぶ | 空 |
+| `runners.items[].desired_state` | Windows サービスの希望状態：`running` / `stopped`。手動停止は再起動後も維持 | `running` |
 | `runners.items[].container_image` | Runner ごとのイメージ上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.items[].job_docker_backend` | Runner ごとの Docker バックエンド上書き（コンテナモード）。空ならグローバル値 | 空 |
 | `runners.resources` | Runner コンテナのリソース上限（`cpus` / `memory` / `memory_swap` / `pids_limit`）。`docker create` に渡すほか、起動時に `docker update` で既存コンテナにも適用します | 空（無制限） |

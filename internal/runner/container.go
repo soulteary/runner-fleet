@@ -1,3 +1,5 @@
+//go:build !windows
+
 // 容器模式：通过 Docker CLI 与 Runner 容器内 Agent 实现 C/S 控制与状态查询。
 // 本包负责 Runner 容器的创建/启停/删除及与 Agent 的 HTTP 通信；Manager 仅编排，不承载 Runner 进程。
 package runner

@@ -8,7 +8,7 @@
 
 HTTP management UI built with Golang Echo to view and manage multiple self-hosted GitHub Actions Runners on one machine. YAML-based config, no database required.
 
-**Linux only** (`linux/amd64`, `linux/arm64`): runner liveness is read from `/proc`. The UI and its messages follow six languages; logs are fixed to English — see the [User Guide](docs/guide.md#1-deployment-docker).
+**Linux containers** (`linux/amd64`, `linux/arm64`) and **native Windows x64 services**: see the [Windows guide](docs/windows.md) for Windows 11 / Server 2022. Linux runner liveness is read from `/proc`. The UI and its messages follow six languages; logs are fixed to English — see the [User Guide](docs/guide.md#1-deployment-docker).
 
 ![](.github/assets/preview.jpg)
 

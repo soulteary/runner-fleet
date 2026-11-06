@@ -169,7 +169,7 @@
   "parse.filled": "Rempli : type {{target_type}}, cible {{target}}{{token_part}}",
   "parse.filled_token": ", token renseigné",
   "parse.invalid_url": "Format d'URL invalide",
-  "parse.label": "Analyser la commande GitHub (collez ./config.sh --url ... --token ... puis cliquez sur Analyser)",
+  "parse.label": "Analyser la commande GitHub (collez ./config.sh / .\\config.cmd --url ... --token ... puis cliquez sur Analyser)",
   "parse.no_url": "Argument --url manquant",
   "parse.placeholder": "./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN",
   "parse.please_enter_command": "Veuillez entrer la commande",
@@ -204,5 +204,10 @@
   "toast.dismiss": "Fermer",
   "toast.reload_list": "Actualiser la liste",
   "toast.view_detail": "Voir les détails",
-  "api.remove_failed": "Échec de la suppression : %v"
+  "api.remove_failed": "Échec de la suppression : %v",
+  "api.windows_running": "Le service Runner Windows est en cours d’exécution",
+  "api.windows_stopped": "Le service Runner Windows est arrêté, y compris après redémarrage",
+  "api.windows_changed": "Le Runner a changé ; actualisez et réessayez",
+  "api.windows_repair_failed": "Réparation du service Runner enregistré impossible : %v",
+  "api.windows_state_failed": "État souhaité enregistré ; échec de l’opération du service Windows : %v"
 }
