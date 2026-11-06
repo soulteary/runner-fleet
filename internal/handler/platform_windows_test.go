@@ -205,6 +205,75 @@ func TestWindowsRegistrationRetryPreservesGitHubIdentity(t *testing.T) {
 	}
 }
 
+func TestWindowsOfficialServiceRegistrationRetryReusesIdentity(t *testing.T) {
+	cfg, s, dir := windowsAPIConfig(t)
+	s.binary = "\"" + filepath.Join(dir, "bin", "RunnerService.exe") + "\""
+	writeRegistrationResult(dir, false, "registered; Windows service setup failed; click Start to retry")
+	j := registrationJob{BasePath: cfg.Runners.BasePath, InstallDir: dir, RunnerName: "demo", Token: "unused"}
+	for range 2 {
+		runWindowsRegistrationJob(j)
+	}
+	info := runner.GetByName(cfg, "demo")
+	if !info.Running || info.Probe != nil || info.RegistrationMessage != "registered; Windows service configured" {
+		t.Fatalf("official service not recognized: %+v", info)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, ".runner")); err != nil || string(data) != "registered fixture" {
+		t.Fatal("registration was overwritten", err)
+	}
+	if s.starts != 0 || s.deleted {
+		t.Fatal("running official service was restarted or deleted")
+	}
+}
+
+func TestWindowsStartUpdatesHistoricalResultOnlyAfterConfirmedSuccess(t *testing.T) {
+	for _, failure := range []string{"", "path", "query"} {
+		t.Run("failure="+failure, func(t *testing.T) {
+			cfg, s, dir := windowsAPIConfig(t)
+			s.binary = "\"" + filepath.Join(dir, "bin", "RunnerService.exe") + "\""
+			if failure == "path" {
+				s.binary = "\"" + filepath.Join(dir, "bin", "Other.exe") + "\""
+			}
+			if failure == "query" {
+				s.fail = errors.New("SCM query denied")
+			}
+			const previous = "registered; Windows service setup failed; click Start to retry"
+			writeRegistrationResult(dir, false, previous)
+			before, err := os.ReadFile(filepath.Join(dir, runner.RegistrationResultFile))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A status probe alone must not rewrite historical errors.
+			if info := runner.GetByName(cfg, "demo"); info.RegistrationMessage != previous {
+				t.Fatal("probe hid historical error", info)
+			}
+			rec := windowsAPICall(StartRunner, "")
+			after, err := os.ReadFile(filepath.Join(dir, runner.RegistrationResultFile))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if failure != "" {
+				if rec.Code != 500 || string(after) != string(before) {
+					t.Fatalf("failed repair changed historical result: %d %s", rec.Code, after)
+				}
+			} else {
+				var result struct {
+					Success bool
+					Message string
+				}
+				if err := json.Unmarshal(after, &result); err != nil {
+					t.Fatal(err)
+				}
+				if rec.Code != 200 || !result.Success || result.Message != "registered; Windows service configured" {
+					t.Fatalf("successful repair left historical error: %d %s", rec.Code, after)
+				}
+			}
+			if s.starts != 0 || s.deleted {
+				t.Fatal("running service was restarted or deleted")
+			}
+		})
+	}
+}
+
 func TestWindowsDeleteCleansServiceBeforeDirectory(t *testing.T) {
 	_, s, dir := windowsAPIConfig(t)
 	if rec := windowsAPICall(RemoveRunnerByName, ""); rec.Code != 200 {

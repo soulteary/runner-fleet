@@ -77,8 +77,9 @@ func matchesBinary(command, dir, name string) bool {
 		binary, args, _ = strings.Cut(command, " ")
 		args = strings.TrimSpace(args)
 	}
-	// RunnerService.exe receives its SCM service name as its sole argument.
-	if args != name && args != "\""+name+"\"" {
+	// Official services have no arguments; repaired services may receive their
+	// SCM service name as the sole argument. Reject all other arguments.
+	if args != "" && args != name && args != "\""+name+"\"" {
 		return false
 	}
 	want, err := filepath.Abs(serviceBinary(dir))

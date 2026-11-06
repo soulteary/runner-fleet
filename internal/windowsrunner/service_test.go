@@ -5,6 +5,7 @@ package windowsrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,96 @@ func serviceFixture(t *testing.T) (Controller, *fakeManager, *fakeService, strin
 	m := &fakeManager{services: map[string]*fakeService{name: s}}
 	c := Controller{Open: func() (Manager, error) { return m, nil }, Protect: func(string) error { return nil }, Cleanup: func(string) error { return nil }}
 	return c, m, s, dir
+}
+
+func TestMatchesBinaryOfficialAndNamedCommands(t *testing.T) {
+	name := "actions.runner.owner.repo.demo"
+	// No filesystem access is needed here; keep this path free of whitespace
+	// even when the test user's temporary directory contains spaces.
+	plainDir := filepath.Join(string(filepath.Separator), "RunnerFleet", "runners", "demo")
+	for _, suffix := range []string{"", " " + name, " \"" + name + "\""} {
+		if !matchesBinary(serviceBinary(plainDir)+suffix, plainDir, name) {
+			t.Fatalf("unquoted executable rejected with suffix %q", suffix)
+		}
+	}
+	for _, path := range []string{"runner", "构建 space"} {
+		dir := filepath.Join(t.TempDir(), path)
+		binary := serviceBinary(dir)
+		quoted := "\"" + binary + "\""
+		for _, tt := range []struct {
+			name, command string
+			want          bool
+		}{
+			{"official", quoted, true},
+			{"official whitespace", " \t" + quoted + "\t ", true},
+			{"named", quoted + " " + name, true},
+			{"quoted name", quoted + " \"" + name + "\"", true},
+			{"case insensitive path", "\"" + strings.ToUpper(binary) + "\"", true},
+			{"foreign directory", "\"" + serviceBinary(dir+"-other") + "\"", false},
+			{"foreign executable", "\"" + filepath.Join(dir, "bin", "Runner.Listener.exe") + "\"", false},
+			{"wrong service", quoted + " actions.runner.other", false},
+			{"extra argument", quoted + " " + name + " extra", false},
+			{"quoted extra argument", quoted + " \"" + name + "\" extra", false},
+			{"empty argument", quoted + " \"\"", false},
+			{"unterminated quote", "\"" + binary, false},
+		} {
+			t.Run(path+"/"+tt.name, func(t *testing.T) {
+				if got := matchesBinary(tt.command, dir, name); got != tt.want {
+					t.Fatalf("matchesBinary(%q) = %v, want %v", tt.command, got, tt.want)
+				}
+			})
+		}
+	}
+}
+
+func TestControllerReusesOfficialService(t *testing.T) {
+	for _, marker := range []bool{true, false} {
+		t.Run(fmt.Sprintf("marker=%v", marker), func(t *testing.T) {
+			c, m, s, dir := serviceFixture(t)
+			s.binary = "\"" + serviceBinary(dir) + "\""
+			s.state = Running
+			if !marker {
+				if err := os.Remove(filepath.Join(dir, ".service")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for range 2 {
+				if err := c.Ensure(context.Background(), dir); err != nil {
+					t.Fatal(err)
+				}
+				if state, err := c.Status(dir); err != nil || state != Running {
+					t.Fatalf("official service not recognized: %s, %v", state, err)
+				}
+			}
+			if m.creates != 0 || s.starts+s.stops != 0 || s.deleted || s.enabled {
+				t.Fatal("existing service was modified or recreated")
+			}
+			if data, err := os.ReadFile(filepath.Join(dir, ".runner")); err != nil || string(data) != "fixture" {
+				t.Fatal("registration changed", err)
+			}
+		})
+	}
+}
+
+func TestControllerRejectsInvalidMarkersForOfficialService(t *testing.T) {
+	for _, marker := range []string{"UnrelatedSystemService", "actions.runner.demo\nextra", "actions.runner.demo/extra", `actions.runner.demo\extra`, "actions.runner.demo\x00"} {
+		t.Run(marker, func(t *testing.T) {
+			c, m, s, dir := serviceFixture(t)
+			s.binary = "\"" + serviceBinary(dir) + "\""
+			if err := os.WriteFile(filepath.Join(dir, ".service"), []byte(marker), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Status(dir); err == nil {
+				t.Fatal("invalid service marker accepted")
+			}
+			if err := c.Ensure(context.Background(), dir); err == nil {
+				t.Fatal("invalid service marker repaired instead of rejected")
+			}
+			if m.creates != 0 || s.starts+s.stops != 0 || s.deleted {
+				t.Fatal("invalid service marker caused a service mutation")
+			}
+		})
+	}
 }
 
 func TestControllerLifecycleIsIdempotentAndIndependent(t *testing.T) {

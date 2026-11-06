@@ -124,6 +124,9 @@ func windowsRunnerAction(c echo.Context, start bool) (bool, error) {
 	}
 	messageKey := "api.windows_stopped"
 	if start {
+		// Only replace a prior registration/service failure after both Ensure
+		// and SetRunning succeeded, including reuse of an already running service.
+		writeRegistrationResult(info.InstallDir, true, "registered; Windows service configured")
 		messageKey = "api.windows_running"
 	}
 	return true, c.JSON(http.StatusOK, map[string]any{"message": tr(c, messageKey), "desired_state": state})
