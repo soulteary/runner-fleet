@@ -1,9 +1,10 @@
+//go:build !windows
+
 package main
 
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -19,7 +20,6 @@ import (
 // 注意这里滤的只是传给子进程的那份副本：Agent 自己每次请求都要 os.Getenv("AGENT_TOKEN")
 // 去鉴权（expectedToken），对本进程 Unsetenv 会直接把鉴权关掉。
 func TestStartRunner_DoesNotLeakAgentToken(t *testing.T) {
-	requireEnvDumpOS(t)
 	t.Setenv("AGENT_TOKEN", "super-secret")
 	t.Setenv("DOCKER_HOST", "tcp://d:2375")
 
@@ -45,13 +45,6 @@ func TestStartRunner_DoesNotLeakAgentToken(t *testing.T) {
 }
 
 // ---- 与 internal/runner 那条同名用例共用的做法，两处各有一份 ----
-
-func requireEnvDumpOS(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("用例依赖 bash 与 FIFO")
-	}
-}
 
 // writeEnvDumpingRunScript 写一个先把自己的环境落盘、再一直挂住的 run.sh。
 // 挂住的写法与 writeBlockingRunScript 一致，理由见那里的注释。

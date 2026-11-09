@@ -1,3 +1,5 @@
+//go:build !windows
+
 // 启动自检：把「配置错了但要等 Job 跑挂才发现」的问题提前到 Manager 启动那一刻暴露。
 // 典型如 runner-net 未创建、挂载目录不属于 UID 1001、docker.sock 不可达、Runner 镜像不存在。
 package runner

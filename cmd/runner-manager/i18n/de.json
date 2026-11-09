@@ -169,7 +169,7 @@
   "parse.filled": "Ausgefüllt: Zieltyp {{target_type}}, Ziel {{target}}{{token_part}}",
   "parse.filled_token": ", Token ausgefüllt",
   "parse.invalid_url": "Ungültiges URL-Format",
-  "parse.label": "Aus GitHub-Befehl parsen (./config.sh --url ... --token ... einfügen, dann Parsen klicken)",
+  "parse.label": "Aus GitHub-Befehl parsen (./config.sh / .\\config.cmd --url ... --token ... einfügen, dann Parsen klicken)",
   "parse.no_url": "Argument --url fehlt",
   "parse.placeholder": "./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN",
   "parse.please_enter_command": "Bitte Befehl eingeben",
@@ -204,5 +204,10 @@
   "toast.dismiss": "Schließen",
   "toast.reload_list": "Liste neu laden",
   "toast.view_detail": "Details anzeigen",
-  "api.remove_failed": "Entfernen fehlgeschlagen: %v"
+  "api.remove_failed": "Entfernen fehlgeschlagen: %v",
+  "api.windows_running": "Der Windows-Runner-Dienst läuft",
+  "api.windows_stopped": "Der Windows-Runner-Dienst ist gestoppt und bleibt nach einem Neustart gestoppt",
+  "api.windows_changed": "Der Runner wurde geändert; bitte aktualisieren und erneut versuchen",
+  "api.windows_repair_failed": "Der registrierte Runner-Dienst konnte nicht repariert werden: %v",
+  "api.windows_state_failed": "Gewünschter Status gespeichert; Windows-Dienstaktion fehlgeschlagen: %v"
 }

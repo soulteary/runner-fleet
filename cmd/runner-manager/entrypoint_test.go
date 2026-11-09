@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"io"
@@ -27,10 +28,29 @@ func TestManagerEntrypointHelper(t *testing.T) {
 	}
 	flag.CommandLine = flag.NewFlagSet("runner-manager", flag.ExitOnError)
 	os.Args = []string{"runner-manager", "-config", os.Getenv("ENTRYPOINT_CONFIG")}
+	if timeout := os.Getenv("ENTRYPOINT_STOP_AFTER"); timeout != "" {
+		duration, err := time.ParseDuration(timeout)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), duration)
+		defer cancel()
+		runManager(ctx)
+		return
+	}
 	main()
 }
 
 func TestManagerEntrypointServesAndShutsDown(t *testing.T) {
+	testManagerEntrypoint(t, false)
+}
+
+func TestManagerContextCancellationWithInvalidConfig(t *testing.T) {
+	testManagerEntrypoint(t, true)
+}
+
+func testManagerEntrypoint(t *testing.T, cancelContext bool) {
+	t.Helper()
 	dir := t.TempDir()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -51,6 +71,9 @@ func TestManagerEntrypointServesAndShutsDown(t *testing.T) {
 	}
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = append(os.Environ(), "RUN_MANAGER_ENTRYPOINT=1", "ENTRYPOINT_CONFIG="+path, "BASIC_AUTH_PASSWORD=", "CSRF_TRUSTED_ORIGINS=http://localhost")
+	if cancelContext {
+		cmd.Env = append(cmd.Env, "ENTRYPOINT_STOP_AFTER=18s")
+	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -97,10 +120,19 @@ func TestManagerEntrypointServesAndShutsDown(t *testing.T) {
 			t.Fatalf("%s: %d %s", endpoint, resp.StatusCode, body)
 		}
 	}
-	// Exercise the actual delayed startup checks without replacing their clocks.
-	time.Sleep(31 * time.Second)
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatal(err)
+	if cancelContext {
+		// A service stop must still complete if an administrator has left an
+		// invalid configuration after startup. The delayed auto-start must also
+		// report the load failure rather than acting on invalid configuration.
+		if err := os.WriteFile(path, []byte("runners: ["), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		// Exercise the actual delayed startup checks without replacing their clocks.
+		time.Sleep(31 * time.Second)
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			t.Fatal(err)
+		}
 	}
 	select {
 	case err := <-done:
@@ -108,10 +140,21 @@ func TestManagerEntrypointServesAndShutsDown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("exit: %v: %s", err, output.String())
 		}
-	case <-time.After(15 * time.Second):
+	case <-time.After(25 * time.Second):
 		t.Fatal("manager did not shut down")
 	}
 	if !strings.Contains(output.String(), "stopped") {
 		t.Fatalf("missing completed shutdown: %s", output.String())
+	}
+	if cancelContext {
+		for _, message := range []string{"cannot load the configuration while auto-starting runners", "cannot reload the configuration while shutting down"} {
+			if !strings.Contains(output.String(), message) {
+				t.Errorf("missing %q: %s", message, output.String())
+			}
+		}
+		if resp, err := client.Get(base + "/health"); err == nil {
+			_ = resp.Body.Close()
+			t.Fatal("HTTP server still accepts requests after context cancellation")
+		}
 	}
 }

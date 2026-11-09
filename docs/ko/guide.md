@@ -10,7 +10,7 @@
 
 ## 1. 배포 (Docker)
 
-- **Linux 전용**, `linux/amd64`와 `linux/arm64`. Runner가 실행 중인지는 `/proc`의 프로세스 테이블에서 읽습니다. 다른 OS에서는 모든 Runner가 "실행 중 아님"으로 보고되므로 시작·중지도 자동 복구도 동작할 수 없습니다. 배포된 이미지는 이 두 아키텍처를 지원합니다.
+- Docker 배포는 Linux (`linux/amd64`, `linux/arm64`)를 사용합니다. Windows x64 기본 서비스 배포는 [Windows 안내](windows.md)를 참조하세요.
 - **화면과 그 메시지는 언어를 따르고, 로그는 영어로 고정입니다.** UI와 서버가 돌려주는 것——API 메시지와 토스트——은 `?lang=`, 언어 cookie, `Accept-Language` 순으로 정해지며, `Accept-Language`를 보내지 않는 스크립트는 영어를 받습니다. 로그가 영어인 것은 번역이 덜 된 것이 아니라 정해진 것입니다. 로그 줄에는 따라갈 요청이 없고, 읽는 사람은 운영자이며, grep과 Loki 질의와 알림 규칙은 같은 사건이 실행할 때마다 다른 언어로 나타나면 망가집니다. 시작 자가 점검도 로그로 나가며 줄 앞에 `[preflight …]`가 붙습니다.
 - 이미지는 **Ubuntu** 기반이며 .NET Core 6.0 의존성이 포함되어 있습니다. **UID 1001**로 실행되며, 호스트에 마운트된 디렉터리는 해당 사용자가 쓸 수 있어야 합니다(예: `chown 1001:1001 config runners`).
 - 시작 후 약 15초 뒤에 등록되었지만 중지된 Runner가 자동으로 시작되며, 5분마다 주기적으로 검사합니다.
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` 또는 `repo` | 필수 |
 | `runners.items[].target` | 조직 이름 또는 `owner/repo` | 필수 |
 | `runners.items[].labels` | 사용자 정의 라벨. workflow의 `runs-on`이 이것으로 선택 | 비움 |
+| `runners.items[].desired_state` | Windows 서비스 목표 상태: `running` / `stopped`; 수동 중지는 재부팅 후에도 유지 | `running` |
 | `runners.items[].container_image` | Runner별 이미지 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 | `runners.items[].job_docker_backend` | Runner별 Docker 백엔드 재정의(컨테이너 모드), 비우면 전역값 | 비움 |
 | `runners.resources` | Runner 컨테이너 리소스 상한(`cpus` / `memory` / `memory_swap` / `pids_limit`), `docker create`로 전달하며 시작 시 `docker update`로 기존 컨테이너에도 적용 | 비움(무제한) |

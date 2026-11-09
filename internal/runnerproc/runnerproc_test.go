@@ -1,3 +1,5 @@
+//go:build !windows
+
 package runnerproc
 
 import (
@@ -178,6 +180,10 @@ func TestRunning_IgnoresPidLookalikeFiles(t *testing.T) {
 
 // 端到端：拿真实的 /proc 和真实的进程验一遍，假 procfs 证明不了这一步
 func TestFind_RealProcesses(t *testing.T) {
+	if os.Getenv("RUNNERPROC_TEST_LISTENER") == "1" {
+		time.Sleep(2 * time.Minute)
+		return
+	}
 	if runtime.GOOS != "linux" {
 		t.Skip("进程探测依赖 /proc，仅在 Linux 上验证")
 	}
@@ -204,18 +210,20 @@ func TestFind_RealProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 监听器：要一个真正的可执行文件，argv[0] 才会是它自己的绝对路径；
-	// shebang 脚本的 argv[0] 是解释器，模拟不了
+	// shebang 脚本的 argv[0] 是解释器，模拟不了。
+	// 复制测试程序自身，不依赖系统 sleep：Ubuntu 26.04 的 uutils sleep
+	// 会校验可执行文件名，改名为 Runner.Listener 后立即退出。
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	listener := ListenerBinary(dir)
-	sleepBin, err := exec.LookPath("sleep")
+	testBin, err := os.Executable()
 	if err != nil {
-		t.Skip("找不到 sleep")
+		t.Fatal(err)
 	}
-	b, err := os.ReadFile(sleepBin)
+	b, err := os.ReadFile(testBin)
 	if err != nil {
-		t.Skip("读不到 sleep 可执行文件")
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(listener, b, 0755); err != nil {
 		t.Fatal(err)
@@ -230,23 +238,29 @@ func TestFind_RealProcesses(t *testing.T) {
 	if err := sup.Start(); err != nil {
 		t.Fatalf("启动监护脚本失败: %v", err)
 	}
-	lis := exec.Command(listener, "120")
+	t.Cleanup(func() {
+		_ = syscall.Kill(-sup.Process.Pid, syscall.SIGKILL)
+		_, _ = sup.Process.Wait()
+	})
+	lis := exec.Command(listener, "-test.run=^TestFind_RealProcesses$")
+	lis.Env = append(os.Environ(), "RUNNERPROC_TEST_LISTENER=1")
 	lis.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := lis.Start(); err != nil {
 		t.Fatalf("启动监听器失败: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = syscall.Kill(-sup.Process.Pid, syscall.SIGKILL)
 		_ = lis.Process.Kill()
-		_, _ = sup.Process.Wait()
 		_, _ = lis.Process.Wait()
 	})
 
-	if !waitFor(func() bool { return len(Find(dir)) == 2 }) {
+	var got []int
+	if !waitFor(func() bool {
+		got = Find(dir)
+		return len(got) == 2
+	}) {
 		t.Fatalf("真实进程未被认领，Find=%v（期望监护脚本 %d 与监听器 %d）",
-			Find(dir), sup.Process.Pid, lis.Process.Pid)
+			got, sup.Process.Pid, lis.Process.Pid)
 	}
-	got := Find(dir)
 	if got[0] != sup.Process.Pid || got[1] != lis.Process.Pid {
 		t.Fatalf("Find=%v，期望 [%d %d]（监护脚本在前）", got, sup.Process.Pid, lis.Process.Pid)
 	}

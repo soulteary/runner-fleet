@@ -21,6 +21,7 @@ package childenv
 
 import (
 	"os"
+	"runtime"
 	"strings"
 )
 
@@ -54,7 +55,7 @@ func Sanitize(environ []string) []string {
 
 func isDenied(key string) bool {
 	for _, name := range Denied {
-		if key == name {
+		if key == name || (runtime.GOOS == "windows" && strings.EqualFold(key, name)) {
 			return true
 		}
 	}

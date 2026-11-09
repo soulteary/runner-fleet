@@ -23,6 +23,7 @@ import (
 	"github.com/soulteary/runner-fleet/internal/runner"
 	"github.com/soulteary/runner-fleet/internal/runnerproc"
 	"github.com/soulteary/runner-fleet/internal/secrets"
+	"github.com/soulteary/runner-fleet/internal/windowsrunner"
 	secure "github.com/soulteary/secure-kit/v2"
 )
 
@@ -100,6 +101,9 @@ func startRegistrationWorker(queue <-chan registrationJob) <-chan struct{} {
 
 // runRegistrationJob 执行单次安装+注册+启动（在后台 goroutine 中调用）
 func runRegistrationJob(j registrationJob) {
+	if runPlatformRegistrationJob(j) {
+		return
+	}
 	installDir := j.InstallDir
 	configScript := filepath.Join(installDir, runner.ConfigScriptName())
 	if _, err := os.Stat(configScript); err != nil {
@@ -264,7 +268,10 @@ func runConfigScript(installDir, url, token, name string, labels []string, timeo
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, configScript, args...)
+	cmd, err := registrationCommand(ctx, configScript, args)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = installDir
 	cmd.Env = childenv.Environ()
 	out, err := cmd.CombinedOutput()
@@ -325,6 +332,7 @@ func viewData(c echo.Context) (map[string]any, error) {
 	}
 	tjson, _ := json.Marshal(T)
 	return map[string]any{
+		"Windows":      windowsrunner.Enabled,
 		"Runners":      list,
 		"Config":       cfg,
 		"T":            T,
@@ -450,7 +458,7 @@ func AddRunner(c echo.Context) error {
 	}
 	if err := config.LoadAndSave(ConfigPath, func(cur *config.Config) error {
 		for _, i := range cur.Runners.Items {
-			if i.Name == item.Name {
+			if i.Name == item.Name || (windowsrunner.Enabled && (strings.EqualFold(i.Name, item.Name) || sameInstallPath(i.InstallPath(cur.Runners.BasePath), installDir))) {
 				return echo.NewHTTPError(http.StatusConflict, trf(c, "api.name_taken", item.Name))
 			}
 		}
@@ -466,7 +474,7 @@ func AddRunner(c echo.Context) error {
 		configScript := filepath.Join(installDir, runner.ConfigScriptName())
 		if _, err := os.Stat(configScript); err != nil {
 			// 目录为空时需先安装：若存在自动安装脚本则交给后台 worker 执行，避免阻塞请求
-			if _, scriptErr := os.Stat(installRunnerScriptPath); scriptErr == nil {
+			if _, scriptErr := os.Stat(installRunnerScriptPath); windowsrunner.Enabled || scriptErr == nil {
 				url := "https://github.com/" + targetNorm
 				select {
 				case registrationQueue <- registrationJob{
@@ -552,6 +560,9 @@ func GetRunner(c echo.Context) error {
 
 // StartRunner 启动指定 runner（POST /api/runners/:name/start）；容器模式下启动 Runner 容器并调 Agent /start
 func StartRunner(c echo.Context) error {
+	if handled, err := windowsRunnerAction(c, true); handled {
+		return err
+	}
 	cfg, err := getConfig(c)
 	if err != nil {
 		return err
@@ -637,6 +648,9 @@ func RecreateRunner(c echo.Context) error {
 
 // StopRunner 停止指定 runner（POST /api/runners/:name/stop）；容器模式下停止 Runner 容器
 func StopRunner(c echo.Context) error {
+	if handled, err := windowsRunnerAction(c, false); handled {
+		return err
+	}
 	cfg, err := getConfig(c)
 	if err != nil {
 		return err
@@ -699,6 +713,11 @@ type UpdateRunnerRequest struct {
 
 // UpdateRunner 更新 runner 配置（PUT /api/runners/:name）；名称不可改，与目录一致
 func UpdateRunner(c echo.Context) error {
+	unlock, lockErr := lockPlatformUpdate(c)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlock()
 	name := c.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, tr(c, "api.name_required"))
@@ -742,12 +761,19 @@ func UpdateRunner(c echo.Context) error {
 		if idx < 0 {
 			return echo.NewHTTPError(http.StatusNotFound, tr(c, "api.runner_not_found"))
 		}
+		old := cfg.Runners.Items[idx]
+		if err := validatePlatformUpdate(cfg, old, req.Path); err != nil {
+			return err
+		}
 		cfg.Runners.Items[idx] = config.RunnerItem{
-			Name:       name,
-			Path:       req.Path,
-			TargetType: targetTypeNorm,
-			Target:     targetNorm,
-			Labels:     req.Labels,
+			DesiredState:     old.DesiredState,
+			ContainerImage:   old.ContainerImage,
+			JobDockerBackend: old.JobDockerBackend,
+			Name:             name,
+			Path:             req.Path,
+			TargetType:       targetTypeNorm,
+			Target:           targetNorm,
+			Labels:           req.Labels,
 		}
 		return nil
 	}); err != nil {
@@ -764,7 +790,7 @@ func UpdateRunner(c echo.Context) error {
 	// 若已注册且未在运行，自动启动（容器/进程模式统一走 StartIfInstalled）
 	msg := tr(c, "api.updated")
 	var started bool
-	if updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
+	if !windowsrunner.Enabled && updated != nil && updated.Status == runner.StatusInstalled && !updated.Running {
 		ctx, cancel := lifecycleContext(c.Request().Context(), 60*time.Second)
 		defer cancel()
 		startErr := runner.StartIfInstalled(ctx, cfg, name, updated.InstallDir)
@@ -790,6 +816,9 @@ var deregisterFromGitHub = githubcheck.Deregister
 // RemoveRunnerByName 从路径参数获取 name 并移除（DELETE /api/runners/:name）
 // 会先停止 runner 进程，再删除其安装目录，最后从配置中移除。
 func RemoveRunnerByName(c echo.Context) error {
+	if handled, err := removeWindowsRunner(c); handled {
+		return err
+	}
 	name := c.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, tr(c, "api.name_required"))

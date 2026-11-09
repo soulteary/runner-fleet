@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add native Windows x64 runner services with automatic installation and registration
+  from the Web UI, persistent start/stop intent, and a Manager service that leaves
+  runner jobs running during its own restart; see the [Windows guide](docs/windows.md).
+
+### Changed
+
+- Keep native Windows runners under NetworkService while the Manager uses
+  LocalSystem; import the installing user's manual Windows proxy and propagate
+  it to runner `.env` files, preserving manual overrides and active jobs.
+
+### Fixed
+
+- Recognize official Windows runner services with no executable arguments and
+  update historical registration failures after a successful Start repair.
+
 ## [1.9.6] - 2026-11-02
 
 ### Fixed

@@ -1,3 +1,5 @@
+//go:build !windows
+
 package runner
 
 import (
@@ -5,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,6 +15,9 @@ import (
 )
 
 func TestRemovedWorkingDirectoryRejectsRelativeLifecyclePaths(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires Linux process/filesystem semantics")
+	}
 	original, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

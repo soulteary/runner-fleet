@@ -10,7 +10,7 @@ Déploiement, configuration, ajout de runners et sécurité sont traités ici. P
 
 ## 1. Déploiement (Docker)
 
-- **Linux uniquement**, `linux/amd64` et `linux/arm64`. L'état d'exécution d'un runner est lu dans la table des processus via `/proc` ; sur tout autre OS chaque runner est rapporté « à l'arrêt », donc le démarrage/arrêt et la reprise automatique ne peuvent pas fonctionner. Les images publiées couvrent ces deux architectures.
+- Le déploiement Docker utilise Linux (`linux/amd64`, `linux/arm64`). Pour les services Windows x64 natifs, voir le [guide Windows](windows.md).
 - **L'interface et ses messages suivent votre langue ; les logs sont fixés en anglais.** L'interface et ce que le serveur répond — messages d'API et notifications — sont choisis via `?lang=`, le cookie de langue ou `Accept-Language` ; un script qui n'envoie pas `Accept-Language` obtient l'anglais. Les logs sont en anglais par décision, non par omission : une ligne de log n'a aucune requête à suivre, son lecteur est celui qui exploite le déploiement, et grep, les requêtes Loki et les règles d'alerte se cassent dès que le même événement apparaît dans une langue différente. L'autotest de démarrage va aussi dans le log, préfixé `[preflight …]`.
 - L'image est basée sur **Ubuntu** avec les dépendances .NET Core 6.0 ; elle tourne en **UID 1001** — les répertoires montés doivent être accessibles en écriture par cet utilisateur (ex. `chown 1001:1001 config runners`).
 - Environ 15 secondes après le démarrage, les runners enregistrés mais arrêtés sont relancés automatiquement ; vérification périodique toutes les 5 minutes.
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` ou `repo` | requis |
 | `runners.items[].target` | Nom d'organisation, ou `owner/repo` | requis |
 | `runners.items[].labels` | Étiquettes personnalisées ; le `runs-on` d'un workflow sélectionne dessus | vide |
+| `runners.items[].desired_state` | État souhaité du service Windows : `running` ou `stopped` ; arrêt conservé après redémarrage | `running` |
 | `runners.items[].container_image` | Surcharge d'image par runner (mode conteneur) ; vide = valeur globale | vide |
 | `runners.items[].job_docker_backend` | Surcharge du backend Docker par runner (mode conteneur) ; vide = valeur globale | vide |
 | `runners.resources` | Limites de ressources des conteneurs runner (`cpus` / `memory` / `memory_swap` / `pids_limit`), transmises à `docker create` et appliquées aux conteneurs existants via `docker update` au démarrage | vide (illimité) |

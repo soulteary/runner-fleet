@@ -1,0 +1,15 @@
+# Windows x64: copy into a dedicated data directory before service install.
+# Windows x64：放在专用数据目录，避免对个人目录应用服务权限。
+server:
+  addr: 127.0.0.1
+  port: 8080
+runners:
+  # Relative to this config file on Windows / Windows 下相对于配置文件目录
+  base_path: ./runners
+  container_mode: false
+  items: []
+  # - name: windows-build
+  #   target_type: repo
+  #   target: owner/repo
+  #   labels: [windows-build]
+  #   desired_state: running

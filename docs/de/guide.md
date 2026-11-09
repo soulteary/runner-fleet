@@ -10,7 +10,7 @@ Bereitstellung, Konfiguration, Hinzufügen von Runnern und Sicherheit werden hie
 
 ## 1. Bereitstellung (Docker)
 
-- **Nur Linux**, `linux/amd64` und `linux/arm64`. Ob ein Runner läuft, wird über `/proc` aus der Prozesstabelle gelesen; auf jedem anderen Betriebssystem meldet sich jeder Runner als „läuft nicht", womit Start/Stopp und der Selbstheilungslauf nicht funktionieren können. Die veröffentlichten Images decken diese beiden Architekturen ab.
+- Docker benötigt Linux (`linux/amd64`, `linux/arm64`). Native Windows-x64-Dienste beschreibt die [Windows-Anleitung](windows.md).
 - **Oberfläche und Meldungen folgen Ihrer Sprache; die Logs sind auf Englisch festgelegt.** Die UI und das, was der Server zurückgibt — API-Meldungen und Toasts — werden aus `?lang=`, dem Sprach-Cookie oder `Accept-Language` ermittelt; ein Skript ohne `Accept-Language` erhält Englisch. Englische Logs sind eine Entscheidung, kein Versäumnis: Eine Logzeile hat keine Anfrage, der sie folgen könnte, ihr Leser ist der Betrieb, und grep, Loki-Abfragen und Alarmregeln brechen, sobald dasselbe Ereignis jedes Mal in einer anderen Sprache erscheint. Der Startup-Selbsttest geht ebenfalls ins Log, mit dem Präfix `[preflight …]`.
 - Das Image basiert auf **Ubuntu** mit .NET Core 6.0-Abhängigkeiten; läuft unter **UID 1001** – gemountete Host-Verzeichnisse müssen für diesen Benutzer schreibbar sein (z. B. `chown 1001:1001 config runners`).
 - Etwa 15 Sekunden nach dem Start werden registrierte, aber gestoppte Runner automatisch gestartet; periodische Prüfung alle 5 Minuten.
@@ -146,6 +146,7 @@ mkdir -p config && cp config.yaml.example config/config.yaml
 | `runners.items[].target_type` | `org` oder `repo` | erforderlich |
 | `runners.items[].target` | Organisationsname oder `owner/repo` | erforderlich |
 | `runners.items[].labels` | Eigene Labels; das `runs-on` eines Workflows wählt danach aus | leer |
+| `runners.items[].desired_state` | Gewünschter Windows-Dienststatus: `running` oder `stopped`; Stopp bleibt nach Neustart erhalten | `running` |
 | `runners.items[].container_image` | Image-Override pro Runner (Containermodus); leer = globaler Wert | leer |
 | `runners.items[].job_docker_backend` | Docker-Backend-Override pro Runner (Containermodus); leer = globaler Wert | leer |
 | `runners.resources` | Ressourcenlimits der Runner-Container (`cpus` / `memory` / `memory_swap` / `pids_limit`), an `docker create` durchgereicht und beim Start via `docker update` auch auf bestehende Container angewendet | leer (unbegrenzt) |

@@ -107,7 +107,13 @@ document.getElementById('langSelect').addEventListener('change', function() {
   document.cookie = 'lang=' + encodeURIComponent(lang) + ';path=/;max-age=31536000';
   location.reload();
 });
-// Parse GitHub config.sh command and fill add-runner form
+// Choose examples for the host where the Manager installs the runner.
+if (document.documentElement.dataset.platform === 'windows') {
+  document.getElementById('githubCommandInput').placeholder = '.\\config.cmd --url https://github.com/owner/repo --token YOUR_TOKEN';
+  document.getElementById('addFormLabelsStr').placeholder = 'self-hosted, windows, x64';
+  document.getElementById('eLabelsStr').placeholder = 'self-hosted, windows, x64';
+}
+// Parse GitHub config.sh / config.cmd arguments; never execute pasted text.
 function sanitizeRunnerName(s) {
   if (!s || typeof s !== 'string') return '';
   return s.replace(/\.\./g, '').replace(/[/\\]/g, '-').trim() || 'runner';
@@ -126,11 +132,14 @@ function parseGitHubConfigCommand(text) {
   } catch (e) {
     return { ok: false, message: t('parse.invalid_url') };
   }
+  if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'github.com' || parsedUrl.port || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+    return { ok: false, message: t('parse.invalid_url') };
+  }
   const pathParts = parsedUrl.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
   let targetType = 'org';
   let target = '';
   let suggestedName = '';
-  if (pathParts.length >= 2) {
+  if (pathParts.length === 2) {
     targetType = 'repo';
     target = pathParts[0] + '/' + pathParts[1];
     suggestedName = sanitizeRunnerName(pathParts[1]);

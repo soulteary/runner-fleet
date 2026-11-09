@@ -169,7 +169,7 @@
   "parse.filled": "入力済み：ターゲットタイプ {{target_type}}、ターゲット {{target}}{{token_part}}",
   "parse.filled_token": "、トークン入力済み",
   "parse.invalid_url": "URL 形式が無効です",
-  "parse.label": "GitHub コマンドを解析（./config.sh --url ... --token ... を貼り付けて解析をクリック）",
+  "parse.label": "GitHub コマンドを解析（./config.sh / .\\config.cmd --url ... --token ... を貼り付けて解析をクリック）",
   "parse.no_url": "--url 引数が見つかりません",
   "parse.placeholder": "./config.sh --url https://github.com/owner/repo --token YOUR_TOKEN",
   "parse.please_enter_command": "コマンドを入力してください",
@@ -204,5 +204,10 @@
   "toast.dismiss": "閉じる",
   "toast.reload_list": "一覧を再読み込み",
   "toast.view_detail": "詳細を見る",
-  "api.remove_failed": "削除に失敗しました：%v"
+  "api.remove_failed": "削除に失敗しました：%v",
+  "api.windows_running": "Windows Runner サービスが実行中です",
+  "api.windows_stopped": "Windows Runner サービスは停止しました。再起動後も停止を維持します",
+  "api.windows_changed": "Runner が変更されました。更新して再試行してください",
+  "api.windows_repair_failed": "登録済み Runner サービスの修復に失敗しました：%v",
+  "api.windows_state_failed": "希望状態を保存しましたが Windows サービス操作に失敗しました：%v"
 }
