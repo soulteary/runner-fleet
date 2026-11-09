@@ -5,7 +5,6 @@ package runner
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,7 +20,6 @@ import (
 //
 // 这条用例盯的就是那条路径：真的把 run.sh 拉起来，让它把自己拿到的环境落盘，再看里面有什么。
 func TestStart_DoesNotLeakCredentials(t *testing.T) {
-	requireEnvDumpOS(t)
 	t.Setenv("BASIC_AUTH_PASSWORD", "x")
 	t.Setenv("DOCKER_HOST", "tcp://d:2375")
 
@@ -46,13 +44,6 @@ func TestStart_DoesNotLeakCredentials(t *testing.T) {
 }
 
 // ---- 下面几个是本文件与 agent 侧那条同名用例共用的做法，两处各有一份 ----
-
-func requireEnvDumpOS(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("用例依赖 bash 与 FIFO")
-	}
-}
 
 // writeEnvDumpingRunScript 写一个先把自己的环境落盘、再一直挂住的 run.sh。
 //
