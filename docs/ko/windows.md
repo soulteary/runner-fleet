@@ -12,7 +12,7 @@ Windows x64 릴리스 ZIP을 풀고 **관리자 PowerShell**에서 실행합니�
 Start-Process http://127.0.0.1:8080
 ```
 
-설치 시 프로그램을 `%ProgramFiles%\RunnerFleet\runner-manager.exe`로 복사하고 `NetworkService` 계정의 자동 시작 서비스 `RunnerFleet`을 등록합니다. 기본 데이터 위치:
+설치 시 프로그램을 `%ProgramFiles%\RunnerFleet\runner-manager.exe`로 복사하고 `LocalSystem` 계정의 자동 시작 서비스 `RunnerFleet`을 등록합니다. 기본 데이터 위치:
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml

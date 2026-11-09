@@ -12,7 +12,7 @@ Extract the Windows x64 release ZIP and run in **Administrator PowerShell**:
 Start-Process http://127.0.0.1:8080
 ```
 
-Installation copies the executable to `%ProgramFiles%\RunnerFleet\runner-manager.exe` and registers the automatic `RunnerFleet` service as `NetworkService`. Default data locations:
+Installation copies the executable to `%ProgramFiles%\RunnerFleet\runner-manager.exe` and registers the automatic `RunnerFleet` service as `LocalSystem`. Default data locations:
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml

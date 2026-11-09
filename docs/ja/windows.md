@@ -12,7 +12,7 @@ Windows x64 のリリース ZIP を展開し、**管理者 PowerShell** で実�
 Start-Process http://127.0.0.1:8080
 ```
 
-プログラムを `%ProgramFiles%\RunnerFleet\runner-manager.exe` にコピーし、`NetworkService` の自動起動サービス `RunnerFleet` を登録します。既定のデータ配置：
+プログラムを `%ProgramFiles%\RunnerFleet\runner-manager.exe` にコピーし、`LocalSystem` の自動起動サービス `RunnerFleet` を登録します。既定のデータ配置：
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml

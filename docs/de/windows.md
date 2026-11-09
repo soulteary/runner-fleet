@@ -12,7 +12,7 @@ Das Windows-x64-ZIP entpacken und in **PowerShell als Administrator** ausführen
 Start-Process http://127.0.0.1:8080
 ```
 
-Die Installation kopiert das Programm nach `%ProgramFiles%\RunnerFleet\runner-manager.exe` und registriert den automatisch startenden Dienst `RunnerFleet` als `NetworkService`. Standard-Datenpfade:
+Die Installation kopiert das Programm nach `%ProgramFiles%\RunnerFleet\runner-manager.exe` und registriert den automatisch startenden Dienst `RunnerFleet` als `LocalSystem`. Standard-Datenpfade:
 
 ```text
 %ProgramData%\RunnerFleet\config.yaml
