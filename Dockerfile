@@ -1,6 +1,6 @@
 # Manager：多阶段构建，BUILDPLATFORM 宿机构建、TARGETOS/TARGETARCH 交叉编译
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
