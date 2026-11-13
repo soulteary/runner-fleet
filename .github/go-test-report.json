@@ -7,9 +7,9 @@
     "skipped": 0
   },
   "coverage": {
-    "covered_statements": 2189,
+    "covered_statements": 2188,
     "total_statements": 2293,
-    "percentage": 95.46,
+    "percentage": 95.42,
     "threshold": 95
   },
   "packages": [
@@ -18,7 +18,7 @@
       "status": "pass",
       "tests": 29,
       "failed": 0,
-      "coverage": 92.31
+      "coverage": 91.61
     },
     {
       "name": "cmd/runner-manager",
