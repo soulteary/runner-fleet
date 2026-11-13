@@ -6,14 +6,14 @@ require (
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/soulteary/cli-kit v1.9.4
 	github.com/soulteary/docker-kit v1.0.3
-	github.com/soulteary/health-kit/v4 v4.0.6
-	github.com/soulteary/i18n-kit/v4 v4.0.5
-	github.com/soulteary/logger-kit/v3 v3.0.5
-	github.com/soulteary/metrics-kit/v3 v3.0.5
+	github.com/soulteary/health-kit/v4 v4.0.7
+	github.com/soulteary/i18n-kit/v4 v4.0.6
+	github.com/soulteary/logger-kit/v3 v3.0.6
+	github.com/soulteary/metrics-kit/v3 v3.0.6
 	github.com/soulteary/preflight-kit v1.0.3
 	github.com/soulteary/procfind-kit v1.0.3
 	github.com/soulteary/secure-kit/v2 v2.1.5
-	github.com/soulteary/version-kit/v4 v4.0.4
+	github.com/soulteary/version-kit/v4 v4.0.5
 	go.yaml.in/yaml/v3 v3.0.6
 )
 
