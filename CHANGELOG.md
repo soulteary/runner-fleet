@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.7] - 2026-11-13
+
+### Security
+
+- Require Go 1.27.4 in `go.mod` and build both container images from
+  `golang:1.27.4-bookworm`. Go 1.27.4 contains security fixes to cgo, the go
+  command, the compiler, the linker and `net/http` (GO-2026-6859). The six
+  language development guides state the same toolchain version.
+
+### Changed
+
+- Update cli-kit to v1.9.4, docker-kit to v1.0.3, health-kit/v4 to v4.0.7,
+  i18n-kit/v4 to v4.0.6, logger-kit/v3 to v3.0.6, metrics-kit/v3 to v3.0.6,
+  preflight-kit to v1.0.3, procfind-kit to v1.0.3, secure-kit/v2 to v2.1.5 and
+  version-kit/v4 to v4.0.5, with golang.org/x/crypto v0.59.0, x/sys v0.50.0 and
+  x/text v0.44.0 as indirect requirements.
+- Refresh Go quality reports. No API, configuration key, authentication format
+  or persistent schema changes.
+
 ## [1.9.6] - 2026-11-02
 
 ### Fixed
@@ -507,7 +526,8 @@ Initial release.
 - Self-heal and structured probes (error type, check/fix commands) for troubleshooting.
 - Optional Basic Auth, optional PAT-based verification against GitHub's runner list, and a multi-language UI.
 
-[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.6...HEAD
+[Unreleased]: https://github.com/soulteary/runner-fleet/compare/v1.9.7...HEAD
+[1.9.7]: https://github.com/soulteary/runner-fleet/compare/v1.9.6...v1.9.7
 [1.9.6]: https://github.com/soulteary/runner-fleet/compare/v1.9.5...v1.9.6
 [1.9.5]: https://github.com/soulteary/runner-fleet/compare/v1.9.4...v1.9.5
 [1.9.4]: https://github.com/soulteary/runner-fleet/compare/v1.9.3...v1.9.4
