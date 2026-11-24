@@ -23,7 +23,7 @@ env:
   #
   # 行尾的 version-check-ignore 是必需的：这是 ci-recipes 的模块版本，不是本仓库的版本号，
   # 而版本号一致性检查只认「一个 vX.Y.Z 字面量」。换成 tag 之后同样需要，这一点跟 tag 无关。
-  CI_RECIPES_VERSION: "v0.0.0-20260921094536-68dc8a7f1123"  # version-check-ignore
+  CI_RECIPES_VERSION: "v0.1.0"  # version-check-ignore
 
 # 两个 job 各自装一遍 ci-recipes。合成一个 job 能省掉一次安装，但也会把 PR 上两个检查
 # 的名字合成一个——分支保护里按名字要求的必需检查会当场对不上。两个 job 本来并行，
@@ -35,10 +35,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
@@ -62,10 +62,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
@@ -88,7 +88,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # 照着文档抄的人不会先读一遍再判断哪条该跳过，他们整段贴进终端。所以这里也整段执行。
       #

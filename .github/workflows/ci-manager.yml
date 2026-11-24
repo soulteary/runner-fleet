@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check both images share the apt manifest
         run: |
@@ -36,7 +36,7 @@ jobs:
 
       - name: Set up Go
         if: steps.modroot.outputs.found == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ${{ steps.modroot.outputs.root }}/go.mod
           cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
@@ -48,9 +48,9 @@ jobs:
 
       - name: Lint
         if: steps.modroot.outputs.found == 'true'
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: latest
+          version: v2.15.0
           args: --max-same-issues=100000 ./cmd/runner-manager/... ./internal/...
           working-directory: ${{ steps.modroot.outputs.root }}
 
@@ -73,7 +73,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Detect Go module root
         id: modroot
@@ -83,7 +83,7 @@ jobs:
 
       - name: Set up Go
         if: steps.modroot.outputs.found == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ${{ steps.modroot.outputs.root }}/go.mod
           cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
@@ -129,13 +129,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # 与 CI (Agent) 中的同名 job 成对：镜像的 builder 阶段只 COPY 了工作区的一部分，
       # 完整工作区里的 go build 验不出构建上下文缺路径。Manager 侧目前 COPY 了 cmd 与
       # internal 全量、没出过问题，这一步是防止它哪天被收窄成 Dockerfile.runner 那样。
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Verify both Linux image binary architectures
         run: scripts/test-image-architecture.sh Dockerfile runner-manager

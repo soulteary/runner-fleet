@@ -21,7 +21,7 @@ USER root
 # 布局必须是 <tool>/<version>/<arch>，并在同级放一个 <arch>.complete 空文件，
 # 否则 actions/setup-* 认不出来，仍会重新下载（@actions/tool-cache 就按这个路径找）。
 # 下面以 Node 为例；Python、Go、Java 同理，换 tool 名与解包路径即可。
-ARG NODE_VERSION=22.14.0
+ARG NODE_VERSION=22.23.5
 RUN set -eux; \
     case "$(uname -m)" in \
       x86_64)  arch=x64 ;; \
