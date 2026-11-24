@@ -178,6 +178,10 @@ func TestRunning_IgnoresPidLookalikeFiles(t *testing.T) {
 
 // 端到端：拿真实的 /proc 和真实的进程验一遍，假 procfs 证明不了这一步
 func TestFind_RealProcesses(t *testing.T) {
+	if os.Getenv("RUNNERPROC_TEST_LISTENER_HELPER") == "1" {
+		time.Sleep(2 * time.Minute)
+		return
+	}
 	if runtime.GOOS != "linux" {
 		t.Skip("进程探测依赖 /proc，仅在 Linux 上验证")
 	}
@@ -209,13 +213,14 @@ func TestFind_RealProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	listener := ListenerBinary(dir)
-	sleepBin, err := exec.LookPath("sleep")
+	testBinary, err := os.Executable()
 	if err != nil {
-		t.Skip("找不到 sleep")
+		t.Fatal(err)
 	}
-	b, err := os.ReadFile(sleepBin)
+	// 复用当前测试程序，避免系统 sleep 是依赖 argv[0] 的 multicall 程序。
+	b, err := os.ReadFile(testBinary)
 	if err != nil {
-		t.Skip("读不到 sleep 可执行文件")
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(listener, b, 0755); err != nil {
 		t.Fatal(err)
@@ -230,7 +235,8 @@ func TestFind_RealProcesses(t *testing.T) {
 	if err := sup.Start(); err != nil {
 		t.Fatalf("启动监护脚本失败: %v", err)
 	}
-	lis := exec.Command(listener, "120")
+	lis := exec.Command(listener, "-test.run=^TestFind_RealProcesses$")
+	lis.Env = append(os.Environ(), "RUNNERPROC_TEST_LISTENER_HELPER=1")
 	lis.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := lis.Start(); err != nil {
 		t.Fatalf("启动监听器失败: %v", err)
@@ -242,11 +248,14 @@ func TestFind_RealProcesses(t *testing.T) {
 		_, _ = lis.Process.Wait()
 	})
 
-	if !waitFor(func() bool { return len(Find(dir)) == 2 }) {
+	var got []int
+	if !waitFor(func() bool {
+		got = Find(dir)
+		return len(got) == 2
+	}) {
 		t.Fatalf("真实进程未被认领，Find=%v（期望监护脚本 %d 与监听器 %d）",
 			Find(dir), sup.Process.Pid, lis.Process.Pid)
 	}
-	got := Find(dir)
 	if got[0] != sup.Process.Pid || got[1] != lis.Process.Pid {
 		t.Fatalf("Find=%v，期望 [%d %d]（监护脚本在前）", got, sup.Process.Pid, lis.Process.Pid)
 	}

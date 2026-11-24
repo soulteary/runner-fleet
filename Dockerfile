@@ -1,6 +1,6 @@
 # Manager：多阶段构建，BUILDPLATFORM 宿机构建、TARGETOS/TARGETARCH 交叉编译
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm@sha256:ce59b41415e2524ae99926fe1f37ce48ba8c194dcbd2a56a65436cdcefa2bd34 AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -14,7 +14,7 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" -o runner-manager ./cmd/runner-manager
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
 LABEL org.opencontainers.image.title="Runner Fleet Manager" \
       org.opencontainers.image.description="GitHub Actions Runner 管理服务"
 

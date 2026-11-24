@@ -1,6 +1,6 @@
 # Runner 容器镜像：仅 Agent + 运行依赖，/runner 由 Manager 挂载；Agent 放 /app 避免挂载覆盖入口
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm@sha256:ce59b41415e2524ae99926fe1f37ce48ba8c194dcbd2a56a65436cdcefa2bd34 AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -16,7 +16,7 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o runner-agent ./cmd/runner-agent
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
 LABEL org.opencontainers.image.title="Runner Fleet Runner" \
       org.opencontainers.image.description="GitHub Actions Runner 单实例容器，内含 Agent 供 Manager 控制"
 
