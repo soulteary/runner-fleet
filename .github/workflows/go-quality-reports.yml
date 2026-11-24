@@ -33,7 +33,7 @@ jobs:
       enabled: ${{ steps.trigger.outputs.enabled }}
       source_sha: ${{ steps.trigger.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
         with:
           persist-credentials: false
           ref: ${{ inputs.source_ref || github.sha }}
@@ -148,7 +148,7 @@ jobs:
       source_sha: ${{ steps.source.outputs.sha }}
       artifact_name: ${{ steps.source.outputs.artifact_name }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
         with:
           ref: ${{ needs.release_gate.outputs.source_sha }}
           fetch-depth: 0
@@ -192,7 +192,7 @@ jobs:
           commit: "false"
       - name: Upload stable reports
         if: "always() && steps.report_cleanup.outcome == 'success'"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2  # version-check-ignore
         with:
           name: ${{ steps.source.outputs.artifact_name }}
           path: |
@@ -206,7 +206,7 @@ jobs:
           retention-days: 14
       - name: Upload raw test evidence
         if: "always() && steps.report_cleanup.outcome == 'success'"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2  # version-check-ignore
         with:
           name: go-quality-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: .github/test-results/
@@ -227,7 +227,7 @@ jobs:
       group: go-report-writeback-${{ github.repository }}-${{ needs.reports.outputs.source_sha }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
         with:
           ref: ${{ needs.reports.outputs.source_sha }}
           fetch-depth: 0

@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
 
       - name: Detect Go module root
         id: modroot
@@ -26,7 +26,7 @@ jobs:
 
       - name: Set up Go
         if: steps.modroot.outputs.found == 'true'
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0  # version-check-ignore
         with:
           go-version-file: ${{ steps.modroot.outputs.root }}/go.mod
           cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
@@ -38,9 +38,9 @@ jobs:
 
       - name: Lint
         if: steps.modroot.outputs.found == 'true'
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0  # version-check-ignore
         with:
-          version: v2.15.0
+          version: v2.15.0  # version-check-ignore
           args: --max-same-issues=100000 ./cmd/runner-agent/... ./internal/...
           working-directory: ${{ steps.modroot.outputs.root }}
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload read-only PR quality evidence
         if: "always() && steps.report_cleanup.outcome == 'success' && ((github.event_name == 'pull_request'))"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2  # version-check-ignore
         with:
           name: pr-go-quality-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -119,7 +119,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
 
       - name: Detect Go module root
         id: modroot
@@ -129,7 +129,7 @@ jobs:
 
       - name: Set up Go
         if: steps.modroot.outputs.found == 'true'
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0  # version-check-ignore
         with:
           go-version-file: ${{ steps.modroot.outputs.root }}/go.mod
           cache-dependency-path: ${{ steps.modroot.outputs.root }}/go.sum
@@ -154,7 +154,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # version-check-ignore
 
       # 上面的 Build 在完整工作区里跑 go build，而镜像的 builder 阶段只 COPY 了其中一部分，
       # 两者能力不同：Agent 新 import 一个 internal 包，Build 照过，镜像构建却直接失败。
@@ -163,7 +163,7 @@ jobs:
       # 所以它不会跟 Dockerfile 漂移。只构建 builder：运行阶段的 apt 安装与发布无关，
       # 要验的是「构建上下文够不够编出这个二进制」。
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1  # version-check-ignore
 
       - name: Verify both Linux image binary architectures
         run: scripts/test-image-architecture.sh Dockerfile.runner runner-agent
