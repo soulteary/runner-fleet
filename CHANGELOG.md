@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.8] - 2026-11-26
+
+Rebuild Manager and Runner together with current kits and container dependencies. Keep the default Runner image and all active deployment examples on the same version. No API, credential format or persistent schema migration is introduced.
+
+- github.com/soulteary/health-kit/v4 v4.0.9 → v4.0.10.
+- github.com/soulteary/metrics-kit/v3 v3.0.7 → v3.0.8.
+- github.com/soulteary/i18n-kit/v4 v4.0.7 → v4.0.8.
+- github.com/soulteary/logger-kit/v3 v3.0.7 → v3.0.8.
+- github.com/soulteary/version-kit/v4 v4.0.6 → v4.0.7.
+
+
+
 ## [1.9.7] - 2026-11-13
 
 ### Security
@@ -564,3 +576,5 @@ Initial release.
 [#19]: https://github.com/soulteary/runner-fleet/pull/19
 [#20]: https://github.com/soulteary/runner-fleet/pull/20
 [#21]: https://github.com/soulteary/runner-fleet/pull/21
+
+[1.9.8]: https://github.com/soulteary/runner-fleet/compare/v1.9.7...v1.9.8
